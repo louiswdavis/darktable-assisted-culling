@@ -2,7 +2,7 @@
     assisted_culling.lua — Assisted Culling for darktable
 
     Lighttable panel that clusters a selection into bursts, shells out to
-    score_images.py, streams ratings back, and keeps live progress jobs.
+    score_images.py, streams ratings back, and keeps sequential live progress jobs.
 ]]
 
 local M = {}
@@ -216,7 +216,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode)
     end
 
     local img_map = {}
-    for _, img in ipairs(images) do img_map[img.id] = img end
+    for _, img in ipairs(images) do img_map[tonumber(img.id) or img.id] = img end
 
     local time_items = {}
     for _, img in ipairs(images) do
@@ -311,14 +311,16 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode)
 
     if culling_job then
         culling_job.percent = 1.0
-        dt.control.sleep(30)
         culling_job.valid = false
     end
+
+    -- Yield to allow GTK event loop to clear the first job widget
+    dt.control.sleep(100)
 
     local applied_total = 0
 
     -- =========================================================================
-    -- STAGE 2: Applying Ratings Job with optimized progress & safety checks
+    -- STAGE 2: Applying Ratings Job with dedicated progress tracking & yields
     -- =========================================================================
     local apply_job = nil
     if not M.cancel_requested and done_code == 0 then
@@ -329,6 +331,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode)
         end
 
         dt.print_hinter(_("Assisted Culling: applying ratings to database..."))
+        dt.print(_("Assisted Culling: Stage 2 starting..."))
         
         local f = io.open(RESULTS_PATH, "r")
         if f then
@@ -347,14 +350,16 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode)
                     local id = tonumber(parts[1])
                     local img = id and img_map[id] or nil
                     
-                    -- Verify image object exists and is valid before writing
                     if img then
-                        pcall(function()
+                        local success, err = pcall(function()
                             img.rating = tonumber(parts[6]) or 0
                             img.yellow = (parts[3] ~= "ok")
                             img.red = tonumber(parts[5]) ~= 1
                             applied_total = applied_total + 1
                         end)
+                        if not success then
+                            dt.print_error(string.format("Assisted Culling Error setting ID %s: %s", tostring(id), tostring(err)))
+                        end
                     end
                 end
 
@@ -370,6 +375,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode)
                 end
             end
             f:close()
+            dt.print(string.format("Assisted Culling: Stage 2 complete. Updated %d images.", applied_total))
         end
 
         if apply_job then
