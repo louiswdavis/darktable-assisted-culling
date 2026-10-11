@@ -267,7 +267,6 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         end
         local py_bin = python_bin(sc_script)
 
-        -- Utilize the robust argparse flags
         local cmd = shell_quote(py_bin) .. " -u " .. shell_quote(sc_script)
             .. " " .. shell_quote(MANIFEST_PATH) 
             .. " " .. shell_quote(RESULTS_PATH)
@@ -332,7 +331,6 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         if not M.cancel_requested then
             dt.print(_("Assisted Culling: Stage 2 applying ratings..."))
             
-            -- Prepare native darktable tags
             local keeper_tag = tags.create("Assisted Culling|Keeper")
             local reject_tag = tags.create("Assisted Culling|Rejected")
             local culled_tag = tags.create("Assisted Culling|Culled")
@@ -372,7 +370,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                                 img.yellow = not is_ok
                                 img.red = not is_keeper
                                 
-                                -- Explicitly detach opposing tags so they don't stack on re-runs
+                                -- Apply hierarchical tags and detach stale state
                                 if is_keeper then
                                     tags.detach(reject_tag, img)
                                     tags.attach(keeper_tag, img)
@@ -476,6 +474,13 @@ local function install_panel()
     M.module_installed = true
 
     local is_updating = false
+    
+    local preset_configs = {
+        {1, 1, 1, 1}, -- [1] sport:      universal, subject, whole_frame, dynamic
+        {1, 2, 2, 2}, -- [2] portrait:   universal, face, subject_only, portrait
+        {1, 3, 3, 3}, -- [3] landscape:  universal, tiles, strict, single
+        {1, 4, 1, 4}, -- [4] macro:      universal, peak, whole_frame, keep_all
+    }
 
     genre_combo = dt.new_widget("combobox") {
         label = _("preset"),
@@ -486,29 +491,15 @@ local function install_panel()
             if is_updating then return end
             is_updating = true
             dt.preferences.write("assisted_culling", "last_genre", "integer", widget.value)
-            if widget.value == 1 then
-                rank_combo.value = 1
-                sharp_combo.value = 1
-                exp_combo.value = 1
-                keep_combo.value = 1
-            elseif widget.value == 2 then
-                rank_combo.value = 1
-                sharp_combo.value = 2
-                exp_combo.value = 2
-                keep_combo.value = 2
-            elseif widget.value == 3 then
-                rank_combo.value = 1
-                sharp_combo.value = 3
-                exp_combo.value = 3
-                keep_combo.value = 3
-            elseif widget.value == 4 then
-                rank_combo.value = 1
-                sharp_combo.value = 4
-                exp_combo.value = 1
-                keep_combo.value = 4
+            
+            local conf = preset_configs[widget.value]
+            if conf then
+                rank_combo.value = conf[1]
+                sharp_combo.value = conf[2]
+                exp_combo.value = conf[3]
+                keep_combo.value = conf[4]
             end
             
-            -- Sync preferences for cascading updates
             dt.preferences.write("assisted_culling", "last_rank_mode", "integer", rank_combo.value)
             dt.preferences.write("assisted_culling", "last_sharp_mode", "integer", sharp_combo.value)
             dt.preferences.write("assisted_culling", "last_exp_mode", "integer", exp_combo.value)
