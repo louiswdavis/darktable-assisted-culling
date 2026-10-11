@@ -15,6 +15,8 @@ M.event_registered = false
 -- Panel UI references shared for state management
 local action_button = nil
 local is_running = false
+local is_clearing = false
+local clear_button = nil
 
 function M.exif_time_to_epoch(s)
     if not s then return nil end
@@ -23,6 +25,7 @@ function M.exif_time_to_epoch(s)
     return os.time({
         year = tonumber(y), month = tonumber(mo), day = tonumber(d),
         hour = tonumber(h), min = tonumber(mi), sec = tonumber(se),
+        isdst = false, -- constant offset, so a DST change can't split a burst
     })
 end
 
@@ -52,7 +55,11 @@ function M.cluster_by_time(items, gap_seconds)
 end
 
 function M.csv_line(fields)
-    return table.concat(fields, ",")
+    local out = {}
+    for i, v in ipairs(fields) do
+        out[i] = '"' .. tostring(v):gsub('"', '""') .. '"'
+    end
+    return table.concat(out, ",")
 end
 
 function M.parse_csv_line(line, n)
@@ -107,6 +114,10 @@ if dt.gui then
         "")
         
     -- Register UI State Preferences
+    dt.preferences.register("assisted_culling", "burst_gap_seconds", "integer",
+        "Assisted Culling: burst gap (seconds)",
+        "photos taken closer together than this are grouped into one burst",
+        2, 1, 60)
     dt.preferences.register("assisted_culling", "last_genre", "integer", "Last Genre", "", 1, 1, 5)
     dt.preferences.register("assisted_culling", "last_rank_mode", "integer", "Last Rank Mode", "", 1, 1, 2)
     dt.preferences.register("assisted_culling", "last_sharp_mode", "integer", "Last Sharpness Mode", "", 1, 1, 5)
@@ -224,6 +235,42 @@ local function stop_job(job)
     end
 end
 
+local TAG_KEEPER = "Assisted Culling|Keeper"
+local TAG_REJECT = "Assisted Culling|Rejected"
+local TAG_CULLED = "Assisted Culling|Culled"
+
+local function fmt_eta(elapsed, done, total)
+    if elapsed < 3 or done <= 0 or done >= total then return "" end
+    local remaining = math.ceil(elapsed * (total - done) / done)
+    return string.format(" | ~%dm %02ds left", remaining // 60, remaining % 60)
+end
+
+-- dt.print_error only writes to darktable's log (-d lua); users never see it.
+local function notify_error(msg)
+    dt.print(msg)
+    dt.print_error(msg)
+end
+
+local function pretty(s)
+    return (tostring(s):gsub("_", " "))
+end
+
+local function tags_of(img)
+    local have = {}
+    for _, t in ipairs(tags.get_tags(img)) do have[t.name] = true end
+    return have
+end
+
+-- Returns 1 if a write was needed (attach/detach), else 0.
+local function sync_tag(img, have, tag, name, wanted)
+    if wanted and not have[name] then
+        tags.attach(tag, img); return 1
+    elseif not wanted and have[name] then
+        tags.detach(tag, img); return 1
+    end
+    return 0
+end
+
 function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_mode)
     rank_mode = rank_mode or "universal"
     sharp_mode = sharp_mode or "subject_focus"
@@ -238,15 +285,43 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         return
     end
 
+    local culling_job = nil
+
     local success, run_err = pcall(function()
-        local img_map = {}
-        for _, img in ipairs(images) do img_map[tonumber(img.id) or img.id] = img end
+        -- Duplicates (same file) are scored once; the result is applied to all of them.
+        local primaries, group_of, seen = {}, {}, {}
+        for _, img in ipairs(images) do
+            local key = img.path .. "/" .. img.filename
+            local lead = seen[key]
+            if lead then
+                table.insert(group_of[tonumber(lead.id) or lead.id], img)
+            else
+                seen[key] = img
+                group_of[tonumber(img.id) or img.id] = { img }
+                table.insert(primaries, img)
+            end
+        end
+        local n_primary = #primaries
+        local n_dups = #images - n_primary
 
         local time_items = {}
-        for _, img in ipairs(images) do
+        for _, img in ipairs(primaries) do
             table.insert(time_items, { id = img.id, epoch = M.exif_time_to_epoch(img.exif_datetime_taken) })
         end
-        local burst_of = M.cluster_by_time(time_items)
+
+        local gap = M.BURST_GAP_SECONDS
+        if dt.gui then
+            local g = dt.preferences.read("assisted_culling", "burst_gap_seconds", "integer")
+            if g and g >= 1 then gap = g end
+        end
+        local burst_of = M.cluster_by_time(time_items, gap)
+
+        local burst_seen, n_bursts, n_untimed = {}, 0, 0
+        for _, it in ipairs(time_items) do
+            local b = burst_of[it.id]
+            if not burst_seen[b] then burst_seen[b] = true; n_bursts = n_bursts + 1 end
+            if not it.epoch then n_untimed = n_untimed + 1 end
+        end
 
         pcall(os.remove, MANIFEST_PATH)
         pcall(os.remove, RESULTS_PATH)
@@ -256,16 +331,26 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         pcall(os.remove, DONE_PATH)
         pcall(os.remove, LOG_PATH)
 
-        if not write_manifest(images, burst_of) then
+        if not write_manifest(primaries, burst_of) then
             error("Could not write manifest")
         end
 
-        local culling_job = nil
         if dt.gui then
             culling_job = dt.gui.create_job(_("Assisted Culling"), true, stop_job)
             culling_job.percent = 0.0
         end
 
+        dt.print(string.format("Assisted Culling: scoring %d images in %d bursts (%s keepers, %s ranking, %ds burst gap)",
+            n_primary, n_bursts, pretty(keep_mode), pretty(rank_mode), gap))
+        if n_dups > 0 then
+            dt.print(string.format("Assisted Culling: %d duplicate(s) share a file with another image; scored once and matched.", n_dups))
+        end
+        if n_untimed > 0 then
+            dt.print(string.format("Assisted Culling: %d image(s) have no capture time and are scored alone.", n_untimed))
+        end
+        if n_primary > 1000 then
+            dt.print(_("Assisted Culling: large selection, this can take a few minutes. You can cancel any time."))
+        end
         dt.print_hinter(_("Assisted Culling: starting analysis..."))
 
         local sc_script = score_script()
@@ -275,7 +360,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         local py_bin = python_bin(sc_script)
 
         local cmd = shell_quote(py_bin) .. " -u " .. shell_quote(sc_script)
-            .. " " .. shell_quote(MANIFEST_PATH) 
+            .. " " .. shell_quote(MANIFEST_PATH)
             .. " " .. shell_quote(RESULTS_PATH)
             .. " --progress " .. shell_quote(PROGRESS_PATH)
             .. " --rank-mode " .. shell_quote(tostring(rank_mode))
@@ -288,8 +373,9 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         run_async_command(cmd, DONE_PATH)
 
         local done_code = nil
+        local stage1_start = os.time()
 
-        -- Stage 1 Loop
+        -- Stage 1: wait for the scorer, showing progress
         while true do
             if M.cancel_requested or (culling_job and not culling_job.valid) or file_exists(CANCEL_PATH) then
                 M.cancel_requested = true
@@ -309,9 +395,11 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                         if culling_job then
                             culling_job.percent = math.min(1.0, num / total)
                         end
+                        local elapsed = os.time() - stage1_start
+                        local rate = (elapsed >= 3 and num > 0) and string.format(" | %.1f img/s", num / elapsed) or ""
                         dt.print_hinter(string.format(
-                            "Assisted Culling: analyzing %d / %d | bursts %s / %s",
-                            num, total, b_cur or "?", b_tot or "?"
+                            "Assisted Culling: analyzing %d / %d | bursts %s / %s%s%s",
+                            num, total, b_cur or "?", b_tot or "?", rate, fmt_eta(elapsed, num, total)
                         ))
                     end
                 end
@@ -330,9 +418,19 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             dt.control.sleep(150)
         end
 
+        -- After a cancel, give the scorer a moment to exit so it can't overlap the next run.
+        if M.cancel_requested then
+            for i = 1, 50 do
+                if file_exists(DONE_PATH) then break end
+                dt.control.sleep(100)
+            end
+        end
+
         local applied_total = 0
         local failed_total = 0
         local first_error = nil
+        local n_skipped = 0
+        local stats = { keepers = 0, others = 0, flagged = 0 }
 
         -- =====================================================================
         -- STAGE 2: apply results in small, paced slices, writing only what changed
@@ -340,11 +438,9 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         if not M.cancel_requested then
             dt.print(_("Assisted Culling: applying ratings..."))
 
-            local keeper_tag = tags.create("Assisted Culling|Keeper")
-            local reject_tag = tags.create("Assisted Culling|Rejected")
-            local culled_tag = tags.create("Assisted Culling|Culled")
-            local KEEPER, REJECT, CULLED =
-                "Assisted Culling|Keeper", "Assisted Culling|Rejected", "Assisted Culling|Culled"
+            local keeper_tag = tags.create(TAG_KEEPER)
+            local reject_tag = tags.create(TAG_REJECT)
+            local culled_tag = tags.create(TAG_CULLED)
 
             local f = io.open(RESULTS_PATH, "r")
             if f then
@@ -353,9 +449,39 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                 f:close()
 
                 local total_lines = #lines
+                n_skipped = math.max(0, n_primary - total_lines)
                 local idx = 1
                 local started = os.time()
                 local last_toast_pct = 0
+
+                -- Reads are cheap; writes reload the lighttable collection / rewrite XMP, so skip no-ops.
+                -- Labels already on an image are only cleared if the plugin touched it before
+                -- (it carries our "Culled" tag), so hand-applied labels survive a first run.
+                local function apply_to_image(img, want_rating, is_keeper, want_yellow)
+                    local writes = 0
+                    local have = tags_of(img)
+                    local touched_before = have[TAG_CULLED]
+
+                    if want_rating ~= nil and img.rating ~= want_rating then
+                        img.rating = want_rating; writes = writes + 1
+                    end
+
+                    local function set_label(name, wanted)
+                        local cur = img[name] and true or false
+                        if wanted and not cur then
+                            img[name] = true; writes = writes + 1
+                        elseif (not wanted) and cur and touched_before then
+                            img[name] = false; writes = writes + 1
+                        end
+                    end
+                    set_label("yellow", want_yellow)
+                    set_label("red", not is_keeper)
+
+                    writes = writes + sync_tag(img, have, keeper_tag, TAG_KEEPER, is_keeper)
+                    writes = writes + sync_tag(img, have, reject_tag, TAG_REJECT, not is_keeper)
+                    writes = writes + sync_tag(img, have, culled_tag, TAG_CULLED, true)
+                    return writes
+                end
 
                 -- Returns the number of DB-touching writes performed.
                 local function apply_line(line)
@@ -365,46 +491,26 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                         parts[k] = val:match("^%s*(.-)%s*$")
                     end
                     local id = tonumber(parts[1])
-                    local img = id and img_map[id] or nil
-                    if not img then return 0 end
+                    local group = id and group_of[id] or nil
+                    if not group then return 0 end
+
+                    local is_keeper = (tonumber(parts[5]) == 1)
+                    local want_yellow = (parts[3] ~= "ok")
+                    if is_keeper then stats.keepers = stats.keepers + 1 else stats.others = stats.others + 1 end
+                    if want_yellow then stats.flagged = stats.flagged + 1 end
+                    local want_rating = nil
+                    if parts[6] ~= "leave" then want_rating = tonumber(parts[6]) or 0 end
 
                     local writes = 0
-                    local ok_apply, err = pcall(function()
-                        local want_rating = (parts[6] ~= "leave") and (tonumber(parts[6]) or 0) or nil
-                        local is_keeper = (tonumber(parts[5]) == 1)
-                        local want_yellow = (parts[3] ~= "ok")
-                        local want_red = not is_keeper
-
-                        -- reads are cheap; writes reload the collection, so skip no-ops
-                        if want_rating ~= nil and img.rating ~= want_rating then
-                            img.rating = want_rating; writes = writes + 1
+                    for _, img in ipairs(group) do
+                        local ok_apply, res = pcall(apply_to_image, img, want_rating, is_keeper, want_yellow)
+                        if ok_apply then
+                            applied_total = applied_total + 1
+                            writes = writes + res
+                        else
+                            failed_total = failed_total + 1
+                            first_error = first_error or tostring(res)
                         end
-                        if (img.yellow and true or false) ~= want_yellow then
-                            img.yellow = want_yellow; writes = writes + 1
-                        end
-                        if (img.red and true or false) ~= want_red then
-                            img.red = want_red; writes = writes + 1
-                        end
-
-                        local have = {}
-                        for _, t in ipairs(tags.get_tags(img)) do have[t.name] = true end
-
-                        local function want(tag, name, wanted)
-                            if wanted and not have[name] then
-                                tags.attach(tag, img); writes = writes + 1
-                            elseif not wanted and have[name] then
-                                tags.detach(tag, img); writes = writes + 1
-                            end
-                        end
-                        want(keeper_tag, KEEPER, is_keeper)
-                        want(reject_tag, REJECT, not is_keeper)
-                        want(culled_tag, CULLED, true)
-                    end)
-                    if ok_apply then
-                        applied_total = applied_total + 1
-                    else
-                        failed_total = failed_total + 1
-                        first_error = first_error or tostring(err)
                     end
                     return writes
                 end
@@ -419,24 +525,17 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                     local slice_start = os.clock()
                     local budget = STAGE2_WRITE_BUDGET
                     while idx <= total_lines and budget > 0 do
-                        budget = budget - apply_line(lines[idx])
+                        budget = budget - math.max(1, apply_line(lines[idx]))
                         idx = idx + 1
                     end
                     local slice_ms = (os.clock() - slice_start) * 1000
 
-                    -- progress + ETA
                     local done = idx - 1
                     local pct = done / total_lines
                     if culling_job then culling_job.percent = math.min(1.0, pct) end
-                    local elapsed = os.time() - started
-                    local eta = ""
-                    if elapsed >= 3 and done > 0 and done < total_lines then
-                        local remaining = math.ceil(elapsed * (total_lines - done) / done)
-                        eta = string.format(" | ~%dm %02ds left", remaining // 60, remaining % 60)
-                    end
                     dt.print_hinter(string.format(
                         "Assisted Culling: applying ratings %d / %d (%d%%)%s", done, total_lines,
-                        math.floor(pct * 100), eta))
+                        math.floor(pct * 100), fmt_eta(os.time() - started, done, total_lines)))
                     local milestone = math.floor(pct * 4) * 25
                     if milestone > last_toast_pct and milestone < 100 then
                         last_toast_pct = milestone
@@ -446,14 +545,6 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                     -- yield to the GUI in proportion to how long the slice took
                     local nap = math.max(STAGE2_SLEEP_MIN_MS, math.min(STAGE2_SLEEP_MAX_MS, math.floor(slice_ms)))
                     dt.control.sleep(nap)
-                end
-
-                if not M.cancel_requested then
-                    dt.print(string.format("Assisted Culling: Stage 2 complete. Updated %d images%s.",
-                        applied_total, failed_total > 0 and (", " .. failed_total .. " failed") or ""))
-                    if first_error then
-                        dt.print_error("Assisted Culling: first apply error: " .. first_error)
-                    end
                 end
             end
         end
@@ -467,19 +558,31 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         dt.print_hinter(" ")
 
         if M.cancel_requested then
-            dt.print(_("Assisted Culling cancelled."))
+            if applied_total > 0 then
+                dt.print(string.format("Assisted Culling cancelled. %d of %d images were already updated and keep their changes.",
+                    applied_total, #images))
+            else
+                dt.print(_("Assisted Culling cancelled. No images were changed."))
+            end
         elseif done_code ~= 0 and done_code ~= nil then
             local tail = read_log_tail()
+            if #tail > 300 then tail = tail:sub(#tail - 299) end
             if tail ~= "" then
-                dt.print_error(_("Assisted Culling failed: ") .. tail)
+                notify_error(_("Assisted Culling failed: ") .. tail)
             else
-                dt.print_error(_("Assisted Culling failed (scorer exit ") .. tostring(done_code or "?") .. ")")
+                notify_error(_("Assisted Culling failed (scorer exit ") .. tostring(done_code or "?") .. ")")
             end
         elseif applied_total == 0 then
             local tail = read_log_tail()
-            dt.print_error(_("Assisted Culling: scorer produced no ratings. ") .. (tail ~= "" and tail or _("Check python path and score_images.py.")))
+            if #tail > 300 then tail = tail:sub(#tail - 299) end
+            notify_error(_("Assisted Culling: scorer produced no ratings. ") .. (tail ~= "" and tail or _("Check python path and score_images.py.")))
         else
-            dt.print(_("Assisted Culling complete."))
+            local msg = string.format("Assisted Culling done: %d keepers, %d not kept", stats.keepers, stats.others)
+            if stats.flagged > 0 then msg = msg .. string.format(", %d exposure-flagged", stats.flagged) end
+            if n_skipped > 0 then msg = msg .. string.format(", %d unreadable (skipped)", n_skipped) end
+            if failed_total > 0 then msg = msg .. string.format(", %d failed to update (see log)", failed_total) end
+            dt.print(msg)
+            if first_error then dt.print_error("Assisted Culling: first apply error: " .. first_error) end
         end
     end)
 
@@ -489,19 +592,80 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
     end
 
     if not success then
-        dt.print_error(_("Assisted Culling Error: ") .. tostring(run_err))
+        if culling_job then pcall(function() culling_job.valid = false end) end
+        notify_error(_("Assisted Culling Error: ") .. tostring(run_err))
     end
 
+    -- Keep the cancel flag if the scorer is still alive, so it can still see it.
+    local scorer_alive = M.cancel_requested and not file_exists(DONE_PATH)
     pcall(os.remove, MANIFEST_PATH)
     pcall(os.remove, RESULTS_PATH)
     pcall(os.remove, RESULTS_PATH .. ".tmp")
-    pcall(os.remove, PROGRESS_PATH)
-    pcall(os.remove, CANCEL_PATH)
+    if not scorer_alive then
+        pcall(os.remove, PROGRESS_PATH)
+        pcall(os.remove, CANCEL_PATH)
+    end
     pcall(os.remove, DONE_PATH)
     if IS_WINDOWS then
         pcall(os.remove, TMP_DIR .. "/dt_assisted_culling_run.bat")
         pcall(os.remove, TMP_DIR .. "/dt_assisted_culling_run.vbs")
     end
+end
+
+-- Removes the plugin's tags and the red/yellow labels it set. Ratings are NOT reverted.
+function M.clear_marks(images)
+    if not images or #images == 0 then
+        dt.print(_("Assisted Culling: select some images first"))
+        return
+    end
+    local found = {}
+    for _, name in ipairs({ TAG_KEEPER, TAG_REJECT, TAG_CULLED }) do
+        local t = tags.find(name)
+        if t then table.insert(found, { tag = t, name = name }) end
+    end
+    if #found == 0 then
+        dt.print("Assisted Culling: nothing to clear, no culling tags exist.")
+        return
+    end
+
+    local total, cleared, failed = #images, 0, 0
+    local i = 1
+    local ok, err = pcall(function()
+        while i <= total do
+            local budget = STAGE2_WRITE_BUDGET
+            local slice_start = os.clock()
+            while i <= total and budget > 0 do
+                local img = images[i]
+                local ok_one, res = pcall(function()
+                    local have = tags_of(img)
+                    local writes = 0
+                    if have[TAG_CULLED] then
+                        if img.red then img.red = false; writes = writes + 1 end
+                        if img.yellow then img.yellow = false; writes = writes + 1 end
+                    end
+                    for _, ft in ipairs(found) do
+                        if have[ft.name] then tags.detach(ft.tag, img); writes = writes + 1 end
+                    end
+                    return writes
+                end)
+                if ok_one then
+                    if res > 0 then cleared = cleared + 1 end
+                    budget = budget - math.max(1, res)
+                else
+                    failed = failed + 1
+                    budget = budget - 1
+                end
+                i = i + 1
+            end
+            dt.print_hinter(string.format("Assisted Culling: clearing marks %d / %d", i - 1, total))
+            dt.control.sleep(math.max(STAGE2_SLEEP_MIN_MS,
+                math.min(STAGE2_SLEEP_MAX_MS, math.floor((os.clock() - slice_start) * 1000))))
+        end
+    end)
+    dt.print_hinter(" ")
+    if not ok then notify_error("Assisted Culling: clear failed: " .. tostring(err)); return end
+    dt.print(string.format("Assisted Culling: cleared marks on %d of %d images%s. Star ratings were not changed.",
+        cleared, total, failed > 0 and (", " .. failed .. " failed") or ""))
 end
 
 local rank_opts = {"universal", "relative"}
@@ -520,6 +684,29 @@ local function execute_current_config(images)
     local nk_val = nk_opts[non_keeper_combo and non_keeper_combo.value or 1] or "leave"
     
     M.score_images(images, r_val, s_val, e_val, k_val, nk_val)
+end
+
+local function start_culling(allow_cancel)
+    if is_clearing then
+        dt.print(_("Assisted Culling: busy clearing marks, try again in a moment."))
+        return
+    end
+    if is_running then
+        if allow_cancel then
+            M.cancel_requested = true
+            local cf = io.open(CANCEL_PATH, "w")
+            if cf then cf:write("1"); cf:close() end
+            if action_button then action_button.label = _("Cancelling...") end
+            dt.print(_("Assisted Culling: cancellation requested..."))
+        else
+            dt.print(_("Assisted Culling: already running. Use the panel button to cancel."))
+        end
+        return
+    end
+    is_running = true
+    M.cancel_requested = false
+    if action_button then action_button.label = _("Cancel Culling") end
+    execute_current_config(dt.gui.action_images)
 end
 
 local function install_panel()
@@ -572,6 +759,7 @@ local function install_panel()
 
     rank_combo = dt.new_widget("combobox") {
         label = _("ranking mode"),
+        tooltip = _("universal: stars from fixed sharpness tiers.\nrelative: keepers get top stars, the rest none."),
         _("universal absolute"), _("relative batch percentile"),
         value = dt.preferences.read("assisted_culling", "last_rank_mode", "integer") or 1, 
         changed_callback = function(widget)
@@ -582,6 +770,7 @@ local function install_panel()
 
     sharp_combo = dt.new_widget("combobox") {
         label = _("sharpness"),
+        tooltip = _("How sharpness is measured. Note: 'subject tracking' and 'face & eyes' currently use the same edge-to-edge tile scoring."),
         _("subject tracking (AI)"), _("face & eyes (OpenCV)"), _("edge-to-edge uniformity"), _("absolute peak 1%"), _("center crop"),
         value = dt.preferences.read("assisted_culling", "last_sharp_mode", "integer") or 1, 
         changed_callback = function(widget)
@@ -592,6 +781,7 @@ local function install_panel()
 
     exp_combo = dt.new_widget("combobox") {
         label = _("exposure"),
+        tooltip = _("Flags clipped shadows/highlights (yellow label, one star lower). Note: 'subject only' currently behaves like 'whole frame'."),
         _("whole frame"), _("subject only (ignore sky)"), _("strict histogram"), _("ignore exposure"),
         value = dt.preferences.read("assisted_culling", "last_exp_mode", "integer") or 1, 
         changed_callback = function(widget)
@@ -602,6 +792,7 @@ local function install_panel()
 
     keep_combo = dt.new_widget("combobox") {
         label = _("keepers"),
+        tooltip = _("How many of each burst are kept (the sharpest ones)."),
         _("dynamic (1 to 5)"), _("portrait (1 or 2)"), _("single best only"), _("keep all (focus stack)"),
         value = dt.preferences.read("assisted_culling", "last_keep_mode", "integer") or 1, 
         changed_callback = function(widget)
@@ -612,6 +803,7 @@ local function install_panel()
 
     non_keeper_combo = dt.new_widget("combobox") {
         label = _("non-keepers"),
+        tooltip = _("What to do with images that are not kept. They always get the red label and the Rejected tag."),
         _("leave alone"), _("reject (-1)"), _("0 stars"), _("1 star"), _("2 stars"), _("3 stars"), _("4 stars"), _("5 stars"),
         value = dt.preferences.read("assisted_culling", "last_nk_mode", "integer") or 1, 
         changed_callback = function(widget)
@@ -622,21 +814,27 @@ local function install_panel()
 
     action_button = dt.new_widget("button") {
         label = _("Start Culling"),
+        tooltip = _("Score the selected images in bursts and rate/tag them. Click again to cancel."),
     }
 
     action_button.clicked_callback = function()
-        if is_running then
-            M.cancel_requested = true
-            local cf = io.open(CANCEL_PATH, "w")
-            if cf then cf:write("1"); cf:close() end
-            dt.print(_("Assisted Culling: cancellation requested..."))
+        start_culling(true)
+    end
+
+    clear_button = dt.new_widget("button") {
+        label = _("Clear culling marks"),
+        tooltip = _("Remove the Assisted Culling tags and red/yellow labels from the selected images. Star ratings are not changed."),
+    }
+
+    clear_button.clicked_callback = function()
+        if is_running or is_clearing then
+            dt.print(_("Assisted Culling: busy, wait for the current job to finish."))
             return
         end
-
-        is_running = true
-        M.cancel_requested = false
-
-        execute_current_config(dt.gui.action_images)
+        is_clearing = true
+        local ok_c, err_c = pcall(M.clear_marks, dt.gui.action_images)
+        is_clearing = false
+        if not ok_c then notify_error("Assisted Culling: " .. tostring(err_c)) end
     end
 
     local panel_box = dt.new_widget("box") {
@@ -665,7 +863,8 @@ local function install_panel()
         exp_combo,
         keep_combo,
         non_keeper_combo,
-        action_button
+        action_button,
+        clear_button
     }
 
     dt.register_lib(
@@ -690,7 +889,7 @@ local function restart()
     pcall(dt.destroy_event, "assisted_culling_run", "shortcut")
     dt.register_event("assisted_culling_run", "shortcut",
         function(event, shortcut)
-            execute_current_config(dt.gui.action_images)
+            start_culling(false)
         end, _("execute Assisted Culling on selected images")
     )
 end
