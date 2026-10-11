@@ -372,10 +372,12 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                                 img.yellow = not is_ok
                                 img.red = not is_keeper
                                 
-                                -- Apply hierarchical tags
+                                -- Explicitly detach opposing tags so they don't stack on re-runs
                                 if is_keeper then
+                                    tags.detach(reject_tag, img)
                                     tags.attach(keeper_tag, img)
                                 else
+                                    tags.detach(keeper_tag, img)
                                     tags.attach(reject_tag, img)
                                 end
 
