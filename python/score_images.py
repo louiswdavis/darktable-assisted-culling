@@ -49,7 +49,6 @@ def _open_rgb(source, fast_jpeg: bool) -> np.ndarray:
     img = Image.open(source)
     if fast_jpeg:
         try:
-            # JPEG only: decode at 1/2, 1/4 or 1/8 scale (never below MAX_DIM); no-op for other formats
             img.draft("RGB", (MAX_DIM, MAX_DIM))
         except Exception:
             pass
@@ -94,16 +93,27 @@ def sharpness_score(rgb: np.ndarray, mode: str) -> float:
         lap = cv2.Laplacian(denoised, cv2.CV_64F)
         return float(np.percentile(np.abs(lap), 99))
 
+    # Refined 3x3 patch scoring with center bias to ignore background false positives
     h, w = denoised.shape
     h_step, w_step = h // 3, w // 3
+    patch_weights = [
+        [0.8, 1.0, 0.8],
+        [1.0, 1.2, 1.0],
+        [0.8, 1.0, 0.8]
+    ]
+    
+    weighted_vars = []
     patch_vars = []
     for r in range(3):
         for c in range(3):
             patch = denoised[r * h_step:(r + 1) * h_step, c * w_step:(c + 1) * w_step]
             if patch.size > 0:
-                patch_vars.append(float(cv2.Laplacian(patch, cv2.CV_64F).var()))
-    if patch_vars:
-        return float(np.max(patch_vars) * 0.85 + np.median(patch_vars) * 0.15)
+                var = float(cv2.Laplacian(patch, cv2.CV_64F).var())
+                patch_vars.append(var)
+                weighted_vars.append(var * patch_weights[r][c])
+
+    if weighted_vars:
+        return float(np.max(weighted_vars) * 0.80 + np.median(patch_vars) * 0.20)
     return float(cv2.Laplacian(denoised, cv2.CV_64F).var())
 
 
@@ -144,7 +154,6 @@ def cancel_requested(progress_path: str) -> bool:
 
 
 def _init_worker():
-    """Each worker is already a separate process; stop OpenCV oversubscribing cores."""
     try:
         cv2.setNumThreads(1)
     except Exception:
@@ -152,7 +161,6 @@ def _init_worker():
 
 
 def process_single_image(filepath: str, sharp_mode: str, exp_mode: str, cancel_path: str = "", fast_jpeg: bool = False):
-    """Worker function for concurrent processing."""
     if cancel_path and os.path.exists(cancel_path):
         return filepath, None, None, "cancelled"
     try:
@@ -165,7 +173,6 @@ def process_single_image(filepath: str, sharp_mode: str, exp_mode: str, cancel_p
 
 
 def process_burst_logic(burst_id, burst_sharpness, burst_exposure, burst_size, args, results_path):
-    """Handles the keeper selection and CSV appending once a burst is fully scored."""
     if not burst_sharpness:
         return
 
@@ -181,11 +188,8 @@ def process_burst_logic(burst_id, burst_sharpness, burst_exposure, burst_size, a
     sorted_members = sorted(burst_sharpness.keys(), key=lambda i: burst_sharpness[i], reverse=True)
     keepers = set(sorted_members[:allowed])
 
-    # Explicitly get the list of keepers in order of their sharpness score
     burst_keepers = [i for i in sorted_members if i in keepers]
     num_keepers = len(burst_keepers)
-    
-    # Calculate the top 40% threshold count among the keepers
     top_40_count = max(1, int(round(num_keepers * 0.4)))
     top_40_keepers = set(burst_keepers[:top_40_count])
 
@@ -213,8 +217,7 @@ def process_burst_logic(burst_id, burst_sharpness, burst_exposure, burst_size, a
                 stars = max(0, stars - EXPOSURE_PENALTY_STARS)
 
         if is_keeper:
-            # If this keeper is in the bottom 60% of keepers, demote by 1 star (min 0)
-            if num_keepers > 1 and img_id not in top_40_keepers:
+            if args.keep_mode != "keep_all" and num_keepers > 1 and img_id not in top_40_keepers:
                 stars = max(0, stars - 1)
         else:
             if args.nk_mode == "leave":
@@ -255,7 +258,6 @@ def main(args):
 
     total_bursts = len(burst_groups)
 
-    # Pre-flight: fail fast with a clear message if RAW support is missing.
     if any(Path(fp).suffix.lower() in RAW_EXTENSIONS for _, fp, _ in manifest):
         try:
             import rawpy  # noqa: F401
@@ -267,7 +269,6 @@ def main(args):
             )
             sys.exit(3)
     
-    # Track completion state for cross-burst concurrency
     burst_completion = {b_id: 0 for b_id in burst_groups}
     burst_sharpness = {b_id: {} for b_id in burst_groups}
     burst_exposure = {b_id: {} for b_id in burst_groups}
@@ -281,10 +282,9 @@ def main(args):
     write_progress(args.progress, 0, total_images, 0, total_bursts)
 
     cancel_path = (args.progress + ".cancel") if args.progress else ""
-    workers = max(1, (os.cpu_count() or 2) - 1)  # leave a core for darktable's UI
+    workers = max(1, (os.cpu_count() or 2) - 1)
 
     with concurrent.futures.ProcessPoolExecutor(max_workers=workers, initializer=_init_worker) as executor:
-        # Submit ALL images to the executor instantly to fully saturate all CPU cores
         future_to_item = {}
         for burst_id, items in burst_groups.items():
             for image_id, filepath in items:
@@ -294,7 +294,6 @@ def main(args):
         for future in concurrent.futures.as_completed(future_to_item):
             if cancel_requested(args.progress):
                 print("cancelled", file=sys.stderr)
-                # drop everything still queued; only in-flight images finish
                 executor.shutdown(wait=False, cancel_futures=True)
                 sys.exit(130)
 
@@ -316,7 +315,6 @@ def main(args):
             processed_count += 1
             burst_completion[burst_id] += 1
 
-            # When a burst reaches its total count, trigger its logic and write to CSV
             if burst_completion[burst_id] == len(burst_groups[burst_id]):
                 completed_bursts += 1
                 process_burst_logic(
@@ -328,7 +326,6 @@ def main(args):
                     args.results
                 )
                 
-                # Free memory immediately for completed bursts
                 del burst_sharpness[burst_id]
                 del burst_exposure[burst_id]
 
