@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-score_images.py — burst-by-burst sharpness/exposure scorer for the darktable Assited Culling plugin.
+score_images.py — burst-by-burst sharpness/exposure scorer for the darktable Assisted Culling plugin.
 """
 
 import argparse
@@ -137,6 +137,72 @@ def process_single_image(filepath: str, sharp_mode: str, exp_mode: str):
         return filepath, None, None, str(e)
 
 
+def process_burst_logic(burst_id, burst_sharpness, burst_exposure, burst_size, args, results_path):
+    """Handles the keeper selection and CSV appending once a burst is fully scored."""
+    if not burst_sharpness:
+        return
+
+    if args.keep_mode == "dynamic_burst":
+        allowed = 1 if burst_size <= 4 else (2 if burst_size <= 8 else (3 if burst_size <= 12 else (4 if burst_size <= 18 else 5)))
+    elif args.keep_mode == "portrait_mode":
+        allowed = 1 if burst_size <= 3 else 2
+    elif args.keep_mode == "single_best":
+        allowed = 1
+    else:
+        allowed = burst_size
+
+    sorted_members = sorted(burst_sharpness.keys(), key=lambda i: burst_sharpness[i], reverse=True)
+    keepers = set(sorted_members[:allowed])
+
+    burst_rows = []
+    for img_id in burst_sharpness:
+        is_keeper = img_id in keepers
+        raw_score = burst_sharpness[img_id]
+
+        if args.rank_mode == "relative":
+            score = 100.0 if is_keeper else 0.0
+            if burst_exposure[img_id] != "ok":
+                score -= EXPOSURE_PENALTY_RELATIVE
+            for threshold, stars in STAR_THRESHOLDS:
+                if max(0, score) >= threshold:
+                    break
+            else:
+                stars = 0
+        else:
+            for threshold, stars in TIER_THRESHOLDS:
+                if raw_score >= threshold:
+                    break
+            else:
+                stars = 0
+            if burst_exposure[img_id] != "ok":
+                stars = max(0, stars - EXPOSURE_PENALTY_STARS)
+
+        if not is_keeper:
+            if args.nk_mode == "leave":
+                stars = "leave"
+            elif args.nk_mode == "reject":
+                stars = -1
+            else:
+                try:
+                    stars = int(args.nk_mode)
+                except ValueError:
+                    stars = 0
+
+        burst_rows.append([
+            img_id,
+            round(raw_score, 1),
+            burst_exposure[img_id],
+            burst_id,
+            int(is_keeper),
+            stars,
+        ])
+
+    with open(results_path, "a", newline="", encoding="utf-8") as f:
+        csv.writer(f).writerows(burst_rows)
+        f.flush()
+        os.fsync(f.fileno())
+
+
 def main(args):
     with open(args.manifest, newline="", encoding="utf-8") as f:
         manifest = [(row[0], row[1], row[2]) for row in csv.reader(f) if row]
@@ -151,113 +217,64 @@ def main(args):
         burst_groups.setdefault(burst_id, []).append((image_id, filepath))
 
     total_bursts = len(burst_groups)
+    
+    # Track completion state for cross-burst concurrency
+    burst_completion = {b_id: 0 for b_id in burst_groups}
+    burst_sharpness = {b_id: {} for b_id in burst_groups}
+    burst_exposure = {b_id: {} for b_id in burst_groups}
 
     with open(args.results, "w", newline="", encoding="utf-8") as f:
         pass
 
     processed_count = 0
+    completed_bursts = 0
     write_progress(args.progress, 0, total_images, 0, total_bursts)
 
     with concurrent.futures.ProcessPoolExecutor() as executor:
-        for burst_idx, (burst_id, items) in enumerate(burst_groups.items()):
+        # Submit ALL images to the executor instantly to fully saturate all CPU cores
+        future_to_item = {}
+        for burst_id, items in burst_groups.items():
+            for image_id, filepath in items:
+                fut = executor.submit(process_single_image, filepath, args.sharp_mode, args.exp_mode)
+                future_to_item[fut] = (burst_id, image_id, filepath)
+
+        for future in concurrent.futures.as_completed(future_to_item):
             if cancel_requested(args.progress):
                 print("cancelled", file=sys.stderr)
                 sys.exit(130)
 
-            burst_sharpness = {}
-            burst_exposure = {}
+            burst_id, image_id, filepath = future_to_item[future]
+            _, sharp, exp, err = future.result()
 
-            # Parallelize processing of images within the burst
-            futures = {
-                executor.submit(process_single_image, filepath, args.sharp_mode, args.exp_mode): image_id
-                for image_id, filepath in items
-            }
-
-            for future in concurrent.futures.as_completed(futures):
-                if cancel_requested(args.progress):
-                    print("cancelled", file=sys.stderr)
-                    sys.exit(130)
-                
-                image_id = futures[future]
-                filepath, sharp, exp, err = future.result()
-                
-                if err:
-                    print(f"skip {image_id} ({filepath}): {err}", file=sys.stderr)
-                else:
-                    burst_sharpness[image_id] = sharp
-                    burst_exposure[image_id] = exp
-
-                processed_count += 1
-                write_progress(args.progress, processed_count, total_images, burst_idx + 1, total_bursts)
-
-            if not burst_sharpness:
-                continue
-
-            burst_size = len(items)
-            if args.keep_mode == "dynamic_burst":
-                allowed = 1 if burst_size <= 4 else (2 if burst_size <= 8 else (3 if burst_size <= 12 else (4 if burst_size <= 18 else 5)))
-            elif args.keep_mode == "portrait_mode":
-                allowed = 1 if burst_size <= 3 else 2
-            elif args.keep_mode == "single_best":
-                allowed = 1
+            if err:
+                print(f"skip {image_id} ({filepath}): {err}", file=sys.stderr)
             else:
-                allowed = burst_size
+                burst_sharpness[burst_id][image_id] = sharp
+                burst_exposure[burst_id][image_id] = exp
 
-            sorted_members = sorted(burst_sharpness.keys(), key=lambda i: burst_sharpness[i], reverse=True)
-            keepers = set(sorted_members[:allowed])
+            processed_count += 1
+            burst_completion[burst_id] += 1
 
-            burst_rows = []
-            for img_id in burst_sharpness:
-                is_keeper = img_id in keepers
-                raw_score = burst_sharpness[img_id]
+            # When a burst reaches its total count, trigger its logic and write to CSV
+            if burst_completion[burst_id] == len(burst_groups[burst_id]):
+                completed_bursts += 1
+                process_burst_logic(
+                    burst_id, 
+                    burst_sharpness[burst_id], 
+                    burst_exposure[burst_id], 
+                    len(burst_groups[burst_id]), 
+                    args, 
+                    args.results
+                )
+                
+                # Free memory immediately for completed bursts
+                del burst_sharpness[burst_id]
+                del burst_exposure[burst_id]
 
-                if args.rank_mode == "relative":
-                    score = 100.0 if is_keeper else 0.0
-                    if burst_exposure[img_id] != "ok":
-                        score -= EXPOSURE_PENALTY_RELATIVE
-                    for threshold, stars in STAR_THRESHOLDS:
-                        if max(0, score) >= threshold:
-                            break
-                    else:
-                        stars = 0
-                else:
-                    for threshold, stars in TIER_THRESHOLDS:
-                        if raw_score >= threshold:
-                            break
-                    else:
-                        stars = 0
-                    if burst_exposure[img_id] != "ok":
-                        stars = max(0, stars - EXPOSURE_PENALTY_STARS)
+                if completed_bursts % 25 == 0:
+                    gc.collect()
 
-                if not is_keeper:
-                    if args.nk_mode == "leave":
-                        stars = "leave"
-                    elif args.nk_mode == "reject":
-                        stars = -1
-                    else:
-                        try:
-                            stars = int(args.nk_mode)
-                        except ValueError:
-                            stars = 0
-
-                burst_rows.append([
-                    img_id,
-                    round(raw_score, 1),
-                    burst_exposure[img_id],
-                    burst_id,
-                    int(is_keeper),
-                    stars,
-                ])
-
-            if burst_idx % 25 == 0:
-                gc.collect()
-
-            with open(args.results, "a", newline="", encoding="utf-8") as f:
-                csv.writer(f).writerows(burst_rows)
-                f.flush()
-                os.fsync(f.fileno())
-
-    write_progress(args.progress, total_images, total_images, total_bursts, total_bursts)
+            write_progress(args.progress, processed_count, total_images, completed_bursts, total_bursts)
 
 
 if __name__ == "__main__":
