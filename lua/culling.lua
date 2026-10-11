@@ -319,13 +319,11 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode)
 
         local applied_total = 0
 
-        -- Stage 2 Loop
+        -- =========================================================================
+        -- STAGE 2: Applying Ratings Pass with Toast & Terminal Feedback
+        -- =========================================================================
         if not M.cancel_requested then
-            if culling_job then
-                culling_job.percent = 0.0
-            end
-
-            dt.print_hinter(_("Assisted Culling: applying ratings to database..."))
+            dt.print(_("Assisted Culling: Stage 2 applying ratings..."))
             
             local f = io.open(RESULTS_PATH, "r")
             if f then
@@ -364,18 +362,24 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode)
                         end
                     end
 
-                    if culling_job and total_lines > 0 then
-                        culling_job.percent = math.min(1.0, i / total_lines)
+                    -- 1. Stream real-time logs to your terminal if running with `-d lua`
+                    if i % 10 == 0 then
+                        dt.print_error(string.format("[Assisted Culling] Processed %d / %d records", i, total_lines))
                     end
 
-                    if i % 10 == 0 or i == total_lines then
-                        dt.print_hinter(string.format(
-                            "Assisted Culling: applying ratings to database... (%d / %d)",
-                            i, total_lines
-                        ))
+                    -- 2. Pop a non-blocking screen toast every 25% progress chunk
+                    if i == math.floor(total_lines * 0.25) or 
+                       i == math.floor(total_lines * 0.50) or 
+                       i == math.floor(total_lines * 0.75) or 
+                       i == total_lines then
+                        dt.print(string.format("Assisted Culling: Written %d of %d ratings", i, total_lines))
+                    end
+
+                    if i % 25 == 0 then
                         dt.control.sleep(10)
                     end
                 end
+                dt.print(string.format("Assisted Culling: Stage 2 complete. Updated %d images.", applied_total))
             end
         end
 
