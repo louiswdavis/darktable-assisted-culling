@@ -181,7 +181,12 @@ def process_burst_logic(burst_id, burst_sharpness, burst_exposure, burst_size, a
     sorted_members = sorted(burst_sharpness.keys(), key=lambda i: burst_sharpness[i], reverse=True)
     keepers = set(sorted_members[:allowed])
 
-    burst_rows = []
+    # Identify all keepers in order of sharpness
+    burst_keepers = [i for i in sorted_members if i in keepers]
+    num_keepers = len(burst_keepers)
+    top_40_count = max(1, int(round(num_keepers * 0.4)))
+
+    computed_stars = {}
     for img_id in burst_sharpness:
         is_keeper = img_id in keepers
         raw_score = burst_sharpness[img_id]
@@ -204,7 +209,23 @@ def process_burst_logic(burst_id, burst_sharpness, burst_exposure, burst_size, a
             if burst_exposure[img_id] != "ok":
                 stars = max(0, stars - EXPOSURE_PENALTY_STARS)
 
-        if not is_keeper:
+        computed_stars[img_id] = stars
+
+    # Get the star rating of the absolute best keeper
+    best_keeper_star = computed_stars[burst_keepers[0]] if burst_keepers else 0
+
+    burst_rows = []
+    for img_id in sorted_members:
+        is_keeper = img_id in keepers
+        raw_score = burst_sharpness[img_id]
+        stars = computed_stars[img_id]
+
+        if is_keeper:
+            # If this keeper is past the top 40% and shares the best keeper's star rating, demote by 1 star
+            if num_keepers > 1 and img_id in burst_keepers[top_40_count:]:
+                if stars == best_keeper_star:
+                    stars = max(0, stars - 1)
+        else:
             if args.nk_mode == "leave":
                 stars = "leave"
             elif args.nk_mode == "reject":
