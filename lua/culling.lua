@@ -318,13 +318,14 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode)
     local applied_total = 0
 
     -- =========================================================================
-    -- STAGE 2: Applying Ratings Job with dedicated progress tracking
+    -- STAGE 2: Applying Ratings Job with robust ID mapping
     -- =========================================================================
     local apply_job = nil
     if not M.cancel_requested and done_code == 0 then
         if dt.gui then
             apply_job = dt.gui.create_job(_("Assisted Culling: Applying Ratings"), true, stop_job)
             apply_job.percent = 0.0
+            dt.control.sleep(50)
         end
 
         dt.print_hinter(_("Assisted Culling: applying ratings to database..."))
@@ -346,10 +347,12 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode)
 
                 local parts = M.parse_csv_line(line, 6)
                 if parts then
+                    -- Ensure ID is cleanly converted to a number for lookup
                     local id = tonumber(parts[1])
-                    local img = img_map[id]
+                    local img = id and img_map[id] or nil
+                    
                     if img then
-                        img.rating = tonumber(parts[6])
+                        img.rating = tonumber(parts[6]) or 0
                         img.yellow = (parts[3] ~= "ok")
                         img.red = tonumber(parts[5]) ~= 1
                         applied_total = applied_total + 1
