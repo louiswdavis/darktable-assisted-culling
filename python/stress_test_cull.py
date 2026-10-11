@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-stress_test_cull.py — Stress test harness for the AI culling pipeline (6,000+ mock items).
+stress_test_cull.py — Stress test harness for the Assisted Culling pipeline (6,000+ mock items).
 """
 
 import os
