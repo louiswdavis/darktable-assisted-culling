@@ -342,7 +342,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                 f:close()
 
                 local total_lines = #lines
-                local chunk_size = 50 -- Process 50 items per slice to keep UI completely responsive
+                local chunk_size = 50
                 local current_index = 1
 
                 while current_index <= total_lines do
@@ -391,15 +391,12 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                         end
                     end
 
-                    -- Update progress bar and hinter per chunk
                     if culling_job and total_lines > 0 then
                         culling_job.percent = math.min(1.0, end_idx / total_lines)
                     end
                     dt.print_hinter(string.format("Assisted Culling: applying ratings... (%d / %d)", end_idx, total_lines))
 
                     current_index = end_idx + 1
-
-                    -- CRITICAL: Yield control back to GTK event loop so clicks (like Cancel) register instantly
                     dt.control.sleep(20)
                 end
 
@@ -480,10 +477,10 @@ local function install_panel()
     local is_updating = false
     
     local preset_configs = {
-        {1, 1, 1, 1}, -- [1] sport:      universal, subject, whole_frame, dynamic
-        {1, 2, 2, 2}, -- [2] portrait:   universal, face, subject_only, portrait
-        {1, 3, 3, 3}, -- [3] landscape:  universal, tiles, strict, single
-        {1, 4, 1, 4}, -- [4] macro:      universal, peak, whole_frame, keep_all
+        {1, 1, 1, 1},
+        {1, 2, 2, 2},
+        {1, 3, 3, 3},
+        {1, 4, 1, 4},
     }
 
     genre_combo = dt.new_widget("combobox") {
