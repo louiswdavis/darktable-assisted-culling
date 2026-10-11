@@ -187,23 +187,12 @@ local function write_manifest(images, burst_of)
     return true
 end
 
-local function apply_parts(parts, img_map)
-    local id = tonumber(parts[1])
-    local img = img_map[id]
-    if not img then return false end
-    img.rating = tonumber(parts[6])
-    img.yellow = (parts[3] ~= "ok")
-    img.red = tonumber(parts[5]) ~= 1
-    return true
-end
-
--- Do not advance past an incomplete last line while Python is still appending.
-local function consume_results(last_read_pos, img_map)
+-- Collect results into a buffer table without executing immediate UI/DB writes
+local function consume_results(last_read_pos, img_map, pending_updates)
     local f = io.open(RESULTS_PATH, "r")
     if not f then return last_read_pos, 0 end
     f:seek("set", last_read_pos)
     local applied = 0
-    local chunk_count = 0
     while true do
         local line_start = f:seek()
         local line = f:read("*l")
@@ -217,12 +206,17 @@ local function consume_results(last_read_pos, img_map)
                 f:close()
                 return line_start, applied
             end
-        elseif apply_parts(parts, img_map) then
-            applied = applied + 1
-            chunk_count = chunk_count + 1
-            if chunk_count >= 50 then
-                chunk_count = 0
-                dt.control.sleep(20)
+        else
+            local id = tonumber(parts[1])
+            local img = img_map[id]
+            if img then
+                table.insert(pending_updates, {
+                    img = img,
+                    rating = tonumber(parts[6]),
+                    yellow = (parts[3] ~= "ok"),
+                    red = tonumber(parts[5]) ~= 1
+                })
+                applied = applied + 1
             end
         end
         last_read_pos = now
@@ -311,6 +305,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode)
     local last_read_pos = 0
     local applied_total = 0
     local done_code = nil
+    local pending_updates = {}
 
     while true do
         if M.cancel_requested or (culling_job and not culling_job.valid) then
@@ -330,16 +325,16 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode)
                 if num and total and total > 0 then
                     if culling_job then
                         culling_job.percent = math.min(1.0, num / total)
-                        culling_job.text = string.format(
-                            "Assisted Culling: images %d / %d | bursts %s / %s",
-                            num, total, b_cur or "?", b_tot or "?"
-                        )
                     end
+                    dt.print_hinter(string.format(
+                        "Assisted Culling: images %d / %d | bursts %s / %s",
+                        num, total, b_cur or "?", b_tot or "?"
+                    ))
                 end
             end
         end
 
-        local new_pos, applied = consume_results(last_read_pos, img_map)
+        local new_pos, applied = consume_results(last_read_pos, img_map, pending_updates)
         last_read_pos = new_pos
         applied_total = applied_total + applied
 
@@ -349,7 +344,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode)
                 done_code = tonumber((df_done:read("*a") or ""):match("%d+"))
                 df_done:close()
             end
-            local final_pos, final_applied = consume_results(last_read_pos, img_map)
+            local final_pos, final_applied = consume_results(last_read_pos, img_map, pending_updates)
             last_read_pos = final_pos
             applied_total = applied_total + final_applied
             if culling_job and done_code == 0 then
@@ -360,6 +355,16 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode)
         end
 
         dt.control.sleep(150)
+    end
+
+    -- Apply all collected ratings and labels in a single deferred pass after processing completes
+    if not M.cancel_requested and done_code == 0 and #pending_updates > 0 then
+        dt.print_hinter(_("Assisted Culling: applying ratings to database..."))
+        for _, update in ipairs(pending_updates) do
+            update.img.rating = update.rating
+            update.img.yellow = update.yellow
+            update.img.red = update.red
+        end
     end
 
     if culling_job then
