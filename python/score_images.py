@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 """
-score_images.py — burst-by-burst sharpness/exposure scorer for the darktable AI Cull plugin.
+score_images.py — burst-by-burst sharpness/exposure scorer for the darktable Assited Culling plugin.
 """
 
+import argparse
 import csv
 import gc
 import io
 import os
 import sys
 import time
+import concurrent.futures
 from pathlib import Path
 
 import numpy as np
@@ -124,22 +126,24 @@ def cancel_requested(progress_path: str) -> bool:
     return Path(progress_path + ".cancel").exists()
 
 
-def main(
-    manifest_path: str,
-    results_path: str,
-    progress_path: str = "",
-    ranking_mode: str = "universal",
-    sharp_mode: str = "subject_focus",
-    exp_mode: str = "whole_frame",
-    keep_mode: str = "dynamic_burst",
-    nk_mode: str = "leave",
-):
-    with open(manifest_path, newline="", encoding="utf-8") as f:
+def process_single_image(filepath: str, sharp_mode: str, exp_mode: str):
+    """Worker function for concurrent processing."""
+    try:
+        rgb = load_image(filepath)
+        sharp = sharpness_score(rgb, sharp_mode)
+        exp = exposure_status(rgb, exp_mode)
+        return filepath, sharp, exp, None
+    except Exception as e:
+        return filepath, None, None, str(e)
+
+
+def main(args):
+    with open(args.manifest, newline="", encoding="utf-8") as f:
         manifest = [(row[0], row[1], row[2]) for row in csv.reader(f) if row]
 
     total_images = len(manifest)
     if total_images == 0:
-        write_progress(progress_path, 0, 0, 0, 0)
+        write_progress(args.progress, 0, 0, 0, 0)
         return
 
     burst_groups = {}
@@ -148,124 +152,129 @@ def main(
 
     total_bursts = len(burst_groups)
 
-    with open(results_path, "w", newline="", encoding="utf-8") as f:
+    with open(args.results, "w", newline="", encoding="utf-8") as f:
         pass
 
     processed_count = 0
-    write_progress(progress_path, 0, total_images, 0, total_bursts)
+    write_progress(args.progress, 0, total_images, 0, total_bursts)
 
-    for burst_idx, (burst_id, items) in enumerate(burst_groups.items()):
-        if cancel_requested(progress_path):
-            print("cancelled", file=sys.stderr)
-            sys.exit(130)
-
-        burst_sharpness = {}
-        burst_exposure = {}
-
-        for image_id, filepath in items:
-            if cancel_requested(progress_path):
+    with concurrent.futures.ProcessPoolExecutor() as executor:
+        for burst_idx, (burst_id, items) in enumerate(burst_groups.items()):
+            if cancel_requested(args.progress):
                 print("cancelled", file=sys.stderr)
                 sys.exit(130)
-            try:
-                rgb = load_image(filepath)
-                burst_sharpness[image_id] = sharpness_score(rgb, sharp_mode)
-                burst_exposure[image_id] = exposure_status(rgb, exp_mode)
-                del rgb
-            except Exception as exc:
-                print(f"skip {image_id} ({filepath}): {exc}", file=sys.stderr)
 
-            processed_count += 1
-            write_progress(progress_path, processed_count, total_images, burst_idx + 1, total_bursts)
+            burst_sharpness = {}
+            burst_exposure = {}
 
-        if not burst_sharpness:
-            continue
+            # Parallelize processing of images within the burst
+            futures = {
+                executor.submit(process_single_image, filepath, args.sharp_mode, args.exp_mode): image_id
+                for image_id, filepath in items
+            }
 
-        burst_size = len(items)
-        if keep_mode == "dynamic_burst":
-            allowed = 1 if burst_size <= 4 else (2 if burst_size <= 8 else (3 if burst_size <= 12 else (4 if burst_size <= 18 else 5)))
-        elif keep_mode == "portrait_mode":
-            allowed = 1 if burst_size <= 3 else 2
-        elif keep_mode == "single_best":
-            allowed = 1
-        else:
-            allowed = burst_size
-
-        sorted_members = sorted(burst_sharpness.keys(), key=lambda i: burst_sharpness[i], reverse=True)
-        keepers = set(sorted_members[:allowed])
-
-        burst_rows = []
-        for img_id in burst_sharpness:
-            is_keeper = img_id in keepers
-            raw_score = burst_sharpness[img_id]
-
-            if ranking_mode == "relative":
-                score = 100.0 if is_keeper else 0.0
-                if burst_exposure[img_id] != "ok":
-                    score -= EXPOSURE_PENALTY_RELATIVE
-                for threshold, stars in STAR_THRESHOLDS:
-                    if max(0, score) >= threshold:
-                        break
+            for future in concurrent.futures.as_completed(futures):
+                if cancel_requested(args.progress):
+                    print("cancelled", file=sys.stderr)
+                    sys.exit(130)
+                
+                image_id = futures[future]
+                filepath, sharp, exp, err = future.result()
+                
+                if err:
+                    print(f"skip {image_id} ({filepath}): {err}", file=sys.stderr)
                 else:
-                    stars = 0
+                    burst_sharpness[image_id] = sharp
+                    burst_exposure[image_id] = exp
+
+                processed_count += 1
+                write_progress(args.progress, processed_count, total_images, burst_idx + 1, total_bursts)
+
+            if not burst_sharpness:
+                continue
+
+            burst_size = len(items)
+            if args.keep_mode == "dynamic_burst":
+                allowed = 1 if burst_size <= 4 else (2 if burst_size <= 8 else (3 if burst_size <= 12 else (4 if burst_size <= 18 else 5)))
+            elif args.keep_mode == "portrait_mode":
+                allowed = 1 if burst_size <= 3 else 2
+            elif args.keep_mode == "single_best":
+                allowed = 1
             else:
-                for threshold, stars in TIER_THRESHOLDS:
-                    if raw_score >= threshold:
-                        break
-                else:
-                    stars = 0
-                if burst_exposure[img_id] != "ok":
-                    stars = max(0, stars - EXPOSURE_PENALTY_STARS)
+                allowed = burst_size
 
-            # Route the non-keeper rating appropriately
-            if not is_keeper:
-                if nk_mode == "leave":
-                    stars = "leave"
-                elif nk_mode == "reject":
-                    stars = -1
-                else:
-                    try:
-                        stars = int(nk_mode)
-                    except ValueError:
+            sorted_members = sorted(burst_sharpness.keys(), key=lambda i: burst_sharpness[i], reverse=True)
+            keepers = set(sorted_members[:allowed])
+
+            burst_rows = []
+            for img_id in burst_sharpness:
+                is_keeper = img_id in keepers
+                raw_score = burst_sharpness[img_id]
+
+                if args.rank_mode == "relative":
+                    score = 100.0 if is_keeper else 0.0
+                    if burst_exposure[img_id] != "ok":
+                        score -= EXPOSURE_PENALTY_RELATIVE
+                    for threshold, stars in STAR_THRESHOLDS:
+                        if max(0, score) >= threshold:
+                            break
+                    else:
                         stars = 0
+                else:
+                    for threshold, stars in TIER_THRESHOLDS:
+                        if raw_score >= threshold:
+                            break
+                    else:
+                        stars = 0
+                    if burst_exposure[img_id] != "ok":
+                        stars = max(0, stars - EXPOSURE_PENALTY_STARS)
 
-            burst_rows.append([
-                img_id,
-                round(raw_score, 1),
-                burst_exposure[img_id],
-                burst_id,
-                int(is_keeper),
-                stars,
-            ])
+                if not is_keeper:
+                    if args.nk_mode == "leave":
+                        stars = "leave"
+                    elif args.nk_mode == "reject":
+                        stars = -1
+                    else:
+                        try:
+                            stars = int(args.nk_mode)
+                        except ValueError:
+                            stars = 0
 
-        if burst_idx % 25 == 0:
-            gc.collect()
+                burst_rows.append([
+                    img_id,
+                    round(raw_score, 1),
+                    burst_exposure[img_id],
+                    burst_id,
+                    int(is_keeper),
+                    stars,
+                ])
 
-        with open(results_path, "a", newline="", encoding="utf-8") as f:
-            csv.writer(f).writerows(burst_rows)
-            f.flush()
-            os.fsync(f.fileno())
+            if burst_idx % 25 == 0:
+                gc.collect()
 
-    write_progress(progress_path, total_images, total_images, total_bursts, total_bursts)
+            with open(args.results, "a", newline="", encoding="utf-8") as f:
+                csv.writer(f).writerows(burst_rows)
+                f.flush()
+                os.fsync(f.fileno())
+
+    write_progress(args.progress, total_images, total_images, total_bursts, total_bursts)
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 3:
-        print(
-            "usage: python score_images.py manifest.csv results.csv [progress_path] [ranking_mode] [sharp_mode] [exp_mode] [keep_mode] [nk_mode]",
-            file=sys.stderr,
-        )
-        sys.exit(1)
+    parser = argparse.ArgumentParser(description="Assisted Culling Scorer")
+    parser.add_argument("manifest", help="Path to manifest CSV")
+    parser.add_argument("results", help="Path to results output CSV")
+    parser.add_argument("--progress", default="", help="Path for progress tracking")
+    parser.add_argument("--rank-mode", default="universal", help="Ranking logic mode")
+    parser.add_argument("--sharp-mode", default="subject_focus", help="Sharpness evaluation mode")
+    parser.add_argument("--exp-mode", default="whole_frame", help="Exposure evaluation mode")
+    parser.add_argument("--keep-mode", default="dynamic_burst", help="Keeper allowance logic")
+    parser.add_argument("--nk-mode", default="leave", help="Handling for non-keepers")
 
-    # Simplified argument unpacking now that Lua strictly passes all 8 variables
-    prog_arg = sys.argv[3] if len(sys.argv) >= 4 else ""
-    mode_arg = sys.argv[4] if len(sys.argv) >= 5 else "universal"
-    s_mode = sys.argv[5] if len(sys.argv) >= 6 else "subject_focus"
-    e_mode = sys.argv[6] if len(sys.argv) >= 7 else "whole_frame"
-    k_mode = sys.argv[7] if len(sys.argv) >= 8 else "dynamic_burst"
-    nk_mode = sys.argv[8] if len(sys.argv) >= 9 else "leave"
+    args = parser.parse_args()
 
     try:
-        main(sys.argv[1], sys.argv[2], prog_arg, mode_arg, s_mode, e_mode, k_mode, nk_mode)
+        main(args)
     except Exception:
         import traceback
         traceback.print_exc()
