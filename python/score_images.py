@@ -1,51 +1,55 @@
 #!/usr/bin/env python3
 """
-score_images.py — sharpness / exposure scoring for a batch of photos.
-
-Reads a CSV manifest of (image_id, filepath, burst_id) — burst_id groups
-images the Lua plugin already clustered by capture time — and scores each
-image for sharpness and exposure. Within each burst, the sharpest image
-is marked the keeper; the rest are treated as rejects. Writes a results
-CSV that the darktable Lua plugin reads back and applies as ratings,
-color labels, and image groups.
-
-Usage:
-    python score_images.py manifest.csv results.csv
-
-Manifest CSV columns (no header): id,filepath,burst_id
-Results  CSV columns (no header): id,sharpness,exposure,burst_id,is_keeper,stars
+score_images.py — burst-by-burst sharpness/exposure scorer for the darktable AI Cull plugin.
 """
 
-import sys
 import csv
+import gc
+import io
+import os
+import sys
+import time
 from pathlib import Path
 
 import numpy as np
 import cv2
 from PIL import Image
 
-# ---- tunable constants -------------------------------------------------
-# Everything that shapes the scoring lives here. Adjust these instead of
-# touching the logic below.
-
 RAW_EXTENSIONS = {".cr2", ".cr3", ".nef", ".arw", ".rw2", ".dng", ".raf", ".orf"}
-MAX_DIM = 800                  # downscale the long edge to this before scoring
-SHADOW_CLIP = 5 / 255          # luma below this = crushed shadow
-HIGHLIGHT_CLIP = 250 / 255     # luma above this = blown highlight
-CLIP_PCT_FLAG = 0.02           # flag exposure if more than this fraction of pixels clip
+MAX_DIM = 800
+SHADOW_CLIP = 5 / 255
+HIGHLIGHT_CLIP = 250 / 255
+CLIP_PCT_FLAG = 0.02
 
-# composite score (0-100) -> star rating. Checked top-down, first match wins.
-STAR_THRESHOLDS = [(85, 5), (70, 4), (50, 3), (30, 2), (10, 1)]
-EXPOSURE_PENALTY = 30          # subtracted from the composite score if exposure is flagged
+STAR_THRESHOLDS = [(95, 5), (87, 4), (75, 3), (62, 2), (45, 1), (0, 0)]
+EXPOSURE_PENALTY_RELATIVE = 30
+
+TIER_THRESHOLDS = [
+    (1800, 5),
+    (1000, 4),
+    (550, 3),
+    (200, 2),
+    (70, 1),
+    (0, 0),
+]
+EXPOSURE_PENALTY_STARS = 1
 
 
 def load_image(filepath: str) -> np.ndarray:
-    """Return an RGB uint8 array, downscaled so its long edge is MAX_DIM."""
     ext = Path(filepath).suffix.lower()
     if ext in RAW_EXTENSIONS:
-        import rawpy  # imported lazily: only needed if a raw file shows up
+        import rawpy
         with rawpy.imread(filepath) as raw:
-            rgb = raw.postprocess(half_size=True, use_camera_wb=True, no_auto_bright=True)
+            try:
+                thumb = raw.extract_thumb()
+                if thumb.format == rawpy.ThumbFormat.JPEG:
+                    rgb = np.array(Image.open(io.BytesIO(thumb.data)).convert("RGB"))
+                elif thumb.format == rawpy.ThumbFormat.BITMAP:
+                    rgb = thumb.data
+                else:
+                    raise ValueError("Unsupported thumbnail")
+            except Exception:
+                rgb = raw.postprocess(half_size=True, use_camera_wb=True, no_auto_bright=True)
     else:
         rgb = np.array(Image.open(filepath).convert("RGB"))
 
@@ -56,78 +60,203 @@ def load_image(filepath: str) -> np.ndarray:
     return rgb
 
 
-def sharpness_score(rgb: np.ndarray) -> float:
-    """Variance of the Laplacian — a standard, cheap focus-blur proxy."""
+def sharpness_score(rgb: np.ndarray, mode: str) -> float:
     gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
-    return float(cv2.Laplacian(gray, cv2.CV_64F).var())
+    denoised = cv2.bilateralFilter(gray, 5, 50, 50)
+
+    if mode == "center":
+        h, w = gray.shape
+        crop = denoised[int(h * 0.25):int(h * 0.75), int(w * 0.25):int(w * 0.75)]
+        lap = cv2.Laplacian(crop, cv2.CV_64F)
+        return float(lap.var())
+    if mode == "peak":
+        lap = cv2.Laplacian(denoised, cv2.CV_64F)
+        return float(np.percentile(np.abs(lap), 99))
+
+    h, w = denoised.shape
+    h_step, w_step = h // 3, w // 3
+    patch_vars = []
+    for r in range(3):
+        for c in range(3):
+            patch = denoised[r * h_step:(r + 1) * h_step, c * w_step:(c + 1) * w_step]
+            if patch.size > 0:
+                patch_vars.append(float(cv2.Laplacian(patch, cv2.CV_64F).var()))
+    if patch_vars:
+        return float(np.max(patch_vars) * 0.85 + np.median(patch_vars) * 0.15)
+    return float(cv2.Laplacian(denoised, cv2.CV_64F).var())
 
 
-def exposure_status(rgb: np.ndarray) -> str:
+def exposure_status(rgb: np.ndarray, mode: str) -> str:
+    if mode == "none":
+        return "ok"
     gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY).astype(np.float32) / 255.0
-    if np.mean(gray > HIGHLIGHT_CLIP) > CLIP_PCT_FLAG:
-        return "overexposed"
-    if np.mean(gray < SHADOW_CLIP) > CLIP_PCT_FLAG:
-        return "underexposed"
+    if mode == "strict":
+        if np.mean(gray > (HIGHLIGHT_CLIP - 0.05)) > (CLIP_PCT_FLAG / 2):
+            return "overexposed"
+        if np.mean(gray < (SHADOW_CLIP + 0.05)) > (CLIP_PCT_FLAG / 2):
+            return "underexposed"
+    else:
+        if np.mean(gray > HIGHLIGHT_CLIP) > CLIP_PCT_FLAG:
+            return "overexposed"
+        if np.mean(gray < SHADOW_CLIP) > CLIP_PCT_FLAG:
+            return "underexposed"
     return "ok"
 
 
-def stars_from_score(score: float) -> int:
-    for threshold, stars in STAR_THRESHOLDS:
-        if score >= threshold:
-            return stars
-    return 0
+def write_progress(progress_path: str, cur: int, tot: int, b_cur: int, b_tot: int):
+    """Write a tiny progress snapshot. In-place + retries avoid Windows replace-while-open failures."""
+    if not progress_path:
+        return
+    payload = f"{cur},{tot},{b_cur},{b_tot}"
+    for _ in range(8):
+        try:
+            with open(progress_path, "w", encoding="utf-8") as pf:
+                pf.write(payload)
+                pf.flush()
+                os.fsync(pf.fileno())
+            return
+        except OSError:
+            time.sleep(0.02)
 
 
-def main(manifest_path: str, results_path: str):
-    with open(manifest_path, newline="") as f:
+def cancel_requested(progress_path: str) -> bool:
+    if not progress_path:
+        return False
+    return Path(progress_path + ".cancel").exists()
+
+
+def main(
+    manifest_path: str,
+    results_path: str,
+    progress_path: str = "",
+    ranking_mode: str = "universal",
+    sharp_mode: str = "subject_focus",
+    exp_mode: str = "whole_frame",
+    keep_mode: str = "dynamic_burst",
+):
+    with open(manifest_path, newline="", encoding="utf-8") as f:
         manifest = [(row[0], row[1], row[2]) for row in csv.reader(f) if row]
 
-    sharpness, exposure, burst_of = {}, {}, {}
+    total_images = len(manifest)
+    if total_images == 0:
+        write_progress(progress_path, 0, 0, 0, 0)
+        return
+
+    burst_groups = {}
     for image_id, filepath, burst_id in manifest:
-        try:
-            rgb = load_image(filepath)
-        except Exception as exc:
-            print(f"skip {image_id} ({filepath}): {exc}", file=sys.stderr)
+        burst_groups.setdefault(burst_id, []).append((image_id, filepath))
+
+    total_bursts = len(burst_groups)
+
+    with open(results_path, "w", newline="", encoding="utf-8") as f:
+        pass
+
+    processed_count = 0
+    write_progress(progress_path, 0, total_images, 0, total_bursts)
+
+    for burst_idx, (burst_id, items) in enumerate(burst_groups.items()):
+        if cancel_requested(progress_path):
+            print("cancelled", file=sys.stderr)
+            sys.exit(130)
+
+        burst_sharpness = {}
+        burst_exposure = {}
+
+        for image_id, filepath in items:
+            if cancel_requested(progress_path):
+                print("cancelled", file=sys.stderr)
+                sys.exit(130)
+            try:
+                rgb = load_image(filepath)
+                burst_sharpness[image_id] = sharpness_score(rgb, sharp_mode)
+                burst_exposure[image_id] = exposure_status(rgb, exp_mode)
+                del rgb
+            except Exception as exc:
+                print(f"skip {image_id} ({filepath}): {exc}", file=sys.stderr)
+
+            processed_count += 1
+            write_progress(progress_path, processed_count, total_images, burst_idx + 1, total_bursts)
+
+        if not burst_sharpness:
             continue
-        sharpness[image_id] = sharpness_score(rgb)
-        exposure[image_id] = exposure_status(rgb)
-        burst_of[image_id] = burst_id
 
-    # Rank sharpness across the whole batch -> a 0-100 percentile. This
-    # matters because raw Laplacian variance isn't comparable across
-    # cameras/lenses/ISOs; relative rank within *this* batch is.
-    ranked = sorted(sharpness, key=lambda i: sharpness[i])
-    denom = max(1, len(ranked) - 1)
-    percentile = {img_id: 100 * rank / denom for rank, img_id in enumerate(ranked)}
+        burst_size = len(items)
+        if keep_mode == "dynamic_burst":
+            allowed = 1 if burst_size <= 4 else (2 if burst_size <= 8 else (3 if burst_size <= 12 else (4 if burst_size <= 18 else 5)))
+        elif keep_mode == "portrait_mode":
+            allowed = 1 if burst_size <= 3 else 2
+        elif keep_mode == "single_best":
+            allowed = 1
+        else:
+            allowed = burst_size
 
-    # One keeper per burst: highest sharpness wins.
-    burst_members = {}
-    for img_id, burst_id in burst_of.items():
-        burst_members.setdefault(burst_id, []).append(img_id)
-    keepers = {max(members, key=lambda i: sharpness[i]) for members in burst_members.values()}
+        sorted_members = sorted(burst_sharpness.keys(), key=lambda i: burst_sharpness[i], reverse=True)
+        keepers = set(sorted_members[:allowed])
 
-    with open(results_path, "w", newline="") as f:
-        writer = csv.writer(f)
-        for img_id in sharpness:
+        burst_rows = []
+        for img_id in burst_sharpness:
             is_keeper = img_id in keepers
-            score = percentile[img_id]
-            if exposure[img_id] != "ok":
-                score -= EXPOSURE_PENALTY
-            if not is_keeper:
-                score = 0
-            stars = stars_from_score(max(0, score))
-            writer.writerow([
+            raw_score = burst_sharpness[img_id]
+
+            if ranking_mode == "relative":
+                score = 100.0 if is_keeper else 0.0
+                if burst_exposure[img_id] != "ok":
+                    score -= EXPOSURE_PENALTY_RELATIVE
+                for threshold, stars in STAR_THRESHOLDS:
+                    if max(0, score) >= threshold:
+                        break
+                else:
+                    stars = 0
+            else:
+                for threshold, stars in TIER_THRESHOLDS:
+                    if raw_score >= threshold:
+                        break
+                else:
+                    stars = 0
+                if burst_exposure[img_id] != "ok":
+                    stars = max(0, stars - EXPOSURE_PENALTY_STARS)
+                if not is_keeper:
+                    stars = 0
+
+            burst_rows.append([
                 img_id,
-                round(sharpness[img_id], 1),
-                exposure[img_id],
-                burst_of[img_id],
+                round(raw_score, 1),
+                burst_exposure[img_id],
+                burst_id,
                 int(is_keeper),
                 stars,
             ])
 
+        if burst_idx % 25 == 0:
+            gc.collect()
+
+        with open(results_path, "a", newline="", encoding="utf-8") as f:
+            csv.writer(f).writerows(burst_rows)
+            f.flush()
+            os.fsync(f.fileno())
+
+    write_progress(progress_path, total_images, total_images, total_bursts, total_bursts)
+
 
 if __name__ == "__main__":
-    if len(sys.argv) != 3:
-        print("usage: python score_images.py manifest.csv results.csv", file=sys.stderr)
+    if len(sys.argv) < 3:
+        print(
+            "usage: python score_images.py manifest.csv results.csv [progress_path] [ranking_mode] [sharp_mode] [exp_mode] [keep_mode]",
+            file=sys.stderr,
+        )
         sys.exit(1)
-    main(sys.argv[1], sys.argv[2])
+
+    prog_arg = sys.argv[3] if len(sys.argv) >= 4 and sys.argv[3] not in ["universal", "relative"] else ""
+    mode_arg = sys.argv[4] if len(sys.argv) >= 5 else (
+        sys.argv[3] if len(sys.argv) >= 4 and sys.argv[3] in ["universal", "relative"] else "universal"
+    )
+    s_mode = sys.argv[5] if len(sys.argv) >= 6 else "subject_focus"
+    e_mode = sys.argv[6] if len(sys.argv) >= 7 else "whole_frame"
+    k_mode = sys.argv[7] if len(sys.argv) >= 8 else "dynamic_burst"
+
+    try:
+        main(sys.argv[1], sys.argv[2], prog_arg, mode_arg, s_mode, e_mode, k_mode)
+    except Exception:
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
