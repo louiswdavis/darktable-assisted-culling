@@ -104,7 +104,6 @@ def exposure_status(rgb: np.ndarray, mode: str) -> str:
 
 
 def write_progress(progress_path: str, cur: int, tot: int, b_cur: int, b_tot: int):
-    """Write a tiny progress snapshot. In-place + retries avoid Windows replace-while-open failures."""
     if not progress_path:
         return
     payload = f"{cur},{tot},{b_cur},{b_tot}"
@@ -133,6 +132,7 @@ def main(
     sharp_mode: str = "subject_focus",
     exp_mode: str = "whole_frame",
     keep_mode: str = "dynamic_burst",
+    nk_mode: str = "leave",
 ):
     with open(manifest_path, newline="", encoding="utf-8") as f:
         manifest = [(row[0], row[1], row[2]) for row in csv.reader(f) if row]
@@ -215,8 +215,18 @@ def main(
                     stars = 0
                 if burst_exposure[img_id] != "ok":
                     stars = max(0, stars - EXPOSURE_PENALTY_STARS)
-                if not is_keeper:
-                    stars = 0
+
+            # Route the non-keeper rating appropriately
+            if not is_keeper:
+                if nk_mode == "leave":
+                    stars = "leave"
+                elif nk_mode == "reject":
+                    stars = -1
+                else:
+                    try:
+                        stars = int(nk_mode)
+                    except ValueError:
+                        stars = 0
 
             burst_rows.append([
                 img_id,
@@ -241,21 +251,21 @@ def main(
 if __name__ == "__main__":
     if len(sys.argv) < 3:
         print(
-            "usage: python score_images.py manifest.csv results.csv [progress_path] [ranking_mode] [sharp_mode] [exp_mode] [keep_mode]",
+            "usage: python score_images.py manifest.csv results.csv [progress_path] [ranking_mode] [sharp_mode] [exp_mode] [keep_mode] [nk_mode]",
             file=sys.stderr,
         )
         sys.exit(1)
 
-    prog_arg = sys.argv[3] if len(sys.argv) >= 4 and sys.argv[3] not in ["universal", "relative"] else ""
-    mode_arg = sys.argv[4] if len(sys.argv) >= 5 else (
-        sys.argv[3] if len(sys.argv) >= 4 and sys.argv[3] in ["universal", "relative"] else "universal"
-    )
+    # Simplified argument unpacking now that Lua strictly passes all 8 variables
+    prog_arg = sys.argv[3] if len(sys.argv) >= 4 else ""
+    mode_arg = sys.argv[4] if len(sys.argv) >= 5 else "universal"
     s_mode = sys.argv[5] if len(sys.argv) >= 6 else "subject_focus"
     e_mode = sys.argv[6] if len(sys.argv) >= 7 else "whole_frame"
     k_mode = sys.argv[7] if len(sys.argv) >= 8 else "dynamic_burst"
+    nk_mode = sys.argv[8] if len(sys.argv) >= 9 else "leave"
 
     try:
-        main(sys.argv[1], sys.argv[2], prog_arg, mode_arg, s_mode, e_mode, k_mode)
+        main(sys.argv[1], sys.argv[2], prog_arg, mode_arg, s_mode, e_mode, k_mode, nk_mode)
     except Exception:
         import traceback
         traceback.print_exc()
