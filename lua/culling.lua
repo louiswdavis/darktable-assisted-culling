@@ -69,6 +69,7 @@ if not ok then return M end
 
 local du = require "lib/dtutils"
 local df = require "lib/dtutils.file"
+local tags = require "darktable.tags"
 
 du.check_min_api_version("7.0.0", "assisted_culling")
 
@@ -97,6 +98,14 @@ if dt.gui then
         "Assisted Culling: score_images.py",
         "path to score_images.py from darktable-assisted-culling (empty = auto-detect)",
         "")
+        
+    -- Register UI State Preferences
+    dt.preferences.register("assisted_culling", "last_genre", "integer", "Last Genre", "", 1)
+    dt.preferences.register("assisted_culling", "last_rank_mode", "integer", "Last Rank Mode", "", 1)
+    dt.preferences.register("assisted_culling", "last_sharp_mode", "integer", "Last Sharpness Mode", "", 1)
+    dt.preferences.register("assisted_culling", "last_exp_mode", "integer", "Last Exposure Mode", "", 1)
+    dt.preferences.register("assisted_culling", "last_keep_mode", "integer", "Last Keeper Mode", "", 1)
+    dt.preferences.register("assisted_culling", "last_nk_mode", "integer", "Last Non-Keeper Mode", "", 1)
 end
 
 local function file_exists(name)
@@ -258,14 +267,16 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         end
         local py_bin = python_bin(sc_script)
 
+        -- Utilize the robust argparse flags
         local cmd = shell_quote(py_bin) .. " -u " .. shell_quote(sc_script)
-            .. " " .. shell_quote(MANIFEST_PATH) .. " " .. shell_quote(RESULTS_PATH)
-            .. " " .. shell_quote(PROGRESS_PATH)
-            .. " " .. shell_quote(tostring(rank_mode))
-            .. " " .. shell_quote(tostring(sharp_mode))
-            .. " " .. shell_quote(tostring(exp_mode))
-            .. " " .. shell_quote(tostring(keep_mode))
-            .. " " .. shell_quote(tostring(nk_mode))
+            .. " " .. shell_quote(MANIFEST_PATH) 
+            .. " " .. shell_quote(RESULTS_PATH)
+            .. " --progress " .. shell_quote(PROGRESS_PATH)
+            .. " --rank-mode " .. shell_quote(tostring(rank_mode))
+            .. " --sharp-mode " .. shell_quote(tostring(sharp_mode))
+            .. " --exp-mode " .. shell_quote(tostring(exp_mode))
+            .. " --keep-mode " .. shell_quote(tostring(keep_mode))
+            .. " --nk-mode " .. shell_quote(tostring(nk_mode))
             .. " 2> " .. shell_quote(LOG_PATH)
 
         run_async_command(cmd, DONE_PATH)
@@ -315,9 +326,15 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
 
         local applied_total = 0
 
-        -- Stage 2 Loop
+        -- =========================================================================
+        -- STAGE 2: Applying Ratings Pass with Tags & Toast Feedback
+        -- =========================================================================
         if not M.cancel_requested then
             dt.print(_("Assisted Culling: Stage 2 applying ratings..."))
+            
+            -- Prepare native darktable tags
+            local keeper_tag = tags.create("AI Culling|Keeper")
+            local reject_tag = tags.create("AI Culling|Rejected")
             
             local f = io.open(RESULTS_PATH, "r")
             if f then
@@ -345,17 +362,22 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                         if img then
                             local raw_rating_str = parts[6]
                             local is_ok = (parts[3] == "ok")
-                            
-                            -- Logic fix: parts[5] == "0" means it's a non-keeper (rejected)
-                            local is_rejected = (tonumber(parts[5]) == 0)
+                            local is_keeper = (tonumber(parts[5]) == 1)
 
                             pcall(function()
-                                -- Only assign the rating if it's not strictly flagged to "leave"
                                 if raw_rating_str ~= "leave" then
                                     img.rating = tonumber(raw_rating_str) or 0
                                 end
                                 img.yellow = not is_ok
-                                img.red = is_rejected
+                                img.red = not is_keeper
+                                
+                                -- Apply hierarchical tags
+                                if is_keeper then
+                                    tags.attach(keeper_tag, img)
+                                else
+                                    tags.attach(reject_tag, img)
+                                end
+                                
                                 applied_total = applied_total + 1
                             end)
                         end
@@ -454,10 +476,11 @@ local function install_panel()
         label = _("preset"),
         tooltip = _("Sets global configurations based on photography genre."),
         _("sport"), _("portrait"), _("landscape"), _("macro"), _("custom"),
-        value = 1,
+        value = dt.preferences.read("assisted_culling", "last_genre", "integer") or 1,
         changed_callback = function(widget)
             if is_updating then return end
             is_updating = true
+            dt.preferences.write("assisted_culling", "last_genre", "integer", widget.value)
             if widget.value == 1 then
                 rank_combo.value = 1
                 sharp_combo.value = 1
@@ -479,6 +502,13 @@ local function install_panel()
                 exp_combo.value = 1
                 keep_combo.value = 4
             end
+            
+            -- Sync preferences for cascading updates
+            dt.preferences.write("assisted_culling", "last_rank_mode", "integer", rank_combo.value)
+            dt.preferences.write("assisted_culling", "last_sharp_mode", "integer", sharp_combo.value)
+            dt.preferences.write("assisted_culling", "last_exp_mode", "integer", exp_combo.value)
+            dt.preferences.write("assisted_culling", "last_keep_mode", "integer", keep_combo.value)
+            
             is_updating = false
         end
     }
@@ -487,37 +517,58 @@ local function install_panel()
         if is_updating then return end
         is_updating = true
         genre_combo.value = 5
+        dt.preferences.write("assisted_culling", "last_genre", "integer", 5)
         is_updating = false
     end
 
     rank_combo = dt.new_widget("combobox") {
         label = _("ranking mode"),
         _("universal absolute"), _("relative batch percentile"),
-        value = 1, changed_callback = trigger_custom_override
+        value = dt.preferences.read("assisted_culling", "last_rank_mode", "integer") or 1, 
+        changed_callback = function(widget)
+            dt.preferences.write("assisted_culling", "last_rank_mode", "integer", widget.value)
+            trigger_custom_override()
+        end
     }
 
     sharp_combo = dt.new_widget("combobox") {
         label = _("sharpness"),
         _("subject tracking (AI)"), _("face & eyes (OpenCV)"), _("edge-to-edge uniformity"), _("absolute peak 1%"), _("center crop"),
-        value = 1, changed_callback = trigger_custom_override
+        value = dt.preferences.read("assisted_culling", "last_sharp_mode", "integer") or 1, 
+        changed_callback = function(widget)
+            dt.preferences.write("assisted_culling", "last_sharp_mode", "integer", widget.value)
+            trigger_custom_override()
+        end
     }
 
     exp_combo = dt.new_widget("combobox") {
         label = _("exposure"),
         _("whole frame"), _("subject only (ignore sky)"), _("strict histogram"), _("ignore exposure"),
-        value = 1, changed_callback = trigger_custom_override
+        value = dt.preferences.read("assisted_culling", "last_exp_mode", "integer") or 1, 
+        changed_callback = function(widget)
+            dt.preferences.write("assisted_culling", "last_exp_mode", "integer", widget.value)
+            trigger_custom_override()
+        end
     }
 
     keep_combo = dt.new_widget("combobox") {
         label = _("keepers"),
         _("dynamic (1 to 5)"), _("portrait (1 or 2)"), _("single best only"), _("keep all (focus stack)"),
-        value = 1, changed_callback = trigger_custom_override
+        value = dt.preferences.read("assisted_culling", "last_keep_mode", "integer") or 1, 
+        changed_callback = function(widget)
+            dt.preferences.write("assisted_culling", "last_keep_mode", "integer", widget.value)
+            trigger_custom_override()
+        end
     }
 
     non_keeper_combo = dt.new_widget("combobox") {
         label = _("non-keepers"),
         _("leave alone"), _("reject (-1)"), _("0 stars"), _("1 star"), _("2 stars"), _("3 stars"), _("4 stars"), _("5 stars"),
-        value = 1, changed_callback = trigger_custom_override
+        value = dt.preferences.read("assisted_culling", "last_nk_mode", "integer") or 1, 
+        changed_callback = function(widget)
+            dt.preferences.write("assisted_culling", "last_nk_mode", "integer", widget.value)
+            trigger_custom_override()
+        end
     }
 
     action_button = dt.new_widget("button") {
@@ -550,6 +601,13 @@ local function install_panel()
             exp_combo.value = 1
             keep_combo.value = 1
             non_keeper_combo.value = 1
+            
+            dt.preferences.write("assisted_culling", "last_genre", "integer", 1)
+            dt.preferences.write("assisted_culling", "last_rank_mode", "integer", 1)
+            dt.preferences.write("assisted_culling", "last_sharp_mode", "integer", 1)
+            dt.preferences.write("assisted_culling", "last_exp_mode", "integer", 1)
+            dt.preferences.write("assisted_culling", "last_keep_mode", "integer", 1)
+            dt.preferences.write("assisted_culling", "last_nk_mode", "integer", 1)
             is_updating = false
         end,
         genre_combo,
