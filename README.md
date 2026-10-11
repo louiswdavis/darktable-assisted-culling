@@ -80,14 +80,27 @@ darktable's config directory is `~/.config/darktable` on Linux/macOS and `%LOCAL
 
 ```
 # Linux / macOS
-cp lua/culling.lua ~/.config/darktable/lua/contrib/culling.lua
+
+mkdir -p ~/.config/darktable/lua/contrib
+ln -s "$(pwd)/lua/culling.lua" ~/.config/darktable/lua/contrib/culling.lua
 echo 'require "contrib/culling"' >> ~/.config/darktable/luarc
 ```
 
 ```
+# Windows (Command Prompt)
+# Note: Creating symbolic links on Windows requires running cmd as Administrator (unless Developer Mode is enabled).
+
+if not exist "%LOCALAPPDATA%\darktable\lua\contrib" mkdir "%LOCALAPPDATA%\darktable\lua\contrib"
+mklink "%LOCALAPPDATA%\darktable\lua\contrib\culling.lua" "%CD%\lua\culling.lua"
+echo require "contrib/culling" >> "%LOCALAPPDATA%\darktable\luarc"
+```
+
+```
 # Windows (PowerShell)
+# Note: Creating symbolic links on Windows requires running PowerShell as Administrator (unless Developer Mode is enabled).
+
 New-Item -ItemType Directory -Force "$env:LOCALAPPDATA\darktable\lua\contrib"
-Copy-Item lua\culling.lua "$env:LOCALAPPDATA\darktable\lua\contrib\culling.lua"
+New-Item -ItemType SymbolicLink -Path "$env:LOCALAPPDATA\darktable\lua\contrib\culling.lua" -Value "$PWD\lua\culling.lua"
 Add-Content "$env:LOCALAPPDATA\darktable\luarc" 'require "contrib/culling"'
 ```
 
