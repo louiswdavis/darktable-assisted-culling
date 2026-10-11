@@ -2,7 +2,7 @@
     assisted_culling.lua — Assisted Culling for darktable
 
     Lighttable panel that clusters a selection into bursts, shells out to
-    score_images.py, streams ratings back, and keeps a live progress job.
+    score_images.py, streams ratings back, and keeps live progress jobs.
 ]]
 
 local M = {}
@@ -237,9 +237,10 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode)
         return
     end
 
+    -- Stage 1 Job: Analyzing
     local culling_job = nil
     if dt.gui then
-        culling_job = dt.gui.create_job(_("Assisted Culling"), true, stop_job)
+        culling_job = dt.gui.create_job(_("Assisted Culling: Analyzing"), true, stop_job)
         culling_job.percent = 0.0
     end
 
@@ -267,7 +268,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode)
     local done_code = nil
 
     -- =========================================================================
-    -- STAGE 1: Pure monitoring loop (zero file parsing or DB interaction)
+    -- STAGE 1 LOOP: Async Monitoring
     -- =========================================================================
     while true do
         if M.cancel_requested or (culling_job and not culling_job.valid) then
@@ -302,27 +303,47 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode)
                 done_code = tonumber((df_done:read("*a") or ""):match("%d+"))
                 df_done:close()
             end
-            if culling_job and done_code == 0 then
-                culling_job.percent = 1.0
-            end
             break
         end
 
         dt.control.sleep(150)
     end
 
+    if culling_job then
+        culling_job.percent = 1.0
+        dt.control.sleep(30)
+        culling_job.valid = false
+    end
+
     local applied_total = 0
 
     -- =========================================================================
-    -- STAGE 2: Post-processing batched read and application pass
+    -- STAGE 2: Applying Ratings Job with dedicated progress tracking
     -- =========================================================================
+    local apply_job = nil
     if not M.cancel_requested and done_code == 0 then
+        if dt.gui then
+            apply_job = dt.gui.create_job(_("Assisted Culling: Applying Ratings"), true, stop_job)
+            apply_job.percent = 0.0
+        end
+
         dt.print_hinter(_("Assisted Culling: applying ratings to database..."))
         
         local f = io.open(RESULTS_PATH, "r")
         if f then
+            local lines = {}
+            for line in f:lines() do table.insert(lines, line) end
+            f:close()
+
+            local total_lines = #lines
             local batch_count = 0
-            for line in f:lines() do
+
+            for i, line in ipairs(lines) do
+                if M.cancel_requested or (apply_job and not apply_job.valid) then
+                    M.cancel_requested = true
+                    break
+                end
+
                 local parts = M.parse_csv_line(line, 6)
                 if parts then
                     local id = tonumber(parts[1])
@@ -332,26 +353,26 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode)
                         img.yellow = (parts[3] ~= "ok")
                         img.red = tonumber(parts[5]) ~= 1
                         applied_total = applied_total + 1
-                        batch_count = batch_count + 1
-                        
-                        -- Yield every 50 updates to keep the UI fully responsive
-                        if batch_count >= 50 then
-                            batch_count = 0
-                            dt.control.sleep(10)
-                        end
                     end
                 end
-            end
-            f:close()
-        end
-    end
 
-    if culling_job then
-        if not M.cancel_requested and done_code == 0 then
-            culling_job.percent = 1.0
-            dt.control.sleep(50)
+                if apply_job and total_lines > 0 then
+                    apply_job.percent = math.min(1.0, i / total_lines)
+                end
+
+                batch_count = batch_count + 1
+                if batch_count >= 50 then
+                    batch_count = 0
+                    dt.control.sleep(10)
+                end
+            end
         end
-        culling_job.valid = false
+
+        if apply_job then
+            apply_job.percent = 1.0
+            dt.control.sleep(50)
+            apply_job.valid = false
+        end
     end
 
     dt.print_hinter(" ")
