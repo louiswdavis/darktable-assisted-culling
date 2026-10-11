@@ -187,44 +187,6 @@ local function write_manifest(images, burst_of)
     return true
 end
 
--- Collect results into a buffer table without executing immediate UI/DB writes
-local function consume_results(last_read_pos, img_map, pending_updates)
-    local f = io.open(RESULTS_PATH, "r")
-    if not f then return last_read_pos, 0 end
-    f:seek("set", last_read_pos)
-    local applied = 0
-    while true do
-        local line_start = f:seek()
-        local line = f:read("*l")
-        if not line then break end
-        local now = f:seek()
-        local size = f:seek("end")
-        f:seek("set", now)
-        local parts = M.parse_csv_line(line, 6)
-        if not parts then
-            if now == size then
-                f:close()
-                return line_start, applied
-            end
-        else
-            local id = tonumber(parts[1])
-            local img = img_map[id]
-            if img then
-                table.insert(pending_updates, {
-                    img = img,
-                    rating = tonumber(parts[6]),
-                    yellow = (parts[3] ~= "ok"),
-                    red = tonumber(parts[5]) ~= 1
-                })
-                applied = applied + 1
-            end
-        end
-        last_read_pos = now
-    end
-    f:close()
-    return last_read_pos, applied
-end
-
 local function read_log_tail()
     local f = io.open(LOG_PATH, "r")
     if not f then return "" end
@@ -302,11 +264,11 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode)
 
     run_async_command(cmd, DONE_PATH)
 
-    local last_read_pos = 0
-    local applied_total = 0
     local done_code = nil
-    local pending_updates = {}
 
+    -- =========================================================================
+    -- STAGE 1: Pure monitoring loop (zero file parsing or DB interaction)
+    -- =========================================================================
     while true do
         if M.cancel_requested or (culling_job and not culling_job.valid) then
             M.cancel_requested = true
@@ -327,16 +289,12 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode)
                         culling_job.percent = math.min(1.0, num / total)
                     end
                     dt.print_hinter(string.format(
-                        "Assisted Culling: images %d / %d | bursts %s / %s",
+                        "Assisted Culling: analyzing %d / %d | bursts %s / %s",
                         num, total, b_cur or "?", b_tot or "?"
                     ))
                 end
             end
         end
-
-        local new_pos, applied = consume_results(last_read_pos, img_map, pending_updates)
-        last_read_pos = new_pos
-        applied_total = applied_total + applied
 
         if file_exists(DONE_PATH) then
             local df_done = io.open(DONE_PATH, "r")
@@ -344,26 +302,39 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode)
                 done_code = tonumber((df_done:read("*a") or ""):match("%d+"))
                 df_done:close()
             end
-            local final_pos, final_applied = consume_results(last_read_pos, img_map, pending_updates)
-            last_read_pos = final_pos
-            applied_total = applied_total + final_applied
             if culling_job and done_code == 0 then
                 culling_job.percent = 1.0
             end
-            dt.control.sleep(50)
             break
         end
 
         dt.control.sleep(150)
     end
 
-    -- Apply all collected ratings and labels in a single deferred pass after processing completes
-    if not M.cancel_requested and done_code == 0 and #pending_updates > 0 then
+    local applied_total = 0
+
+    -- =========================================================================
+    -- STAGE 2: Post-processing batch read and application pass
+    -- =========================================================================
+    if not M.cancel_requested and done_code == 0 then
         dt.print_hinter(_("Assisted Culling: applying ratings to database..."))
-        for _, update in ipairs(pending_updates) do
-            update.img.rating = update.rating
-            update.img.yellow = update.yellow
-            update.img.red = update.red
+        
+        local f = io.open(RESULTS_PATH, "r")
+        if f then
+            for line in f:lines() do
+                local parts = M.parse_csv_line(line, 6)
+                if parts then
+                    local id = tonumber(parts[1])
+                    local img = img_map[id]
+                    if img then
+                        img.rating = tonumber(parts[6])
+                        img.yellow = (parts[3] ~= "ok")
+                        img.red = tonumber(parts[5]) ~= 1
+                        applied_total = applied_total + 1
+                    end
+                end
+            end
+            f:close()
         end
     end
 
