@@ -78,6 +78,13 @@ local function _(msgid)
     return gettext(msgid)
 end
 
+-- Stage 2 pacing. Every darktable property write (rating, colour label, tag
+-- attach/detach) reloads the lighttable collection and/or rewrites the XMP
+-- sidecar, so we count writes and yield to the GUI after a small budget.
+local STAGE2_WRITE_BUDGET = 12   -- writes per slice before yielding
+local STAGE2_SLEEP_MIN_MS = 20   -- minimum yield per slice
+local STAGE2_SLEEP_MAX_MS = 300  -- maximum yield per slice
+
 local IS_WINDOWS = dt.configuration.running_os == "windows"
 local THIS_DIR = (debug.getinfo(1, "S").source:sub(2):match("^(.*)[/\\]")) or "."
 
@@ -324,17 +331,21 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         end
 
         local applied_total = 0
+        local failed_total = 0
+        local first_error = nil
 
-        -- =========================================================================
-        -- STAGE 2: Applying Ratings Pass via Chunked Asynchronous Execution
-        -- =========================================================================
+        -- =====================================================================
+        -- STAGE 2: apply results in small, paced slices, writing only what changed
+        -- =====================================================================
         if not M.cancel_requested then
-            dt.print(_("Assisted Culling: Stage 2 applying ratings asynchronously..."))
-            
+            dt.print(_("Assisted Culling: applying ratings..."))
+
             local keeper_tag = tags.create("Assisted Culling|Keeper")
             local reject_tag = tags.create("Assisted Culling|Rejected")
             local culled_tag = tags.create("Assisted Culling|Culled")
-            
+            local KEEPER, REJECT, CULLED =
+                "Assisted Culling|Keeper", "Assisted Culling|Rejected", "Assisted Culling|Culled"
+
             local f = io.open(RESULTS_PATH, "r")
             if f then
                 local lines = {}
@@ -342,66 +353,107 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                 f:close()
 
                 local total_lines = #lines
-                local chunk_size = 50
-                local current_index = 1
+                local idx = 1
+                local started = os.time()
+                local last_toast_pct = 0
 
-                while current_index <= total_lines do
+                -- Returns the number of DB-touching writes performed.
+                local function apply_line(line)
+                    local parts = M.parse_csv_line(line, 6)
+                    if not parts then return 0 end
+                    for k, val in ipairs(parts) do
+                        parts[k] = val:match("^%s*(.-)%s*$")
+                    end
+                    local id = tonumber(parts[1])
+                    local img = id and img_map[id] or nil
+                    if not img then return 0 end
+
+                    local writes = 0
+                    local ok_apply, err = pcall(function()
+                        local want_rating = (parts[6] ~= "leave") and (tonumber(parts[6]) or 0) or nil
+                        local is_keeper = (tonumber(parts[5]) == 1)
+                        local want_yellow = (parts[3] ~= "ok")
+                        local want_red = not is_keeper
+
+                        -- reads are cheap; writes reload the collection, so skip no-ops
+                        if want_rating ~= nil and img.rating ~= want_rating then
+                            img.rating = want_rating; writes = writes + 1
+                        end
+                        if (img.yellow and true or false) ~= want_yellow then
+                            img.yellow = want_yellow; writes = writes + 1
+                        end
+                        if (img.red and true or false) ~= want_red then
+                            img.red = want_red; writes = writes + 1
+                        end
+
+                        local have = {}
+                        for _, t in ipairs(tags.get_tags(img)) do have[t.name] = true end
+
+                        local function want(tag, name, wanted)
+                            if wanted and not have[name] then
+                                tags.attach(tag, img); writes = writes + 1
+                            elseif not wanted and have[name] then
+                                tags.detach(tag, img); writes = writes + 1
+                            end
+                        end
+                        want(keeper_tag, KEEPER, is_keeper)
+                        want(reject_tag, REJECT, not is_keeper)
+                        want(culled_tag, CULLED, true)
+                    end)
+                    if ok_apply then
+                        applied_total = applied_total + 1
+                    else
+                        failed_total = failed_total + 1
+                        first_error = first_error or tostring(err)
+                    end
+                    return writes
+                end
+
+                while idx <= total_lines do
                     if M.cancel_requested or (culling_job and not culling_job.valid) or file_exists(CANCEL_PATH) then
                         M.cancel_requested = true
                         break
                     end
 
-                    local end_idx = math.min(current_index + chunk_size - 1, total_lines)
+                    -- one slice: stop once the write budget is spent
+                    local slice_start = os.clock()
+                    local budget = STAGE2_WRITE_BUDGET
+                    while idx <= total_lines and budget > 0 do
+                        budget = budget - apply_line(lines[idx])
+                        idx = idx + 1
+                    end
+                    local slice_ms = (os.clock() - slice_start) * 1000
 
-                    for i = current_index, end_idx do
-                        local line = lines[i]
-                        local parts = M.parse_csv_line(line, 6)
-                        if parts then
-                            for k, val in ipairs(parts) do
-                                parts[k] = val:match("^%s*(.-)%s*$")
-                            end
-
-                            local id = tonumber(parts[1])
-                            local img = id and img_map[id] or nil
-                            
-                            if img then
-                                local raw_rating_str = parts[6]
-                                local is_ok = (parts[3] == "ok")
-                                local is_keeper = (tonumber(parts[5]) == 1)
-
-                                pcall(function()
-                                    if raw_rating_str ~= "leave" then
-                                        img.rating = tonumber(raw_rating_str) or 0
-                                    end
-                                    img.yellow = not is_ok
-                                    img.red = not is_keeper
-                                    
-                                    if is_keeper then
-                                        tags.detach(reject_tag, img)
-                                        tags.attach(keeper_tag, img)
-                                    else
-                                        tags.detach(keeper_tag, img)
-                                        tags.attach(reject_tag, img)
-                                    end
-
-                                    tags.attach(culled_tag, img)
-                                    applied_total = applied_total + 1
-                                end)
-                            end
-                        end
+                    -- progress + ETA
+                    local done = idx - 1
+                    local pct = done / total_lines
+                    if culling_job then culling_job.percent = math.min(1.0, pct) end
+                    local elapsed = os.time() - started
+                    local eta = ""
+                    if elapsed >= 3 and done > 0 and done < total_lines then
+                        local remaining = math.ceil(elapsed * (total_lines - done) / done)
+                        eta = string.format(" | ~%dm %02ds left", remaining // 60, remaining % 60)
+                    end
+                    dt.print_hinter(string.format(
+                        "Assisted Culling: applying ratings %d / %d (%d%%)%s", done, total_lines,
+                        math.floor(pct * 100), eta))
+                    local milestone = math.floor(pct * 4) * 25
+                    if milestone > last_toast_pct and milestone < 100 then
+                        last_toast_pct = milestone
+                        dt.print(string.format("Assisted Culling: %d%% applied", milestone))
                     end
 
-                    if culling_job and total_lines > 0 then
-                        culling_job.percent = math.min(1.0, end_idx / total_lines)
-                    end
-                    dt.print_hinter(string.format("Assisted Culling: applying ratings... (%d / %d)", end_idx, total_lines))
-
-                    current_index = end_idx + 1
-                    dt.control.sleep(20)
+                    -- yield to the GUI in proportion to how long the slice took
+                    local nap = math.max(STAGE2_SLEEP_MIN_MS, math.min(STAGE2_SLEEP_MAX_MS, math.floor(slice_ms)))
+                    dt.control.sleep(nap)
                 end
 
                 if not M.cancel_requested then
-                    dt.print(string.format("Assisted Culling: Stage 2 complete. Updated %d images.", applied_total))
+                    dt.print(string.format("Assisted Culling: Stage 2 complete. Updated %d images%s.",
+                        applied_total, failed_total > 0 and (", " .. failed_total .. " failed") or ""))
+                    if first_error then
+                        dt.print_error("Assisted Culling: first apply error: " .. first_error)
+                    end
                 end
             end
         end
