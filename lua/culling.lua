@@ -69,7 +69,7 @@ if not ok then return M end
 
 local du = require "lib/dtutils"
 local df = require "lib/dtutils.file"
-local tags = require "darktable.tags"
+local tags = dt.tags
 
 du.check_min_api_version("7.0.0", "assisted_culling")
 
@@ -100,12 +100,12 @@ if dt.gui then
         "")
         
     -- Register UI State Preferences
-    dt.preferences.register("assisted_culling", "last_genre", "integer", "Last Genre", "", 1)
-    dt.preferences.register("assisted_culling", "last_rank_mode", "integer", "Last Rank Mode", "", 1)
-    dt.preferences.register("assisted_culling", "last_sharp_mode", "integer", "Last Sharpness Mode", "", 1)
-    dt.preferences.register("assisted_culling", "last_exp_mode", "integer", "Last Exposure Mode", "", 1)
-    dt.preferences.register("assisted_culling", "last_keep_mode", "integer", "Last Keeper Mode", "", 1)
-    dt.preferences.register("assisted_culling", "last_nk_mode", "integer", "Last Non-Keeper Mode", "", 1)
+    dt.preferences.register("assisted_culling", "last_genre", "integer", "Last Genre", "", 1, 1, 5)
+    dt.preferences.register("assisted_culling", "last_rank_mode", "integer", "Last Rank Mode", "", 1, 1, 2)
+    dt.preferences.register("assisted_culling", "last_sharp_mode", "integer", "Last Sharpness Mode", "", 1, 1, 5)
+    dt.preferences.register("assisted_culling", "last_exp_mode", "integer", "Last Exposure Mode", "", 1, 1, 4)
+    dt.preferences.register("assisted_culling", "last_keep_mode", "integer", "Last Keeper Mode", "", 1, 1, 4)
+    dt.preferences.register("assisted_culling", "last_nk_mode", "integer", "Last Non-Keeper Mode", "", 1, 1, 8)
 end
 
 local function file_exists(name)
@@ -635,6 +635,7 @@ local function restart()
         dt.gui.libs["assisted_culling"].visible = true
     end
 
+    pcall(dt.destroy_event, "assisted_culling_run", "shortcut")
     dt.register_event("assisted_culling_run", "shortcut",
         function(event, shortcut)
             execute_current_config(dt.gui.action_images)
