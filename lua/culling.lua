@@ -520,15 +520,16 @@ local function install_panel()
             M.cancel_requested = true
             local cf = io.open(CANCEL_PATH, "w")
             if cf then cf:write("1"); cf:close() end
-            action_button.label = _("cancelling...")
+            dt.print(_("Assisted Culling: cancellation requested..."))
             return
         end
 
         is_running = true
         M.cancel_requested = false
-        action_button.label = _("CANCEL (running...)")
 
         execute_current_config(dt.gui.action_images)
+
+        is_running = false
     end
 
     local panel_box = dt.new_widget("box") {
