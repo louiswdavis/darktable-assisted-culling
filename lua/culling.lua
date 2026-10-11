@@ -227,196 +227,191 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode)
         return
     end
 
-    local img_map = {}
-    for _, img in ipairs(images) do img_map[tonumber(img.id) or img.id] = img end
+    local success, run_err = pcall(function()
+        local img_map = {}
+        for _, img in ipairs(images) do img_map[tonumber(img.id) or img.id] = img end
 
-    local time_items = {}
-    for _, img in ipairs(images) do
-        table.insert(time_items, { id = img.id, epoch = M.exif_time_to_epoch(img.exif_datetime_taken) })
-    end
-    local burst_of = M.cluster_by_time(time_items)
+        local time_items = {}
+        for _, img in ipairs(images) do
+            table.insert(time_items, { id = img.id, epoch = M.exif_time_to_epoch(img.exif_datetime_taken) })
+        end
+        local burst_of = M.cluster_by_time(time_items)
 
-    pcall(os.remove, MANIFEST_PATH)
-    pcall(os.remove, RESULTS_PATH)
-    pcall(os.remove, RESULTS_PATH .. ".tmp")
-    pcall(os.remove, PROGRESS_PATH)
-    pcall(os.remove, CANCEL_PATH)
-    pcall(os.remove, DONE_PATH)
-    pcall(os.remove, LOG_PATH)
+        pcall(os.remove, MANIFEST_PATH)
+        pcall(os.remove, RESULTS_PATH)
+        pcall(os.remove, RESULTS_PATH .. ".tmp")
+        pcall(os.remove, PROGRESS_PATH)
+        pcall(os.remove, CANCEL_PATH)
+        pcall(os.remove, DONE_PATH)
+        pcall(os.remove, LOG_PATH)
 
-    if not write_manifest(images, burst_of) then
-        dt.print_error(_("Assisted Culling Error: could not write manifest"))
-        is_running = false
-        if action_button then action_button.label = _("Start Culling") end
-        return
-    end
-
-    local culling_job = nil
-    if dt.gui then
-        culling_job = dt.gui.create_job(_("Assisted Culling"), true, stop_job)
-        culling_job.percent = 0.0
-    end
-
-    dt.print_hinter(_("Assisted Culling: starting analysis..."))
-
-    local sc_script = score_script()
-    if not df.test_file(sc_script, "e") and not file_exists(sc_script) then
-        dt.print_error(_("Assisted Culling Error: score_images.py not found at: ") .. sc_script)
-        if culling_job then culling_job.valid = false end
-        is_running = false
-        if action_button then action_button.label = _("Start Culling") end
-        return
-    end
-    local py_bin = python_bin(sc_script)
-
-    local cmd = shell_quote(py_bin) .. " -u " .. shell_quote(sc_script)
-        .. " " .. shell_quote(MANIFEST_PATH) .. " " .. shell_quote(RESULTS_PATH)
-        .. " " .. shell_quote(PROGRESS_PATH)
-        .. " " .. shell_quote(tostring(rank_mode))
-        .. " " .. shell_quote(tostring(sharp_mode))
-        .. " " .. shell_quote(tostring(exp_mode))
-        .. " " .. shell_quote(tostring(keep_mode))
-        .. " 2> " .. shell_quote(LOG_PATH)
-
-    run_async_command(cmd, DONE_PATH)
-
-    local done_code = nil
-
-    -- =========================================================================
-    -- STAGE 1 LOOP: Async Monitoring
-    -- =========================================================================
-    while true do
-        if M.cancel_requested or (culling_job and not culling_job.valid) then
-            M.cancel_requested = true
-            local cf = io.open(CANCEL_PATH, "w")
-            if cf then cf:write("1"); cf:close() end
-            break
+        if not write_manifest(images, burst_of) then
+            error("Could not write manifest")
         end
 
-        local pf = io.open(PROGRESS_PATH, "r")
-        if pf then
-            local p = pf:read("*a"); pf:close()
-            if p and p ~= "" then
-                local cur, tot, b_cur, b_tot = p:match("(%d+),(%d+),(%d+),(%d+)")
-                local num = tonumber(cur)
-                local total = tonumber(tot)
-                if num and total and total > 0 then
-                    if culling_job then
-                        culling_job.percent = math.min(1.0, num / total)
-                    end
-                    dt.print_hinter(string.format(
-                        "Assisted Culling: analyzing %d / %d | bursts %s / %s",
-                        num, total, b_cur or "?", b_tot or "?"
-                    ))
-                end
-            end
-        end
-
-        if file_exists(DONE_PATH) then
-            local df_done = io.open(DONE_PATH, "r")
-            if df_done then
-                local raw_content = df_done:read("*a") or ""
-                df_done:close()
-                done_code = tonumber(raw_content:match("%d+"))
-            end
-            break
-        end
-
-        dt.control.sleep(150)
-    end
-
-    local applied_total = 0
-
-    -- =========================================================================
-    -- STAGE 2: Applying Ratings Pass
-    -- =========================================================================
-    if not M.cancel_requested then
-        if culling_job then
+        local culling_job = nil
+        if dt.gui then
+            culling_job = dt.gui.create_job(_("Assisted Culling"), true, stop_job)
             culling_job.percent = 0.0
         end
 
-        dt.print_hinter(_("Assisted Culling: applying ratings to database..."))
-        
-        local f = io.open(RESULTS_PATH, "r")
-        if f then
-            local lines = {}
-            for line in f:lines() do table.insert(lines, line) end
-            f:close()
+        dt.print_hinter(_("Assisted Culling: starting analysis..."))
 
-            local total_lines = #lines
+        local sc_script = score_script()
+        if not df.test_file(sc_script, "e") and not file_exists(sc_script) then
+            error("score_images.py not found at: " .. sc_script)
+        end
+        local py_bin = python_bin(sc_script)
 
-            for i, line in ipairs(lines) do
-                if M.cancel_requested or (culling_job and not culling_job.valid) then
-                    M.cancel_requested = true
-                    break
+        local cmd = shell_quote(py_bin) .. " -u " .. shell_quote(sc_script)
+            .. " " .. shell_quote(MANIFEST_PATH) .. " " .. shell_quote(RESULTS_PATH)
+            .. " " .. shell_quote(PROGRESS_PATH)
+            .. " " .. shell_quote(tostring(rank_mode))
+            .. " " .. shell_quote(tostring(sharp_mode))
+            .. " " .. shell_quote(tostring(exp_mode))
+            .. " " .. shell_quote(tostring(keep_mode))
+            .. " 2> " .. shell_quote(LOG_PATH)
+
+        run_async_command(cmd, DONE_PATH)
+
+        local done_code = nil
+
+        -- Stage 1 Loop
+        while true do
+            if M.cancel_requested or (culling_job and not culling_job.valid) then
+                M.cancel_requested = true
+                local cf = io.open(CANCEL_PATH, "w")
+                if cf then cf:write("1"); cf:close() end
+                break
+            end
+
+            local pf = io.open(PROGRESS_PATH, "r")
+            if pf then
+                local p = pf:read("*a"); pf:close()
+                if p and p ~= "" then
+                    local cur, tot, b_cur, b_tot = p:match("(%d+),(%d+),(%d+),(%d+)")
+                    local num = tonumber(cur)
+                    local total = tonumber(tot)
+                    if num and total and total > 0 then
+                        if culling_job then
+                            culling_job.percent = math.min(1.0, num / total)
+                        end
+                        dt.print_hinter(string.format(
+                            "Assisted Culling: analyzing %d / %d | bursts %s / %s",
+                            num, total, b_cur or "?", b_tot or "?"
+                        ))
+                    end
                 end
+            end
 
-                local parts = M.parse_csv_line(line, 6)
-                if parts then
-                    for k, val in ipairs(parts) do
-                        parts[k] = val:match("^%s*(.-)%s*$")
+            if file_exists(DONE_PATH) then
+                local df_done = io.open(DONE_PATH, "r")
+                if df_done then
+                    local raw_content = df_done:read("*a") or ""
+                    df_done:close()
+                    done_code = tonumber(raw_content:match("%d+"))
+                end
+                break
+            end
+
+            dt.control.sleep(150)
+        end
+
+        local applied_total = 0
+
+        -- Stage 2 Loop
+        if not M.cancel_requested then
+            if culling_job then
+                culling_job.percent = 0.0
+            end
+
+            dt.print_hinter(_("Assisted Culling: applying ratings to database..."))
+            
+            local f = io.open(RESULTS_PATH, "r")
+            if f then
+                local lines = {}
+                for line in f:lines() do table.insert(lines, line) end
+                f:close()
+
+                local total_lines = #lines
+
+                for i, line in ipairs(lines) do
+                    if M.cancel_requested or (culling_job and not culling_job.valid) then
+                        M.cancel_requested = true
+                        break
                     end
 
-                    local id = tonumber(parts[1])
-                    local img = id and img_map[id] or nil
-                    
-                    if img then
-                        local raw_rating = tonumber(parts[6]) or 0
-                        local is_ok = (parts[3] == "ok")
-                        local is_rejected = (tonumber(parts[5]) == 1)
+                    local parts = M.parse_csv_line(line, 6)
+                    if parts then
+                        for k, val in ipairs(parts) do
+                            parts[k] = val:match("^%s*(.-)%s*$")
+                        end
 
-                        pcall(function()
-                            img.rating = raw_rating
-                            img.yellow = not is_ok
-                            img.red = is_rejected
-                            applied_total = applied_total + 1
-                        end)
+                        local id = tonumber(parts[1])
+                        local img = id and img_map[id] or nil
+                        
+                        if img then
+                            local raw_rating = tonumber(parts[6]) or 0
+                            local is_ok = (parts[3] == "ok")
+                            local is_rejected = (tonumber(parts[5]) == 1)
+
+                            pcall(function()
+                                img.rating = raw_rating
+                                img.yellow = not is_ok
+                                img.red = is_rejected
+                                applied_total = applied_total + 1
+                            end)
+                        end
                     end
-                end
 
-                if culling_job and total_lines > 0 then
-                    culling_job.percent = math.min(1.0, i / total_lines)
-                end
+                    if culling_job and total_lines > 0 then
+                        culling_job.percent = math.min(1.0, i / total_lines)
+                    end
 
-                if i % 10 == 0 or i == total_lines then
-                    dt.print_hinter(string.format(
-                        "Assisted Culling: applying ratings to database... (%d / %d)",
-                        i, total_lines
-                    ))
-                    dt.control.sleep(10)
+                    if i % 10 == 0 or i == total_lines then
+                        dt.print_hinter(string.format(
+                            "Assisted Culling: applying ratings to database... (%d / %d)",
+                            i, total_lines
+                        ))
+                        dt.control.sleep(10)
+                    end
                 end
             end
         end
-    end
 
-    if culling_job then
-        culling_job.percent = 1.0
-        dt.control.sleep(50)
-        culling_job.valid = false
-    end
-
-    dt.print_hinter(" ")
-
-    if M.cancel_requested then
-        dt.print(_("Assisted Culling cancelled."))
-    elseif done_code ~= 0 and done_code ~= nil then
-        local tail = read_log_tail()
-        if tail ~= "" then
-            dt.print_error(_("Assisted Culling failed: ") .. tail)
-        else
-            dt.print_error(_("Assisted Culling failed (scorer exit ") .. tostring(done_code or "?") .. ")")
+        if culling_job then
+            culling_job.percent = 1.0
+            dt.control.sleep(50)
+            culling_job.valid = false
         end
-    elseif applied_total == 0 then
-        local tail = read_log_tail()
-        dt.print_error(_("Assisted Culling: scorer produced no ratings. ") .. (tail ~= "" and tail or _("Check python path and score_images.py.")))
-    else
-        dt.print(_("Assisted Culling complete."))
-    end
 
-    -- Always reset button state on completion, failure, or cancellation
+        dt.print_hinter(" ")
+
+        if M.cancel_requested then
+            dt.print(_("Assisted Culling cancelled."))
+        elseif done_code ~= 0 and done_code ~= nil then
+            local tail = read_log_tail()
+            if tail ~= "" then
+                dt.print_error(_("Assisted Culling failed: ") .. tail)
+            else
+                dt.print_error(_("Assisted Culling failed (scorer exit ") .. tostring(done_code or "?") .. ")")
+            end
+        elseif applied_total == 0 then
+            local tail = read_log_tail()
+            dt.print_error(_("Assisted Culling: scorer produced no ratings. ") .. (tail ~= "" and tail or _("Check python path and score_images.py.")))
+        else
+            dt.print(_("Assisted Culling complete."))
+        end
+    end)
+
+    -- Guaranteed cleanup: always reset button state and flags
     is_running = false
     if action_button then
         action_button.label = _("Start Culling")
+    end
+
+    if not success then
+        dt.print_error(_("Assisted Culling Error: ") .. tostring(run_err))
     end
 
     pcall(os.remove, MANIFEST_PATH)
