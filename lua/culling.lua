@@ -1,5 +1,5 @@
 --[[
-    culling.lua — AI-assisted culling for darktable
+    assisted_culling.lua — Assisted Culling for darktable
 
     Lighttable panel that clusters a selection into bursts, shells out to
     score_images.py, streams ratings back, and keeps a live progress job.
@@ -61,7 +61,7 @@ function M.parse_csv_line(line, n)
 end
 
 -- =========================================================================
--- darktable integration — skipped when required from lua test_culling.lua
+-- darktable integration — skipped when required from lua test_assisted_culling.lua
 -- =========================================================================
 
 local ok, dt = pcall(require, "darktable")
@@ -70,7 +70,7 @@ if not ok then return M end
 local du = require "lib/dtutils"
 local df = require "lib/dtutils.file"
 
-du.check_min_api_version("7.0.0", "ai_cull")
+du.check_min_api_version("7.0.0", "assisted_culling")
 
 local gettext = dt.gettext.gettext
 local function _(msgid)
@@ -81,21 +81,21 @@ local IS_WINDOWS = dt.configuration.running_os == "windows"
 local THIS_DIR = (debug.getinfo(1, "S").source:sub(2):match("^(.*)[/\\]")) or "."
 
 local TMP_DIR = dt.configuration.tmp_dir
-local MANIFEST_PATH = TMP_DIR .. "/dt_ai_cull_manifest.csv"
-local RESULTS_PATH = TMP_DIR .. "/dt_ai_cull_results.csv"
-local LOG_PATH = TMP_DIR .. "/dt_ai_cull_stderr.log"
-local PROGRESS_PATH = TMP_DIR .. "/dt_ai_cull_progress.txt"
+local MANIFEST_PATH = TMP_DIR .. "/dt_assisted_culling_manifest.csv"
+local RESULTS_PATH = TMP_DIR .. "/dt_assisted_culling_results.csv"
+local LOG_PATH = TMP_DIR .. "/dt_assisted_culling_stderr.log"
+local PROGRESS_PATH = TMP_DIR .. "/dt_assisted_culling_progress.txt"
 local CANCEL_PATH = PROGRESS_PATH .. ".cancel"
-local DONE_PATH = TMP_DIR .. "/dt_ai_cull_done.txt"
+local DONE_PATH = TMP_DIR .. "/dt_assisted_culling_done.txt"
 
 if dt.gui then
-    dt.preferences.register("ai_cull", "python_bin", "file",
-        "AI Cull: python interpreter",
+    dt.preferences.register("assisted_culling", "python_bin", "file",
+        "Assisted Culling: python interpreter",
         "python with opencv-python-headless, numpy, Pillow and rawpy installed",
         "")
-    dt.preferences.register("ai_cull", "score_script", "file",
-        "AI Cull: score_images.py",
-        "path to score_images.py from darktable-ai-cull (empty = auto-detect)",
+    dt.preferences.register("assisted_culling", "score_script", "file",
+        "Assisted Culling: score_images.py",
+        "path to score_images.py from darktable-assisted-culling (empty = auto-detect)",
         "")
 end
 
@@ -114,7 +114,7 @@ local function first_existing(paths)
 end
 
 local function score_script()
-    local pref = dt.preferences.read("ai_cull", "score_script", "file") or ""
+    local pref = dt.preferences.read("assisted_culling", "score_script", "file") or ""
     local home = os.getenv("USERPROFILE") or os.getenv("HOME") or ""
     local found = first_existing({
         pref,
@@ -122,13 +122,13 @@ local function score_script()
         THIS_DIR .. "/python/score_images.py",
         THIS_DIR .. "/../python/score_images.py",
         THIS_DIR .. "/../../python/score_images.py",
-        home .. "/Pictures/DarkTable/Settings/Plugins/darktable-ai-cull/python/score_images.py",
+        home .. "/Pictures/DarkTable/Settings/Plugins/darktable-assisted-culling/python/score_images.py",
     })
     return found or (THIS_DIR .. "/score_images.py")
 end
 
 local function python_bin(script)
-    local pref = dt.preferences.read("ai_cull", "python_bin", "file")
+    local pref = dt.preferences.read("assisted_culling", "python_bin", "file")
     if pref and pref ~= "" then return pref end
 
     local home = os.getenv("USERPROFILE") or os.getenv("HOME") or ""
@@ -139,7 +139,7 @@ local function python_bin(script)
         plugin_root .. "/.venv/bin/python",
         THIS_DIR .. "/../.venv/Scripts/python.exe",
         THIS_DIR .. "/../.venv/bin/python",
-        home .. "/Pictures/DarkTable/Settings/Plugins/darktable-ai-cull/.venv/Scripts/python.exe",
+        home .. "/Pictures/DarkTable/Settings/Plugins/darktable-assisted-culling/.venv/Scripts/python.exe",
     })
     if found then return found end
 
@@ -157,8 +157,8 @@ end
 
 local function run_async_command(cmd, done_path)
     if IS_WINDOWS then
-        local bat = TMP_DIR .. "/dt_ai_cull_run.bat"
-        local vbs = TMP_DIR .. "/dt_ai_cull_run.vbs"
+        local bat = TMP_DIR .. "/dt_assisted_culling_run.bat"
+        local vbs = TMP_DIR .. "/dt_assisted_culling_run.vbs"
         local f = io.open(bat, "w")
         if not f then return end
         f:write("@echo off\r\nchcp 65001>nul\r\n")
@@ -255,7 +255,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode)
     keep_mode = keep_mode or "dynamic_burst"
 
     if not images or #images == 0 then
-        dt.print(_("AI Cull: select some images first"))
+        dt.print(_("Assisted Culling: select some images first"))
         return
     end
 
@@ -277,21 +277,21 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode)
     pcall(os.remove, LOG_PATH)
 
     if not write_manifest(images, burst_of) then
-        dt.print_error(_("AI Cull Error: could not write manifest"))
+        dt.print_error(_("Assisted Culling Error: could not write manifest"))
         return
     end
 
     local culling_job = nil
     if dt.gui then
-        culling_job = dt.gui.create_job(_("AI Culling"), true, stop_job)
+        culling_job = dt.gui.create_job(_("Assisted Culling"), true, stop_job)
         culling_job.percent = 0.0
     end
 
-    dt.print_hinter(_("AI Cull: starting analysis..."))
+    dt.print_hinter(_("Assisted Culling: starting analysis..."))
 
     local sc_script = score_script()
     if not df.test_file(sc_script, "e") and not file_exists(sc_script) then
-        dt.print_error(_("AI Cull Error: score_images.py not found at: ") .. sc_script)
+        dt.print_error(_("Assisted Culling Error: score_images.py not found at: ") .. sc_script)
         if culling_job then culling_job.valid = false end
         return
     end
@@ -332,7 +332,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode)
                         culling_job.percent = math.min(1.0, num / total)
                     end
                     dt.print_hinter(string.format(
-                        "AI Cull: images %d / %d | bursts %s / %s",
+                        "Assisted Culling: images %d / %d | bursts %s / %s",
                         num, total, b_cur or "?", b_tot or "?"
                     ))
                 end
@@ -373,19 +373,19 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode)
     dt.print_hinter(" ")
 
     if M.cancel_requested then
-        dt.print(_("AI Culling cancelled."))
+        dt.print(_("Assisted Culling cancelled."))
     elseif done_code ~= 0 then
         local tail = read_log_tail()
         if tail ~= "" then
-            dt.print_error(_("AI Cull failed: ") .. tail)
+            dt.print_error(_("Assisted Culling failed: ") .. tail)
         else
-            dt.print_error(_("AI Cull failed (scorer exit ") .. tostring(done_code or "?") .. ")")
+            dt.print_error(_("Assisted Culling failed (scorer exit ") .. tostring(done_code or "?") .. ")")
         end
     elseif applied_total == 0 then
         local tail = read_log_tail()
-        dt.print_error(_("AI Cull: scorer produced no ratings. ") .. (tail ~= "" and tail or _("Check python path and score_images.py.")))
+        dt.print_error(_("Assisted Culling: scorer produced no ratings. ") .. (tail ~= "" and tail or _("Check python path and score_images.py.")))
     else
-        dt.print(_("AI Culling complete."))
+        dt.print(_("Assisted Culling complete."))
     end
 
     pcall(os.remove, MANIFEST_PATH)
@@ -395,8 +395,8 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode)
     pcall(os.remove, CANCEL_PATH)
     pcall(os.remove, DONE_PATH)
     if IS_WINDOWS then
-        pcall(os.remove, TMP_DIR .. "/dt_ai_cull_run.bat")
-        pcall(os.remove, TMP_DIR .. "/dt_ai_cull_run.vbs")
+        pcall(os.remove, TMP_DIR .. "/dt_assisted_culling_run.bat")
+        pcall(os.remove, TMP_DIR .. "/dt_assisted_culling_run.vbs")
     end
 end
 
@@ -530,28 +530,28 @@ local function install_panel()
     }
 
     dt.register_lib(
-        "ai_cull", _("AI Cull"), true, true,
+        "assisted_culling", _("Assisted Culling"), true, true,
         { [dt.gui.views.lighttable] = { "DT_UI_CONTAINER_PANEL_RIGHT_CENTER", 100 } },
         panel_box
     )
 end
 
 local function destroy()
-    if dt.gui.libs["ai_cull"] then
-        dt.gui.libs["ai_cull"].visible = false
+    if dt.gui.libs["assisted_culling"] then
+        dt.gui.libs["assisted_culling"].visible = false
     end
-    dt.destroy_event("ai_cull_run", "shortcut")
+    dt.destroy_event("assisted_culling_run", "shortcut")
 end
 
 local function restart()
-    if dt.gui.libs["ai_cull"] then
-        dt.gui.libs["ai_cull"].visible = true
+    if dt.gui.libs["assisted_culling"] then
+        dt.gui.libs["assisted_culling"].visible = true
     end
 
-    dt.register_event("ai_cull_run", "shortcut",
+    dt.register_event("assisted_culling_run", "shortcut",
         function(event, shortcut)
             execute_current_config(dt.gui.action_images)
-        end, _("execute AI culling on selected images")
+        end, _("execute Assisted Culling on selected images")
     )
 end
 
@@ -560,8 +560,8 @@ M.restart = restart
 M.destroy_method = "hide"
 M.show = restart
 M.metadata = {
-    name = _("AI Cull"),
-    purpose = _("AI-assisted culling, sharpness grading, and keeper selection"),
+    name = _("Assisted Culling"),
+    purpose = _("Assisted culling, sharpness grading, and keeper selection"),
     author = "Custom Script",
     help = ""
 }
@@ -572,7 +572,7 @@ if dt.gui then
         restart()
     else
         if not M.event_registered then
-            dt.register_event("ai_cull", "view-changed", function(event, old_view, new_view)
+            dt.register_event("assisted_culling", "view-changed", function(event, old_view, new_view)
                 if new_view.name == "lighttable" or new_view.id == "lighttable" then
                     install_panel()
                     restart()

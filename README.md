@@ -1,21 +1,16 @@
-# darktable-ai-cull
+# darktable-assisted-culling
 
-A culling assistant for [darktable](https://www.darktable.org/). Select a
-batch of images in lighttable, click one button, and it will:
+A culling assistant for [darktable](https://www.darktable.org/). Select a batch of images in lighttable, click one button, and it will:
 
 - group your selection into **bursts** by capture time
 - score every frame for **sharpness** and **exposure clipping**
 - pick the sharpest frame in each burst as the **keeper**
-- write the result back as a **star rating**, a **yellow** label for exposure
-  problems, a **red** label for rejected duplicates, and darktable's native
-  **image grouping** per burst, with the keeper leading the group
+- write the result back as a **star rating**, a **yellow** label for exposure problems, a **red** label for rejected duplicates, and darktable's native **image grouping** per burst, with the keeper leading the group
 
-Everything runs locally: a Lua plugin inside darktable and a small
-Python/OpenCV scorer it shells out to. No API keys, no cloud, no daemon.
-Nothing is deleted — it only rates, labels and groups; rejecting is still
-your call.
+Everything runs locally: a Lua plugin inside darktable and a small Python/OpenCV scorer it shells out to. No API keys, no cloud, no daemon.
+Nothing is deleted — it only rates, labels and groups; rejecting is still your call.
 
-<!-- docs/lighttable.png: lighttable with the AI Cull panel and a scored burst -->
+<!-- docs/lighttable.png: lighttable with the Assisted Culling panel and a scored burst -->
 
 ## How it works
 
@@ -23,17 +18,13 @@ your call.
 you select images in lighttable
         |
         v
-culling.lua clusters the selection into bursts using each image's
-EXIF capture time (darktable already parses this for you)
+culling.lua clusters the selection into bursts using each image's EXIF capture time (darktable already parses this for you)
         |
         v
-culling.lua writes manifest.csv (id, filepath, burst_id)
-and runs score_images.py
+culling.lua writes manifest.csv (id, filepath, burst_id) and runs score_images.py
         |
         v
-score_images.py opens each file (raw or otherwise), computes a
-sharpness score and an exposure status, picks one keeper per burst,
-writes results.csv
+score_images.py opens each file (raw or otherwise), computes a sharpness score and an exposure status, picks one keeper per burst, writes results.csv
         |
         v
 culling.lua reads results.csv and applies ratings / labels / groups
@@ -75,8 +66,9 @@ imported lazily, only when a raw file shows up.
 ### 1. Python side
 
 ```
-git clone https://github.com/ayaan-cs/darktable-ai-cull
-cd darktable-ai-cull
+git clone https://github.com/louiswdavis/darktable-assisted-culling
+cd darktable-assisted-culling
+
 python -m venv .venv
 .venv/Scripts/pip install -r python/requirements.txt     # Windows
 .venv/bin/pip install -r python/requirements.txt         # Linux / macOS
@@ -84,8 +76,7 @@ python -m venv .venv
 
 ### 2. darktable side
 
-darktable's config directory is `~/.config/darktable` on Linux/macOS and
-`%LOCALAPPDATA%\darktable` on Windows.
+darktable's config directory is `~/.config/darktable` on Linux/macOS and `%LOCALAPPDATA%\darktable` on Windows.
 
 ```
 # Linux / macOS
@@ -104,14 +95,13 @@ Add-Content "$env:LOCALAPPDATA\darktable\luarc" 'require "contrib/culling"'
 
 Start darktable, open **preferences → lua options**, and set:
 
-- **AI Cull: python interpreter** — the venv's `python.exe` / `bin/python`
-- **AI Cull: score_images.py** — `python/score_images.py` from this repo
-  (or leave it empty and keep `score_images.py` next to `culling.lua`)
+- **Assisted Culling: python interpreter** — the venv's `python.exe` / `bin/python`
+- **Assisted Culling: score_images.py** — `python/score_images.py` from this repo (or leave it empty and keep `score_images.py` next to `culling.lua`)
 
 ## Use
 
 In lighttable, select a batch — a whole shoot or a single burst — and
-click **score selected** in the **AI Cull** panel on the right. Progress
+click **score selected** in the **Assisted Culling** panel on the right. Progress
 shows in darktable's message area. When it's done:
 
 - **stars** rank each keeper against the rest of the batch
