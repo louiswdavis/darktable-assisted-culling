@@ -12,6 +12,10 @@ M.cancel_requested = false
 M.module_installed = false
 M.event_registered = false
 
+-- Panel UI references shared for state management
+local score_button = nil
+local is_running = false
+
 function M.exif_time_to_epoch(s)
     if not s then return nil end
     local y, mo, d, h, mi, se = s:match("(%d+):(%d+):(%d+) (%d+):(%d+):(%d+)")
@@ -202,6 +206,12 @@ local function stop_job(job)
     local cf = io.open(CANCEL_PATH, "w")
     if cf then cf:write("1"); cf:close() end
     job.valid = false
+    
+    -- Ensure button state resets immediately if cancelled via job UI widget
+    is_running = false
+    if score_button then
+        score_button.label = _("score selected images")
+    end
 end
 
 function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode)
@@ -212,6 +222,8 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode)
 
     if not images or #images == 0 then
         dt.print(_("Assisted Culling: select some images first"))
+        is_running = false
+        if score_button then score_button.label = _("score selected images") end
         return
     end
 
@@ -234,10 +246,11 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode)
 
     if not write_manifest(images, burst_of) then
         dt.print_error(_("Assisted Culling Error: could not write manifest"))
+        is_running = false
+        if score_button then score_button.label = _("score selected images") end
         return
     end
 
-    -- Single persistent job for the entire culling operation
     local culling_job = nil
     if dt.gui then
         culling_job = dt.gui.create_job(_("Assisted Culling"), true, stop_job)
@@ -250,6 +263,8 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode)
     if not df.test_file(sc_script, "e") and not file_exists(sc_script) then
         dt.print_error(_("Assisted Culling Error: score_images.py not found at: ") .. sc_script)
         if culling_job then culling_job.valid = false end
+        is_running = false
+        if score_button then score_button.label = _("score selected images") end
         return
     end
     local py_bin = python_bin(sc_script)
@@ -268,7 +283,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode)
     local done_code = nil
 
     -- =========================================================================
-    -- STAGE 1 LOOP: Async Monitoring (Progress 0.0 -> 1.0)
+    -- STAGE 1 LOOP: Async Monitoring
     -- =========================================================================
     while true do
         if M.cancel_requested or (culling_job and not culling_job.valid) then
@@ -303,7 +318,6 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode)
                 local raw_content = df_done:read("*a") or ""
                 df_done:close()
                 done_code = tonumber(raw_content:match("%d+"))
-                dt.print("DEBUG: DONE_PATH content: [" .. raw_content .. "] parsed as: " .. tostring(done_code))
             end
             break
         end
@@ -314,7 +328,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode)
     local applied_total = 0
 
     -- =========================================================================
-    -- STAGE 2: Applying Ratings Pass (Reset progress to 0.0 and run batch updates)
+    -- STAGE 2: Applying Ratings Pass
     -- =========================================================================
     if not M.cancel_requested then
         if culling_job then
@@ -322,17 +336,16 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode)
         end
 
         dt.print_hinter(_("Assisted Culling: applying ratings to database..."))
-        dt.print(_("Assisted Culling: Stage 2 starting..."))
         
         local f = io.open(RESULTS_PATH, "r")
-        if not f then
-            dt.print_error(_("Assisted Culling Error: Could not open results file at: ") .. RESULTS_PATH)
-        else
-            local total_images = #images
-            local processed_count = 0
-            local batch_count = 0
+        if f then
+            local lines = {}
+            for line in f:lines() do table.insert(lines, line) end
+            f:close()
 
-            for line in f:lines() do
+            local total_lines = #lines
+
+            for i, line in ipairs(lines) do
                 if M.cancel_requested or (culling_job and not culling_job.valid) then
                     M.cancel_requested = true
                     break
@@ -340,7 +353,6 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode)
 
                 local parts = M.parse_csv_line(line, 6)
                 if parts then
-                    -- Clean up any potential carriage returns or whitespace from fields
                     for k, val in ipairs(parts) do
                         parts[k] = val:match("^%s*(.-)%s*$")
                     end
@@ -353,33 +365,27 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode)
                         local is_ok = (parts[3] == "ok")
                         local is_rejected = (tonumber(parts[5]) == 1)
 
-                        local success, err = pcall(function()
+                        pcall(function()
                             img.rating = raw_rating
-                            img.yellow = not is_ok       -- True if not ok (flagged/issue)
-                            img.red = is_rejected        -- True if rejected
-                        end)
-
-                        if success then
+                            img.yellow = not is_ok
+                            img.red = is_rejected
                             applied_total = applied_total + 1
-                        else
-                            dt.print_error(string.format("Error updating image ID %s: %s", tostring(id), tostring(err)))
-                        end
+                        end)
                     end
                 end
 
-                processed_count = processed_count + 1
-                if culling_job and total_images > 0 then
-                    culling_job.percent = math.min(1.0, processed_count / total_images)
+                if culling_job and total_lines > 0 then
+                    culling_job.percent = math.min(1.0, i / total_lines)
                 end
 
-                batch_count = batch_count + 1
-                if batch_count >= 50 then
-                    batch_count = 0
+                if i % 10 == 0 or i == total_lines then
+                    dt.print_hinter(string.format(
+                        "Assisted Culling: applying ratings to database... (%d / %d)",
+                        i, total_lines
+                    ))
                     dt.control.sleep(10)
                 end
             end
-            f:close()
-            dt.print(string.format("Assisted Culling: Stage 2 complete. Read %d lines, successfully updated %d images.", processed_count, applied_total))
         end
     end
 
@@ -407,6 +413,12 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode)
         dt.print(_("Assisted Culling complete."))
     end
 
+    -- Always reset button state on completion, failure, or cancellation
+    is_running = false
+    if score_button then
+        score_button.label = _("score selected images")
+    end
+
     pcall(os.remove, MANIFEST_PATH)
     pcall(os.remove, RESULTS_PATH)
     pcall(os.remove, RESULTS_PATH .. ".tmp")
@@ -424,7 +436,7 @@ local sharp_opts = {"subject_focus", "face_detect", "tiles_uniformity", "peak", 
 local exp_opts = {"whole_frame", "subject_only", "strict", "none"}
 local keep_opts = {"dynamic_burst", "portrait_mode", "single_best", "keep_all"}
 
-local genre_combo, rank_combo, sharp_combo, exp_combo, keep_combo, score_button
+local genre_combo, rank_combo, sharp_combo, exp_combo, keep_combo
 
 local function execute_current_config(images)
     local r_val = rank_opts[rank_combo and rank_combo.value or 1] or "universal"
@@ -439,7 +451,6 @@ local function install_panel()
     M.module_installed = true
 
     local is_updating = false
-    local is_running = false
 
     genre_combo = dt.new_widget("combobox") {
         label = _("preset"),
@@ -523,9 +534,6 @@ local function install_panel()
         score_button.label = _("CANCEL (running...)")
 
         execute_current_config(dt.gui.action_images)
-
-        is_running = false
-        score_button.label = _("score selected images")
     end
 
     local panel_box = dt.new_widget("box") {
