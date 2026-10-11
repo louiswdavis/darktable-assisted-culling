@@ -13,7 +13,7 @@ M.module_installed = false
 M.event_registered = false
 
 -- Panel UI references shared for state management
-local score_button = nil
+local action_button = nil
 local is_running = false
 
 function M.exif_time_to_epoch(s)
@@ -209,8 +209,8 @@ local function stop_job(job)
     
     -- Ensure button state resets immediately if cancelled via job UI widget
     is_running = false
-    if score_button then
-        score_button.label = _("Start Culling")
+    if action_button then
+        action_button.label = _("Start Culling")
     end
 end
 
@@ -223,7 +223,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode)
     if not images or #images == 0 then
         dt.print(_("Assisted Culling: select some images first"))
         is_running = false
-        if score_button then score_button.label = _("Start Culling") end
+        if action_button then action_button.label = _("Start Culling") end
         return
     end
 
@@ -247,7 +247,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode)
     if not write_manifest(images, burst_of) then
         dt.print_error(_("Assisted Culling Error: could not write manifest"))
         is_running = false
-        if score_button then score_button.label = _("Start Culling") end
+        if action_button then action_button.label = _("Start Culling") end
         return
     end
 
@@ -264,7 +264,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode)
         dt.print_error(_("Assisted Culling Error: score_images.py not found at: ") .. sc_script)
         if culling_job then culling_job.valid = false end
         is_running = false
-        if score_button then score_button.label = _("Start Culling") end
+        if action_button then action_button.label = _("Start Culling") end
         return
     end
     local py_bin = python_bin(sc_script)
@@ -415,8 +415,8 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode)
 
     -- Always reset button state on completion, failure, or cancellation
     is_running = false
-    if score_button then
-        score_button.label = _("Start Culling")
+    if action_button then
+        action_button.label = _("Start Culling")
     end
 
     pcall(os.remove, MANIFEST_PATH)
@@ -516,22 +516,22 @@ local function install_panel()
         value = 1, changed_callback = trigger_custom_override
     }
 
-    score_button = dt.new_widget("button") {
+    action_button = dt.new_widget("button") {
         label = _("Start Culling"),
     }
 
-    score_button.clicked_callback = function()
+    action_button.clicked_callback = function()
         if is_running then
             M.cancel_requested = true
             local cf = io.open(CANCEL_PATH, "w")
             if cf then cf:write("1"); cf:close() end
-            score_button.label = _("cancelling...")
+            action_button.label = _("cancelling...")
             return
         end
 
         is_running = true
         M.cancel_requested = false
-        score_button.label = _("CANCEL (running...)")
+        action_button.label = _("CANCEL (running...)")
 
         execute_current_config(dt.gui.action_images)
     end
@@ -553,7 +553,7 @@ local function install_panel()
         sharp_combo,
         exp_combo,
         keep_combo,
-        score_button
+        action_button
     }
 
     dt.register_lib(
