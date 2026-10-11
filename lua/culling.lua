@@ -210,7 +210,7 @@ local function stop_job(job)
     -- Ensure button state resets immediately if cancelled via job UI widget
     is_running = false
     if score_button then
-        score_button.label = _("score selected images")
+        score_button.label = _("Start Culling")
     end
 end
 
@@ -223,7 +223,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode)
     if not images or #images == 0 then
         dt.print(_("Assisted Culling: select some images first"))
         is_running = false
-        if score_button then score_button.label = _("score selected images") end
+        if score_button then score_button.label = _("Start Culling") end
         return
     end
 
@@ -247,7 +247,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode)
     if not write_manifest(images, burst_of) then
         dt.print_error(_("Assisted Culling Error: could not write manifest"))
         is_running = false
-        if score_button then score_button.label = _("score selected images") end
+        if score_button then score_button.label = _("Start Culling") end
         return
     end
 
@@ -264,7 +264,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode)
         dt.print_error(_("Assisted Culling Error: score_images.py not found at: ") .. sc_script)
         if culling_job then culling_job.valid = false end
         is_running = false
-        if score_button then score_button.label = _("score selected images") end
+        if score_button then score_button.label = _("Start Culling") end
         return
     end
     local py_bin = python_bin(sc_script)
@@ -416,7 +416,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode)
     -- Always reset button state on completion, failure, or cancellation
     is_running = false
     if score_button then
-        score_button.label = _("score selected images")
+        score_button.label = _("Start Culling")
     end
 
     pcall(os.remove, MANIFEST_PATH)
@@ -517,7 +517,7 @@ local function install_panel()
     }
 
     score_button = dt.new_widget("button") {
-        label = _("score selected images"),
+        label = _("Start Culling"),
     }
 
     score_button.clicked_callback = function()
