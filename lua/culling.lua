@@ -326,10 +326,10 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         local applied_total = 0
 
         -- =========================================================================
-        -- STAGE 2: Applying Ratings Pass with Tags & Toast Feedback
+        -- STAGE 2: Applying Ratings Pass with Large Batch Refreshing
         -- =========================================================================
         if not M.cancel_requested then
-            dt.print(_("Assisted Culling: Stage 2 applying ratings..."))
+            dt.print(_("Assisted Culling: Stage 2 applying ratings (batching updates)..."))
             
             local keeper_tag = tags.create("Assisted Culling|Keeper")
             local reject_tag = tags.create("Assisted Culling|Rejected")
@@ -342,6 +342,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                 f:close()
 
                 local total_lines = #lines
+                local batch_size = 100 -- Large batch interval for stable UI refresh
 
                 for i, line in ipairs(lines) do
                     if M.cancel_requested or (culling_job and not culling_job.valid) then
@@ -380,25 +381,38 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                                 end
 
                                 tags.attach(culled_tag, img)
-                                
                                 applied_total = applied_total + 1
                             end)
                         end
                     end
 
-                    if i % 10 == 0 then
+                    -- BATCH REFRESH: Trigger heavy UI updates and OS yields every 100 items
+                    if i % batch_size == 0 or i == total_lines then
+                        
+                        -- 1. Progress Bar Update
+                        if culling_job and total_lines > 0 then
+                            culling_job.percent = math.min(1.0, i / total_lines)
+                        end
+
+                        -- 2. Bottom Hinter Text Update
+                        dt.print_hinter(string.format(
+                            "Assisted Culling: applying ratings... (%d / %d)",
+                            i, total_lines
+                        ))
+
+                        -- 3. Terminal Logger stream
                         dt.print_error(string.format("[Assisted Culling] Processed %d / %d records", i, total_lines))
-                    end
 
-                    if i == math.floor(total_lines * 0.25) or 
-                       i == math.floor(total_lines * 0.50) or 
-                       i == math.floor(total_lines * 0.75) or 
-                       i == total_lines then
-                        dt.print(string.format("Assisted Culling: Written %d of %d ratings", i, total_lines))
-                    end
+                        -- 4. Screen Toast notifications (every 1000 items to avoid screen spam)
+                        local toast_interval = 1000
+                        if i % toast_interval == 0 or i == total_lines then
+                            dt.print(string.format("Assisted Culling: Written %d of %d ratings", i, total_lines))
+                        end
 
-                    if i % 25 == 0 then
-                        dt.control.sleep(10)
+                        -- 5. HEAVY YIELD (100ms): This is the critical step for massive catalogs. 
+                        -- It gives GTK time to flush the UI update queue, paint the progress bar, 
+                        -- and allows the OS window manager to successfully un-minimize the app.
+                        dt.control.sleep(100)
                     end
                 end
                 dt.print(string.format("Assisted Culling: Stage 2 complete. Updated %d images.", applied_total))
