@@ -318,7 +318,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode)
     local applied_total = 0
 
     -- =========================================================================
-    -- STAGE 2: Applying Ratings Job with robust ID mapping
+    -- STAGE 2: Applying Ratings Job with optimized progress & safety checks
     -- =========================================================================
     local apply_job = nil
     if not M.cancel_requested and done_code == 0 then
@@ -332,14 +332,11 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode)
         
         local f = io.open(RESULTS_PATH, "r")
         if f then
-            local lines = {}
-            for line in f:lines() do table.insert(lines, line) end
-            f:close()
-
-            local total_lines = #lines
+            local total_images = #images
+            local processed_count = 0
             local batch_count = 0
 
-            for i, line in ipairs(lines) do
+            for line in f:lines() do
                 if M.cancel_requested or (apply_job and not apply_job.valid) then
                     M.cancel_requested = true
                     break
@@ -347,20 +344,23 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode)
 
                 local parts = M.parse_csv_line(line, 6)
                 if parts then
-                    -- Ensure ID is cleanly converted to a number for lookup
                     local id = tonumber(parts[1])
                     local img = id and img_map[id] or nil
                     
+                    -- Verify image object exists and is valid before writing
                     if img then
-                        img.rating = tonumber(parts[6]) or 0
-                        img.yellow = (parts[3] ~= "ok")
-                        img.red = tonumber(parts[5]) ~= 1
-                        applied_total = applied_total + 1
+                        pcall(function()
+                            img.rating = tonumber(parts[6]) or 0
+                            img.yellow = (parts[3] ~= "ok")
+                            img.red = tonumber(parts[5]) ~= 1
+                            applied_total = applied_total + 1
+                        end)
                     end
                 end
 
-                if apply_job and total_lines > 0 then
-                    apply_job.percent = math.min(1.0, i / total_lines)
+                processed_count = processed_count + 1
+                if apply_job and total_images > 0 then
+                    apply_job.percent = math.min(1.0, processed_count / total_images)
                 end
 
                 batch_count = batch_count + 1
@@ -369,6 +369,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode)
                     dt.control.sleep(10)
                 end
             end
+            f:close()
         end
 
         if apply_job then
