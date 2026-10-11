@@ -1,50 +1,17 @@
 --[[
     culling.lua — AI-assisted culling for darktable
 
-    Adds an "AI Cull" panel to the lighttable view. Select a batch of
-    images (e.g. a whole shoot) and click "score selected". It will:
-
-      1. Cluster the selection into bursts by capture time (two shots
-         taken within BURST_GAP_SECONDS of each other are one burst).
-      2. Hand each image's file path + burst id to score_images.py,
-         which scores sharpness and exposure per image.
-      3. Read the results back and apply them in darktable: a star
-         rating, a yellow label for exposure problems, a red label for
-         non-keeper duplicates, and darktable's native image grouping
-         for each burst.
-
-    Install:
-      1. Copy this file to <config>/lua/contrib/culling.lua, where <config> is
-             ~/.config/darktable            (Linux / macOS)
-             %LOCALAPPDATA%\darktable       (Windows)
-      2. Add this line to <config>/luarc:
-             require "contrib/culling"
-      3. Restart darktable. A new "AI Cull" panel appears in lighttable,
-         on the right side.
-      4. In preferences > lua options, point "AI Cull: python interpreter"
-         at a Python that has python/requirements.txt installed, and
-         "AI Cull: score_images.py" at that file (or leave it empty and
-         keep score_images.py next to this file).
-
-    Note on testing: the pure logic below (time parsing, burst
-    clustering, CSV formatting) is covered by test_culling.lua, which
-    runs under a plain `lua` interpreter with no darktable involved.
-    The darktable-specific calls in the second half of this file
-    (dt.new_widget, dt.register_lib, image.rating, and so on) can only
-    be exercised inside darktable itself.
+    Lighttable panel that clusters a selection into bursts, shells out to
+    score_images.py, streams ratings back, and keeps a live progress job.
 ]]
 
--- =========================================================================
--- Part 1: pure logic — no darktable dependency, covered by test_culling.lua
--- =========================================================================
+local M = {}
 
-local M = {}  -- exposed so test_culling.lua can require this file directly
+M.BURST_GAP_SECONDS = 2
+M.cancel_requested = false
+M.module_installed = false
+M.event_registered = false
 
-M.BURST_GAP_SECONDS = 2  -- shots within this many seconds count as one burst
-
--- Parses darktable's "YYYY:MM:DD HH:MM:SS" exif_datetime_taken format into
--- a Unix epoch number. Returns nil if the string doesn't match (images
--- with missing EXIF data end up as their own singleton burst).
 function M.exif_time_to_epoch(s)
     if not s then return nil end
     local y, mo, d, h, mi, se = s:match("(%d+):(%d+):(%d+) (%d+):(%d+):(%d+)")
@@ -55,9 +22,6 @@ function M.exif_time_to_epoch(s)
     })
 end
 
--- items: array of {id=..., epoch=... or nil}
--- Returns a table mapping id -> burst_id (a small integer).
--- Images with no timestamp each get their own burst.
 function M.cluster_by_time(items, gap_seconds)
     gap_seconds = gap_seconds or M.BURST_GAP_SECONDS
     local timed, untimed = {}, {}
@@ -67,7 +31,7 @@ function M.cluster_by_time(items, gap_seconds)
     table.sort(timed, function(a, b) return a.epoch < b.epoch end)
 
     local burst_of = {}
-    local next_burst = 1
+    local next_burst = 0
     local prev_epoch = nil
     for _, item in ipairs(timed) do
         if prev_epoch == nil or (item.epoch - prev_epoch) > gap_seconds then
@@ -83,9 +47,6 @@ function M.cluster_by_time(items, gap_seconds)
     return burst_of
 end
 
--- Minimal CSV line helpers. No embedded-comma/quote handling because our
--- fields are always ids, numbers, plain filesystem paths, or single words
--- (see the note in the README about paths containing commas).
 function M.csv_line(fields)
     return table.concat(fields, ",")
 end
@@ -100,172 +61,206 @@ function M.parse_csv_line(line, n)
 end
 
 -- =========================================================================
--- Part 2: darktable integration — only runs inside darktable
+-- darktable integration — skipped when required from lua test_culling.lua
 -- =========================================================================
 
 local ok, dt = pcall(require, "darktable")
-if not ok then
-    return M  -- allows test_culling.lua to load this file outside darktable
+if not ok then return M end
+
+local du = require "lib/dtutils"
+local df = require "lib/dtutils.file"
+
+du.check_min_api_version("7.0.0", "ai_cull")
+
+local gettext = dt.gettext.gettext
+local function _(msgid)
+    return gettext(msgid)
 end
 
--- ---- configuration ------------------------------------------------------
--- Both settings live in darktable's preferences dialog, under "lua options":
---   python interpreter   - one that has python/requirements.txt installed
---                          (a venv's python.exe / bin/python is ideal)
---   score_images.py      - where this repo's python/score_images.py lives;
---                          leave empty to look next to this file, so simply
---                          dropping both files into lua/contrib/ works too.
 local IS_WINDOWS = dt.configuration.running_os == "windows"
-
--- Registering only adds the entries to the preferences dialog (and, like
--- register_lib, is GTK-wrapped, so headless it would wait for a GTK main
--- loop that never runs). Reading works with or without a GUI.
-if dt.gui then
-    dt.preferences.register("ai_cull", "python_bin", "file",
-        "AI Cull: python interpreter",
-        "python with opencv-python-headless, numpy, Pillow and rawpy installed",
-        IS_WINDOWS and "python" or "python3")
-    dt.preferences.register("ai_cull", "score_script", "file",
-        "AI Cull: score_images.py",
-        "path to score_images.py from darktable-ai-cull (empty = next to culling.lua)",
-        "")
-end
-
 local THIS_DIR = (debug.getinfo(1, "S").source:sub(2):match("^(.*)[/\\]")) or "."
 
-local function python_bin()
-    local v = dt.preferences.read("ai_cull", "python_bin", "file")
-    if v == nil or v == "" then v = IS_WINDOWS and "python" or "python3" end
-    return v
-end
-
-local function score_script()
-    local v = dt.preferences.read("ai_cull", "score_script", "file")
-    if v == nil or v == "" then v = THIS_DIR .. "/score_images.py" end
-    return v
-end
--- --------------------------------------------------------------------------
-
--- darktable hands us a per-platform temp directory that already exists, so
--- there's no mkdir to do (and no /tmp to assume on Windows).
 local TMP_DIR = dt.configuration.tmp_dir
 local MANIFEST_PATH = TMP_DIR .. "/dt_ai_cull_manifest.csv"
 local RESULTS_PATH = TMP_DIR .. "/dt_ai_cull_results.csv"
 local LOG_PATH = TMP_DIR .. "/dt_ai_cull_stderr.log"
+local PROGRESS_PATH = TMP_DIR .. "/dt_ai_cull_progress.txt"
+local CANCEL_PATH = PROGRESS_PATH .. ".cancel"
+local DONE_PATH = TMP_DIR .. "/dt_ai_cull_done.txt"
 
--- cmd.exe only understands double quotes; POSIX shells get single quotes.
-local function shell_quote(s)
-    if IS_WINDOWS then
-        return '"' .. s .. '"'
+if dt.gui then
+    dt.preferences.register("ai_cull", "python_bin", "file",
+        "AI Cull: python interpreter",
+        "python with opencv-python-headless, numpy, Pillow and rawpy installed",
+        "")
+    dt.preferences.register("ai_cull", "score_script", "file",
+        "AI Cull: score_images.py",
+        "path to score_images.py from darktable-ai-cull (empty = auto-detect)",
+        "")
+end
+
+local function file_exists(name)
+    local f = io.open(name, "r")
+    if f ~= nil then f:close(); return true else return false end
+end
+
+local function first_existing(paths)
+    for _, p in ipairs(paths) do
+        if p and p ~= "" and (df.test_file(p, "e") or file_exists(p)) then
+            return p
+        end
     end
+    return nil
+end
+
+local function score_script()
+    local pref = dt.preferences.read("ai_cull", "score_script", "file") or ""
+    local home = os.getenv("USERPROFILE") or os.getenv("HOME") or ""
+    local found = first_existing({
+        pref,
+        THIS_DIR .. "/score_images.py",
+        THIS_DIR .. "/python/score_images.py",
+        THIS_DIR .. "/../python/score_images.py",
+        THIS_DIR .. "/../../python/score_images.py",
+        home .. "/Pictures/DarkTable/Settings/Plugins/darktable-ai-cull/python/score_images.py",
+    })
+    return found or (THIS_DIR .. "/score_images.py")
+end
+
+local function python_bin(script)
+    local pref = dt.preferences.read("ai_cull", "python_bin", "file")
+    if pref and pref ~= "" then return pref end
+
+    local home = os.getenv("USERPROFILE") or os.getenv("HOME") or ""
+    local script_dir = (script and script:match("^(.*)[/\\]")) or THIS_DIR
+    local plugin_root = script_dir:match("^(.*)[/\\]python$") or script_dir
+    local found = first_existing({
+        plugin_root .. "/.venv/Scripts/python.exe",
+        plugin_root .. "/.venv/bin/python",
+        THIS_DIR .. "/../.venv/Scripts/python.exe",
+        THIS_DIR .. "/../.venv/bin/python",
+        home .. "/Pictures/DarkTable/Settings/Plugins/darktable-ai-cull/.venv/Scripts/python.exe",
+    })
+    if found then return found end
+
+    local v = df.check_if_bin_exists(IS_WINDOWS and "python" or "python3")
+    if not v then
+        v = IS_WINDOWS and "python" or "python3"
+    end
+    return v
+end
+
+local function shell_quote(s)
+    if IS_WINDOWS then return '"' .. s .. '"' end
     return "'" .. s:gsub("'", "'\\''") .. "'"
 end
 
--- dt.control.execute releases the Lua lock while the child runs, so the GUI
--- stays responsive. Headless (darktable-cli, where dt.gui is nil) there is
--- no GUI to keep responsive, and releasing the lock would let darktable-cli
--- tear the Lua state down underneath us once its export finishes, so we use
--- plain os.execute and keep the lock for the duration.
-local execute = dt.gui and dt.control.execute or os.execute
-
--- On Windows the command goes through cmd.exe, which mangles a command line
--- that contains more than one quoted item, so we follow the convention from
--- darktable's own lua-scripts (lib/dtutils/system.lua): write the command
--- into a .bat file and execute that instead.
-local function run_command(cmd)
-    if not IS_WINDOWS then
-        return execute(cmd)
+local function run_async_command(cmd, done_path)
+    if IS_WINDOWS then
+        local bat = TMP_DIR .. "/dt_ai_cull_run.bat"
+        local vbs = TMP_DIR .. "/dt_ai_cull_run.vbs"
+        local f = io.open(bat, "w")
+        if not f then return end
+        f:write("@echo off\r\nchcp 65001>nul\r\n")
+        f:write(cmd, " < NUL\r\n")
+        f:write("echo %ERRORLEVEL%> \"", done_path:gsub("/", "\\"), "\"\r\n")
+        f:close()
+        local f_vbs = io.open(vbs, "w")
+        if not f_vbs then return end
+        f_vbs:write('Set WshShell = CreateObject("WScript.Shell")\r\n')
+        f_vbs:write('WScript.Quit WshShell.Run(Chr(34) & "', bat:gsub("/", "\\"), '" & Chr(34), 0, False)\r\n')
+        f_vbs:close()
+        os.execute('wscript.exe "' .. vbs:gsub("/", "\\") .. '"')
+    else
+        os.execute('( ' .. cmd .. ' ; echo $? > ' .. shell_quote(done_path) .. ' ) >/dev/null 2>&1 &')
     end
-    local bat = TMP_DIR .. "/dt_ai_cull_run.bat"
-    local f = io.open(bat, "w")
-    if not f then
-        dt.print_error("AI Cull: cannot write " .. bat)
-        return 1
-    end
-    f:write("@echo off\n")
-    f:write("chcp 65001>nul\n")  -- UTF-8 so non-ASCII paths survive the round trip
-    f:write(cmd, "\n")
-    f:write("exit /b %ERRORLEVEL%\n")
-    f:close()
-    local rc = execute(bat)
-    os.remove(bat)
-    return rc
 end
 
 local function write_manifest(images, burst_of)
     local f = io.open(MANIFEST_PATH, "w")
+    if not f then return false end
     for _, img in ipairs(images) do
         local path = img.path .. "/" .. img.filename
         f:write(M.csv_line({ img.id, path, burst_of[img.id] }), "\n")
     end
     f:close()
+    return true
 end
 
-local function read_results()
-    local results = {}
+local function apply_parts(parts, img_map)
+    local id = tonumber(parts[1])
+    local img = img_map[id]
+    if not img then return false end
+    img.rating = tonumber(parts[6])
+    img.yellow = (parts[3] ~= "ok")
+    img.red = tonumber(parts[5]) ~= 1
+    return true
+end
+
+-- Do not advance past an incomplete last line while Python is still appending.
+local function consume_results(last_read_pos, img_map)
     local f = io.open(RESULTS_PATH, "r")
-    if not f then return results end
-    for line in f:lines() do
+    if not f then return last_read_pos, 0 end
+    f:seek("set", last_read_pos)
+    local applied = 0
+    local chunk_count = 0
+    while true do
+        local line_start = f:seek()
+        local line = f:read("*l")
+        if not line then break end
+        local now = f:seek()
+        local size = f:seek("end")
+        f:seek("set", now)
         local parts = M.parse_csv_line(line, 6)
-        if parts then
-            local id = tonumber(parts[1])
-            results[id] = {
-                sharpness = tonumber(parts[2]),
-                exposure = parts[3],
-                burst_id = parts[4],
-                is_keeper = tonumber(parts[5]) == 1,
-                stars = tonumber(parts[6]),
-            }
-        end
-    end
-    f:close()
-    return results
-end
-
-local function apply_results(images, results)
-    -- The keeper leads its burst's group, so a collapsed group in lighttable
-    -- shows the frame worth keeping rather than whichever came first.
-    local burst_leader = {}
-    for _, img in ipairs(images) do
-        local r = results[img.id]
-        if r and (r.is_keeper or not burst_leader[r.burst_id]) then
-            burst_leader[r.burst_id] = img
-        end
-    end
-
-    -- Detach each leader into a fresh group of its own first. group_with()
-    -- always removes the image from its current group before adding it,
-    -- and pulling a *leader* out of a group hands that group to another
-    -- member — so on a re-run over already-grouped images, attaching to a
-    -- leader that still sits in an old group would scatter the burst.
-    for _, leader in pairs(burst_leader) do
-        leader:group_with()
-    end
-
-    for _, img in ipairs(images) do
-        local r = results[img.id]
-        if r then
-            img.rating = r.stars
-            img.yellow = (r.exposure ~= "ok")   -- flag exposure problems
-            img.red = not r.is_keeper           -- flag non-keeper duplicates
-
-            local leader = burst_leader[r.burst_id]
-            if leader.id ~= img.id then
-                img:group_with(leader)
+        if not parts then
+            if now == size then
+                f:close()
+                return line_start, applied
+            end
+        elseif apply_parts(parts, img_map) then
+            applied = applied + 1
+            chunk_count = chunk_count + 1
+            if chunk_count >= 50 then
+                chunk_count = 0
+                dt.control.sleep(20)
             end
         end
+        last_read_pos = now
     end
+    f:close()
+    return last_read_pos, applied
 end
 
--- Scores a list of images and applies the result. Exposed on the module so
--- it can be driven without the button, e.g. from `darktable --luacmd` or
--- headlessly from darktable-cli:
---     package.loaded["contrib/culling"].score_images(images)
-function M.score_images(images)
-    if #images == 0 then
-        dt.print("AI Cull: select some images first")
+local function read_log_tail()
+    local f = io.open(LOG_PATH, "r")
+    if not f then return "" end
+    local t = f:read("*a") or ""
+    f:close()
+    t = t:gsub("%s+$", "")
+    if #t > 800 then t = t:sub(#t - 799) end
+    return t
+end
+
+local function stop_job(job)
+    M.cancel_requested = true
+    local cf = io.open(CANCEL_PATH, "w")
+    if cf then cf:write("1"); cf:close() end
+    job.valid = false
+end
+
+function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode)
+    rank_mode = rank_mode or "universal"
+    sharp_mode = sharp_mode or "subject_focus"
+    exp_mode = exp_mode or "whole_frame"
+    keep_mode = keep_mode or "dynamic_burst"
+
+    if not images or #images == 0 then
+        dt.print(_("AI Cull: select some images first"))
         return
     end
+
+    local img_map = {}
+    for _, img in ipairs(images) do img_map[img.id] = img end
 
     local time_items = {}
     for _, img in ipairs(images) do
@@ -273,68 +268,318 @@ function M.score_images(images)
     end
     local burst_of = M.cluster_by_time(time_items)
 
-    dt.print("AI Cull: scoring " .. #images .. " images...")
-    write_manifest(images, burst_of)
-    os.remove(RESULTS_PATH)  -- never read a stale result from a previous run
+    pcall(os.remove, MANIFEST_PATH)
+    pcall(os.remove, RESULTS_PATH)
+    pcall(os.remove, RESULTS_PATH .. ".tmp")
+    pcall(os.remove, PROGRESS_PATH)
+    pcall(os.remove, CANCEL_PATH)
+    pcall(os.remove, DONE_PATH)
+    pcall(os.remove, LOG_PATH)
 
-    local cmd = shell_quote(python_bin()) .. " " .. shell_quote(score_script())
-        .. " " .. shell_quote(MANIFEST_PATH) .. " " .. shell_quote(RESULTS_PATH)
-        .. " 2> " .. shell_quote(LOG_PATH)
-    dt.print_log("AI Cull: " .. cmd)
-    local rc = run_command(cmd)
-    dt.print_log("AI Cull: scorer exited with " .. tostring(rc))
-
-    local results = read_results()
-    if next(results) == nil then
-        dt.print("AI Cull: no results — see " .. LOG_PATH)
+    if not write_manifest(images, burst_of) then
+        dt.print_error(_("AI Cull Error: could not write manifest"))
         return
     end
 
-    apply_results(images, results)
-    dt.print("AI Cull: done")
-end
-
--- The panel only exists when there is a GUI (darktable-cli has no dt.gui,
--- and register_lib would block waiting for a GTK main loop that never runs).
-if dt.gui then
-    local installed = false
-    local function install_panel()
-        if installed then return end
-        installed = true
-        local score_button = dt.new_widget("button") {
-            label = "score selected",
-            clicked_callback = function() M.score_images(dt.gui.selection()) end,
-        }
-        -- register_lib(plugin_name, name, expandable, resetable, containers, widget)
-        dt.register_lib(
-            "ai_cull",
-            "AI Cull",
-            true,   -- expandable
-            false,  -- resetable (no reset button; nothing to reset)
-            { [dt.gui.views.lighttable] = { "DT_UI_CONTAINER_PANEL_RIGHT_CENTER", 100 } },
-            score_button
-        )
+    local culling_job = nil
+    if dt.gui then
+        culling_job = dt.gui.create_job(_("AI Culling"), true, stop_job)
+        culling_job.percent = 0.0
     end
 
-    -- Registering a lib straight from luarc is a known startup race: darktable
-    -- may report lighttable as the current view before that view has finished
-    -- initialising, and a lib registered in that window is silently never
-    -- attached to the panel (src/views/view.c documents this; the lua-scripts
-    -- collection hit it as issue #19197). So install the panel from the
-    -- view-changed event into lighttable, which fires only once the view is
-    -- fully up. If that event already went by before we got here, the view is
-    -- complete and installing now is safe -- darktable >= 5.6 says so via the
-    -- darktable_gui_safe flag its system luarc sets; older versions have no
-    -- flag, so there we apply darktable's own workaround for this (#21035): a
-    -- short sleep in the Lua thread that lets the main thread finish starting.
-    dt.register_event("ai_cull", "view-changed", function(_, _, new_view)
-        if new_view.id == "lighttable" then install_panel() end
-    end)
-    if _G.darktable_gui_safe then
+    dt.print_hinter(_("AI Cull: starting analysis..."))
+
+    local sc_script = score_script()
+    if not df.test_file(sc_script, "e") and not file_exists(sc_script) then
+        dt.print_error(_("AI Cull Error: score_images.py not found at: ") .. sc_script)
+        if culling_job then culling_job.valid = false end
+        return
+    end
+    local py_bin = python_bin(sc_script)
+
+    local cmd = shell_quote(py_bin) .. " -u " .. shell_quote(sc_script)
+        .. " " .. shell_quote(MANIFEST_PATH) .. " " .. shell_quote(RESULTS_PATH)
+        .. " " .. shell_quote(PROGRESS_PATH)
+        .. " " .. shell_quote(tostring(rank_mode))
+        .. " " .. shell_quote(tostring(sharp_mode))
+        .. " " .. shell_quote(tostring(exp_mode))
+        .. " " .. shell_quote(tostring(keep_mode))
+        .. " 2> " .. shell_quote(LOG_PATH)
+
+    run_async_command(cmd, DONE_PATH)
+
+    local last_read_pos = 0
+    local applied_total = 0
+    local done_code = nil
+
+    while true do
+        if M.cancel_requested or (culling_job and not culling_job.valid) then
+            M.cancel_requested = true
+            local cf = io.open(CANCEL_PATH, "w")
+            if cf then cf:write("1"); cf:close() end
+            break
+        end
+
+        local pf = io.open(PROGRESS_PATH, "r")
+        if pf then
+            local p = pf:read("*a"); pf:close()
+            if p and p ~= "" then
+                local cur, tot, b_cur, b_tot = p:match("(%d+),(%d+),(%d+),(%d+)")
+                local num = tonumber(cur)
+                local total = tonumber(tot)
+                if num and total and total > 0 then
+                    if culling_job then
+                        culling_job.percent = math.min(1.0, num / total)
+                    end
+                    dt.print_hinter(string.format(
+                        "AI Cull: images %d / %d | bursts %s / %s",
+                        num, total, b_cur or "?", b_tot or "?"
+                    ))
+                end
+            end
+        end
+
+        local new_pos, applied = consume_results(last_read_pos, img_map)
+        last_read_pos = new_pos
+        applied_total = applied_total + applied
+
+        if file_exists(DONE_PATH) then
+            local df_done = io.open(DONE_PATH, "r")
+            if df_done then
+                done_code = tonumber((df_done:read("*a") or ""):match("%d+"))
+                df_done:close()
+            end
+            local final_pos, final_applied = consume_results(last_read_pos, img_map)
+            last_read_pos = final_pos
+            applied_total = applied_total + final_applied
+            if culling_job and done_code == 0 then
+                culling_job.percent = 1.0
+            end
+            dt.control.sleep(50)
+            break
+        end
+
+        dt.control.sleep(150)
+    end
+
+    if culling_job then
+        if not M.cancel_requested and done_code == 0 then
+            culling_job.percent = 1.0
+            dt.control.sleep(50)
+        end
+        culling_job.valid = false
+    end
+
+    dt.print_hinter(" ")
+
+    if M.cancel_requested then
+        dt.print(_("AI Culling cancelled."))
+    elseif done_code ~= 0 then
+        local tail = read_log_tail()
+        if tail ~= "" then
+            dt.print_error(_("AI Cull failed: ") .. tail)
+        else
+            dt.print_error(_("AI Cull failed (scorer exit ") .. tostring(done_code or "?") .. ")")
+        end
+    elseif applied_total == 0 then
+        local tail = read_log_tail()
+        dt.print_error(_("AI Cull: scorer produced no ratings. ") .. (tail ~= "" and tail or _("Check python path and score_images.py.")))
+    else
+        dt.print(_("AI Culling complete."))
+    end
+
+    pcall(os.remove, MANIFEST_PATH)
+    pcall(os.remove, RESULTS_PATH)
+    pcall(os.remove, RESULTS_PATH .. ".tmp")
+    pcall(os.remove, PROGRESS_PATH)
+    pcall(os.remove, CANCEL_PATH)
+    pcall(os.remove, DONE_PATH)
+    if IS_WINDOWS then
+        pcall(os.remove, TMP_DIR .. "/dt_ai_cull_run.bat")
+        pcall(os.remove, TMP_DIR .. "/dt_ai_cull_run.vbs")
+    end
+end
+
+local rank_opts = {"universal", "relative"}
+local sharp_opts = {"subject_focus", "face_detect", "tiles_uniformity", "peak", "center"}
+local exp_opts = {"whole_frame", "subject_only", "strict", "none"}
+local keep_opts = {"dynamic_burst", "portrait_mode", "single_best", "keep_all"}
+
+local genre_combo, rank_combo, sharp_combo, exp_combo, keep_combo, score_button
+
+local function execute_current_config(images)
+    local r_val = rank_opts[rank_combo and rank_combo.value or 1] or "universal"
+    local s_val = sharp_opts[sharp_combo and sharp_combo.value or 1] or "subject_focus"
+    local e_val = exp_opts[exp_combo and exp_combo.value or 1] or "whole_frame"
+    local k_val = keep_opts[keep_combo and keep_combo.value or 1] or "dynamic_burst"
+    M.score_images(images, r_val, s_val, e_val, k_val)
+end
+
+local function install_panel()
+    if M.module_installed then return end
+    M.module_installed = true
+
+    local is_updating = false
+    local is_running = false
+
+    genre_combo = dt.new_widget("combobox") {
+        label = _("preset"),
+        tooltip = _("Sets global configurations based on photography genre."),
+        _("sport"), _("portrait"), _("landscape"), _("macro"), _("custom"),
+        value = 1,
+        changed_callback = function(widget)
+            if is_updating then return end
+            is_updating = true
+            if widget.value == 1 then
+                rank_combo.value = 1
+                sharp_combo.value = 1
+                exp_combo.value = 1
+                keep_combo.value = 1
+            elseif widget.value == 2 then
+                rank_combo.value = 1
+                sharp_combo.value = 2
+                exp_combo.value = 2
+                keep_combo.value = 2
+            elseif widget.value == 3 then
+                rank_combo.value = 1
+                sharp_combo.value = 3
+                exp_combo.value = 3
+                keep_combo.value = 3
+            elseif widget.value == 4 then
+                rank_combo.value = 1
+                sharp_combo.value = 4
+                exp_combo.value = 1
+                keep_combo.value = 4
+            end
+            is_updating = false
+        end
+    }
+
+    local function trigger_custom_override()
+        if is_updating then return end
+        is_updating = true
+        genre_combo.value = 5
+        is_updating = false
+    end
+
+    rank_combo = dt.new_widget("combobox") {
+        label = _("ranking mode"),
+        _("universal absolute"), _("relative batch percentile"),
+        value = 1, changed_callback = trigger_custom_override
+    }
+
+    sharp_combo = dt.new_widget("combobox") {
+        label = _("sharpness"),
+        _("subject tracking (AI)"), _("face & eyes (OpenCV)"), _("edge-to-edge uniformity"), _("absolute peak 1%"), _("center crop"),
+        value = 1, changed_callback = trigger_custom_override
+    }
+
+    exp_combo = dt.new_widget("combobox") {
+        label = _("exposure"),
+        _("whole frame"), _("subject only (ignore sky)"), _("strict histogram"), _("ignore exposure"),
+        value = 1, changed_callback = trigger_custom_override
+    }
+
+    keep_combo = dt.new_widget("combobox") {
+        label = _("keepers"),
+        _("dynamic (1 to 5)"), _("portrait (1 or 2)"), _("single best only"), _("keep all (focus stack)"),
+        value = 1, changed_callback = trigger_custom_override
+    }
+
+    score_button = dt.new_widget("button") {
+        label = _("score selected images"),
+    }
+
+    score_button.clicked_callback = function()
+        if is_running then
+            M.cancel_requested = true
+            local cf = io.open(CANCEL_PATH, "w")
+            if cf then cf:write("1"); cf:close() end
+            score_button.label = _("cancelling...")
+            return
+        end
+
+        is_running = true
+        M.cancel_requested = false
+        score_button.label = _("CANCEL (running...)")
+
+        execute_current_config(dt.gui.action_images)
+
+        is_running = false
+        score_button.label = _("score selected images")
+    end
+
+    local panel_box = dt.new_widget("box") {
+        orientation = "vertical",
+        reset_callback = function()
+            if is_updating then return end
+            is_updating = true
+            genre_combo.value = 1
+            rank_combo.value = 1
+            sharp_combo.value = 1
+            exp_combo.value = 1
+            keep_combo.value = 1
+            is_updating = false
+        end,
+        genre_combo,
+        rank_combo,
+        sharp_combo,
+        exp_combo,
+        keep_combo,
+        score_button
+    }
+
+    dt.register_lib(
+        "ai_cull", _("AI Cull"), true, true,
+        { [dt.gui.views.lighttable] = { "DT_UI_CONTAINER_PANEL_RIGHT_CENTER", 100 } },
+        panel_box
+    )
+end
+
+local function destroy()
+    if dt.gui.libs["ai_cull"] then
+        dt.gui.libs["ai_cull"].visible = false
+    end
+    dt.destroy_event("ai_cull_run", "shortcut")
+end
+
+local function restart()
+    if dt.gui.libs["ai_cull"] then
+        dt.gui.libs["ai_cull"].visible = true
+    end
+
+    dt.register_event("ai_cull_run", "shortcut",
+        function(event, shortcut)
+            execute_current_config(dt.gui.action_images)
+        end, _("execute AI culling on selected images")
+    )
+end
+
+M.destroy = destroy
+M.restart = restart
+M.destroy_method = "hide"
+M.show = restart
+M.metadata = {
+    name = _("AI Cull"),
+    purpose = _("AI-assisted culling, sharpness grading, and keeper selection"),
+    author = "Custom Script",
+    help = ""
+}
+
+if dt.gui then
+    if dt.gui.current_view().id == "lighttable" then
         install_panel()
-    elseif dt.gui.current_view().id == "lighttable" then
-        dt.control.sleep(1500)
-        install_panel()
+        restart()
+    else
+        if not M.event_registered then
+            dt.register_event("ai_cull", "view-changed", function(event, old_view, new_view)
+                if new_view.name == "lighttable" or new_view.id == "lighttable" then
+                    install_panel()
+                    restart()
+                end
+            end)
+            M.event_registered = true
+        end
     end
 end
 
