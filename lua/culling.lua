@@ -333,8 +333,9 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             dt.print(_("Assisted Culling: Stage 2 applying ratings..."))
             
             -- Prepare native darktable tags
-            local keeper_tag = tags.create("AI Culling|Keeper")
-            local reject_tag = tags.create("AI Culling|Rejected")
+            local keeper_tag = tags.create("Assisted Culling|Keeper")
+            local reject_tag = tags.create("Assisted Culling|Rejected")
+            local culled_tag = tags.create("Assisted Culling|Culled")
             
             local f = io.open(RESULTS_PATH, "r")
             if f then
@@ -377,6 +378,8 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                                 else
                                     tags.attach(reject_tag, img)
                                 end
+
+                                tags.attach(culled_tag, img)
                                 
                                 applied_total = applied_total + 1
                             end)
