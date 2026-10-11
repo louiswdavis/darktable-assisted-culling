@@ -2,7 +2,7 @@
     assisted_culling.lua — Assisted Culling for darktable
 
     Lighttable panel that clusters a selection into bursts, shells out to
-    score_images.py, streams ratings back, and keeps sequential live progress jobs.
+    score_images.py, streams ratings back, and keeps a single continuous live progress job.
 ]]
 
 local M = {}
@@ -237,10 +237,10 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode)
         return
     end
 
-    -- Stage 1 Job: Analyzing
+    -- Single persistent job for the entire culling operation
     local culling_job = nil
     if dt.gui then
-        culling_job = dt.gui.create_job(_("Assisted Culling: Analyzing"), true, stop_job)
+        culling_job = dt.gui.create_job(_("Assisted Culling"), true, stop_job)
         culling_job.percent = 0.0
     end
 
@@ -268,7 +268,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode)
     local done_code = nil
 
     -- =========================================================================
-    -- STAGE 1 LOOP: Async Monitoring
+    -- STAGE 1 LOOP: Async Monitoring (Progress 0.0 -> 1.0)
     -- =========================================================================
     while true do
         if M.cancel_requested or (culling_job and not culling_job.valid) then
@@ -303,7 +303,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode)
                 local raw_content = df_done:read("*a") or ""
                 df_done:close()
                 done_code = tonumber(raw_content:match("%d+"))
-                dt.print("DEBUG: DONE_PATH content was: [" .. raw_content .. "] parsed as: " .. tostring(done_code))
+                dt.print("DEBUG: DONE_PATH content: [" .. raw_content .. "] parsed as: " .. tostring(done_code))
             end
             break
         end
@@ -311,31 +311,18 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode)
         dt.control.sleep(150)
     end
 
-    if culling_job then
-        culling_job.percent = 1.0
-        culling_job.valid = false
-    end
-
-    -- Yield to allow GTK event loop to clear the first job widget
-    dt.control.sleep(100)
-
     local applied_total = 0
 
     -- =========================================================================
-    -- STAGE 2: Applying Ratings Job with diagnostics & forced entry testing
+    -- STAGE 2: Applying Ratings Pass (Reset progress to 0.0 and run batch updates)
     -- =========================================================================
-    local apply_job = nil
     if not M.cancel_requested then
-        dt.print(_("Assisted Culling: Entering Stage 2 block..."))
-        
-        if dt.gui then
-            apply_job = dt.gui.create_job(_("Assisted Culling: Applying Ratings"), true, stop_job)
-            apply_job.percent = 0.0
-            dt.control.sleep(100)
+        if culling_job then
+            culling_job.percent = 0.0
         end
 
         dt.print_hinter(_("Assisted Culling: applying ratings to database..."))
-        dt.print(_("Assisted Culling: Stage 2 job created."))
+        dt.print(_("Assisted Culling: Stage 2 starting..."))
         
         local f = io.open(RESULTS_PATH, "r")
         if not f then
@@ -346,7 +333,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode)
             local batch_count = 0
 
             for line in f:lines() do
-                if M.cancel_requested or (apply_job and not apply_job.valid) then
+                if M.cancel_requested or (culling_job and not culling_job.valid) then
                     M.cancel_requested = true
                     break
                 end
@@ -372,8 +359,8 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode)
                 end
 
                 processed_count = processed_count + 1
-                if apply_job and total_images > 0 then
-                    apply_job.percent = math.min(1.0, processed_count / total_images)
+                if culling_job and total_images > 0 then
+                    culling_job.percent = math.min(1.0, processed_count / total_images)
                 end
 
                 batch_count = batch_count + 1
@@ -385,12 +372,12 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode)
             f:close()
             dt.print(string.format("Assisted Culling: Stage 2 complete. Read %d lines, successfully updated %d images.", processed_count, applied_total))
         end
+    end
 
-        if apply_job then
-            apply_job.percent = 1.0
-            dt.control.sleep(50)
-            apply_job.valid = false
-        end
+    if culling_job then
+        culling_job.percent = 1.0
+        dt.control.sleep(50)
+        culling_job.valid = false
     end
 
     dt.print_hinter(" ")
