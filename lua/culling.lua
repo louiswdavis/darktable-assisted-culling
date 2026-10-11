@@ -64,10 +64,6 @@ function M.parse_csv_line(line, n)
     return parts
 end
 
--- =========================================================================
--- darktable integration — skipped when required from lua test_assisted_culling.lua
--- =========================================================================
-
 local ok, dt = pcall(require, "darktable")
 if not ok then return M end
 
@@ -206,19 +202,18 @@ local function stop_job(job)
     local cf = io.open(CANCEL_PATH, "w")
     if cf then cf:write("1"); cf:close() end
     job.valid = false
-    
-    -- Ensure button state resets immediately if cancelled via job UI widget
     is_running = false
     if action_button then
         action_button.label = _("Start Culling")
     end
 end
 
-function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode)
+function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_mode)
     rank_mode = rank_mode or "universal"
     sharp_mode = sharp_mode or "subject_focus"
     exp_mode = exp_mode or "whole_frame"
     keep_mode = keep_mode or "dynamic_burst"
+    nk_mode = nk_mode or "leave"
 
     if not images or #images == 0 then
         dt.print(_("Assisted Culling: select some images first"))
@@ -270,6 +265,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode)
             .. " " .. shell_quote(tostring(sharp_mode))
             .. " " .. shell_quote(tostring(exp_mode))
             .. " " .. shell_quote(tostring(keep_mode))
+            .. " " .. shell_quote(tostring(nk_mode))
             .. " 2> " .. shell_quote(LOG_PATH)
 
         run_async_command(cmd, DONE_PATH)
@@ -319,9 +315,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode)
 
         local applied_total = 0
 
-        -- =========================================================================
-        -- STAGE 2: Applying Ratings Pass with Toast & Terminal Feedback
-        -- =========================================================================
+        -- Stage 2 Loop
         if not M.cancel_requested then
             dt.print(_("Assisted Culling: Stage 2 applying ratings..."))
             
@@ -349,12 +343,17 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode)
                         local img = id and img_map[id] or nil
                         
                         if img then
-                            local raw_rating = tonumber(parts[6]) or 0
+                            local raw_rating_str = parts[6]
                             local is_ok = (parts[3] == "ok")
-                            local is_rejected = (tonumber(parts[5]) == 1)
+                            
+                            -- Logic fix: parts[5] == "0" means it's a non-keeper (rejected)
+                            local is_rejected = (tonumber(parts[5]) == 0)
 
                             pcall(function()
-                                img.rating = raw_rating
+                                -- Only assign the rating if it's not strictly flagged to "leave"
+                                if raw_rating_str ~= "leave" then
+                                    img.rating = tonumber(raw_rating_str) or 0
+                                end
                                 img.yellow = not is_ok
                                 img.red = is_rejected
                                 applied_total = applied_total + 1
@@ -362,12 +361,10 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode)
                         end
                     end
 
-                    -- 1. Stream real-time logs to your terminal if running with `-d lua`
                     if i % 10 == 0 then
                         dt.print_error(string.format("[Assisted Culling] Processed %d / %d records", i, total_lines))
                     end
 
-                    -- 2. Pop a non-blocking screen toast every 25% progress chunk
                     if i == math.floor(total_lines * 0.25) or 
                        i == math.floor(total_lines * 0.50) or 
                        i == math.floor(total_lines * 0.75) or 
@@ -408,7 +405,6 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode)
         end
     end)
 
-    -- Guaranteed cleanup: always reset button state and flags
     is_running = false
     if action_button then
         action_button.label = _("Start Culling")
@@ -434,15 +430,18 @@ local rank_opts = {"universal", "relative"}
 local sharp_opts = {"subject_focus", "face_detect", "tiles_uniformity", "peak", "center"}
 local exp_opts = {"whole_frame", "subject_only", "strict", "none"}
 local keep_opts = {"dynamic_burst", "portrait_mode", "single_best", "keep_all"}
+local nk_opts = {"leave", "reject", "0", "1", "2", "3", "4", "5"}
 
-local genre_combo, rank_combo, sharp_combo, exp_combo, keep_combo
+local genre_combo, rank_combo, sharp_combo, exp_combo, keep_combo, non_keeper_combo
 
 local function execute_current_config(images)
     local r_val = rank_opts[rank_combo and rank_combo.value or 1] or "universal"
     local s_val = sharp_opts[sharp_combo and sharp_combo.value or 1] or "subject_focus"
     local e_val = exp_opts[exp_combo and exp_combo.value or 1] or "whole_frame"
     local k_val = keep_opts[keep_combo and keep_combo.value or 1] or "dynamic_burst"
-    M.score_images(images, r_val, s_val, e_val, k_val)
+    local nk_val = nk_opts[non_keeper_combo and non_keeper_combo.value or 1] or "leave"
+    
+    M.score_images(images, r_val, s_val, e_val, k_val, nk_val)
 end
 
 local function install_panel()
@@ -515,6 +514,12 @@ local function install_panel()
         value = 1, changed_callback = trigger_custom_override
     }
 
+    non_keeper_combo = dt.new_widget("combobox") {
+        label = _("non-keepers"),
+        _("leave alone"), _("reject (-1)"), _("0 stars"), _("1 star"), _("2 stars"), _("3 stars"), _("4 stars"), _("5 stars"),
+        value = 1, changed_callback = trigger_custom_override
+    }
+
     action_button = dt.new_widget("button") {
         label = _("Start Culling"),
     }
@@ -532,8 +537,6 @@ local function install_panel()
         M.cancel_requested = false
 
         execute_current_config(dt.gui.action_images)
-
-        is_running = false
     end
 
     local panel_box = dt.new_widget("box") {
@@ -546,6 +549,7 @@ local function install_panel()
             sharp_combo.value = 1
             exp_combo.value = 1
             keep_combo.value = 1
+            non_keeper_combo.value = 1
             is_updating = false
         end,
         genre_combo,
@@ -553,6 +557,7 @@ local function install_panel()
         sharp_combo,
         exp_combo,
         keep_combo,
+        non_keeper_combo,
         action_button
     }
 
