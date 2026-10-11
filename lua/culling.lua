@@ -767,10 +767,10 @@ local function install_panel()
     local is_updating = false
     
     local preset_configs = {
-        {1, 1, 1, 1},
-        {1, 2, 2, 2},
-        {1, 3, 3, 3},
-        {1, 4, 1, 4},
+        {1, 2, 3, 1},
+        {1, 4, 2, 2},
+        {1, 5, 1, 3},
+        {1, 3, 1, 4},
     }
 
     local function trigger_custom_override()
@@ -786,7 +786,7 @@ local function install_panel()
     genre_combo = dt.new_widget("combobox") {
         label = _("preset"),
         tooltip = _("Sets global configurations based on photography genre."),
-        _("sport"), _("portrait"), _("landscape"), _("macro"), _("custom"),
+        _("landscape"), _("portrait"), _("sport"), _("macro"), _("custom"),
         selected = dt.preferences.read("assisted_culling", "last_genre", "integer") or 1,
         changed_callback = function(widget)
             if is_updating then return end
@@ -825,7 +825,7 @@ local function install_panel()
     sharp_combo = dt.new_widget("combobox") {
         label = _("sharpness"),
         tooltip = _("How sharpness is measured. Note: 'subject tracking' and 'face & eyes' currently use the same edge-to-edge tile scoring."),
-        _("subject tracking (AI)"), _("face & eyes (OpenCV)"), _("edge-to-edge uniformity"), _("absolute peak 1%"), _("center crop"),
+         _("center crop"), _("edge-to-edge uniformity"), _("absolute peak 1%"), _("face & eyes (OpenCV)"), _("subject tracking (AI)"),
         selected = dt.preferences.read("assisted_culling", "last_sharp_mode", "integer") or 1, 
         changed_callback = function(widget)
             if is_updating then return end
@@ -849,7 +849,7 @@ local function install_panel()
     keep_combo = dt.new_widget("combobox") {
         label = _("keepers"),
         tooltip = _("How many of each burst are kept (the sharpest ones)."),
-        _("dynamic (1 to 5)"), _("portrait (1 or 2)"), _("single best only"), _("keep all (focus stack)"),
+        _("single best only"), _("portrait (1 or 2)"), _("dynamic (1 to 5)"), _("keep all (focus stack)"),
         selected = dt.preferences.read("assisted_culling", "last_keep_mode", "integer") or 1, 
         changed_callback = function(widget)
             if is_updating then return end
