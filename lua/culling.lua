@@ -340,21 +340,30 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode)
 
                 local parts = M.parse_csv_line(line, 6)
                 if parts then
+                    -- Clean up any potential carriage returns or whitespace from fields
+                    for k, val in ipairs(parts) do
+                        parts[k] = val:match("^%s*(.-)%s*$")
+                    end
+
                     local id = tonumber(parts[1])
                     local img = id and img_map[id] or nil
                     
                     if img then
+                        local raw_rating = tonumber(parts[6]) or 0
+                        local is_ok = (parts[3] == "ok")
+                        local is_rejected = (tonumber(parts[5]) == 1)
+
                         local success, err = pcall(function()
-                            img.rating = tonumber(parts[6]) or 0
-                            img.yellow = (parts[3] ~= "ok")
-                            img.red = tonumber(parts[5]) ~= 1
-                            applied_total = applied_total + 1
+                            img.rating = raw_rating
+                            img.yellow = not is_ok       -- True if not ok (flagged/issue)
+                            img.red = is_rejected        -- True if rejected
                         end)
-                        if not success then
-                            dt.print_error(string.format("Assisted Culling Error setting ID %s: %s", tostring(id), tostring(err)))
+
+                        if success then
+                            applied_total = applied_total + 1
+                        else
+                            dt.print_error(string.format("Error updating image ID %s: %s", tostring(id), tostring(err)))
                         end
-                    else
-                        dt.print_error(string.format("Assisted Culling Warning: ID %s from CSV not found in img_map", tostring(parts[1])))
                     end
                 end
 
