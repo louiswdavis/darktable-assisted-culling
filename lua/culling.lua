@@ -575,6 +575,8 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                 dt.print(string.format(overlap and "Assisted Culling: analysis done, applying the last %d..."
                     or "Assisted Culling: applying ratings to %d...", remaining))
             end
+            
+            -- >>> INSERT STAGE 2 TIMING HERE <<<
             local started = os.time()
             local last_toast_pct = 0
 
@@ -586,13 +588,15 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
 
                 apply_slice()
 
-                local done = pending_idx - 1
-                local pct = done / total_lines
-                if culling_job then culling_job.percent = math.min(1.0, pct) end
+                local done = pending_idx - start_idx
+                local pct = done / remaining
+                if culling_job then culling_job.percent = math.min(1.0, (pending_idx - 1) / total_lines) end
+                
                 dt.print_hinter(string.format(
-                    "Assisted Culling: applying ratings %d / %d (%d%%)%s", done, total_lines,
-                    math.floor(pct * 100), fmt_eta(os.time() - started, done - start_idx, remaining)))
-                local milestone = math.floor(pct * 4) * 25
+                    "Assisted Culling: applying ratings %d / %d (%d%%)%s", pending_idx - 1, total_lines,
+                    math.floor(((pending_idx - 1) / total_lines) * 100), fmt_eta(os.time() - started, done, remaining)))
+                    
+                local milestone = math.floor(((pending_idx - 1) / total_lines) * 4) * 25
                 if milestone > last_toast_pct and milestone < 100 then
                     last_toast_pct = milestone
                     dt.print(string.format("Assisted Culling: %d%% applied", milestone))
