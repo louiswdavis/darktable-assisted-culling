@@ -420,7 +420,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                 local cur = img[name] and true or false
                 if wanted and not cur then
                     img[name] = true; writes = writes + 1
-                elseif (not wanted) and cur and touched_before then
+                elseif (not wanted) and cur then
                     img[name] = false; writes = writes + 1
                 end
             end
