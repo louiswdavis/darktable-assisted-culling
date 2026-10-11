@@ -773,6 +773,16 @@ local function install_panel()
         {1, 4, 1, 4},
     }
 
+    local function trigger_custom_override()
+        if is_updating then return end
+        is_updating = true
+        if genre_combo then
+            genre_combo.selected = 5
+            dt.preferences.write("assisted_culling", "last_genre", "integer", 5)
+        end
+        is_updating = false
+    end
+
     genre_combo = dt.new_widget("combobox") {
         label = _("preset"),
         tooltip = _("Sets global configurations based on photography genre."),
@@ -785,28 +795,20 @@ local function install_panel()
             
             local conf = preset_configs[widget.selected]
             if conf then
-                rank_combo.selected = conf[1]
-                sharp_combo.selected = conf[2]
-                exp_combo.selected = conf[3]
-                keep_combo.selected = conf[4]
+                if rank_combo then rank_combo.selected = conf[1] end
+                if sharp_combo then sharp_combo.selected = conf[2] end
+                if exp_combo then exp_combo.selected = conf[3] end
+                if keep_combo then keep_combo.selected = conf[4] end
+                
+                dt.preferences.write("assisted_culling", "last_rank_mode", "integer", conf[1])
+                dt.preferences.write("assisted_culling", "last_sharp_mode", "integer", conf[2])
+                dt.preferences.write("assisted_culling", "last_exp_mode", "integer", conf[3])
+                dt.preferences.write("assisted_culling", "last_keep_mode", "integer", conf[4])
             end
-            
-            dt.preferences.write("assisted_culling", "last_rank_mode", "integer", rank_combo.selected)
-            dt.preferences.write("assisted_culling", "last_sharp_mode", "integer", sharp_combo.selected)
-            dt.preferences.write("assisted_culling", "last_exp_mode", "integer", exp_combo.selected)
-            dt.preferences.write("assisted_culling", "last_keep_mode", "integer", keep_combo.selected)
             
             is_updating = false
         end
     }
-
-    local function trigger_custom_override()
-        if is_updating then return end
-        is_updating = true
-        genre_combo.selected = 5
-        dt.preferences.write("assisted_culling", "last_genre", "integer", 5)
-        is_updating = false
-    end
 
     rank_combo = dt.new_widget("combobox") {
         label = _("ranking mode"),
@@ -814,6 +816,7 @@ local function install_panel()
         _("universal absolute"), _("relative batch percentile"),
         selected = dt.preferences.read("assisted_culling", "last_rank_mode", "integer") or 1, 
         changed_callback = function(widget)
+            if is_updating then return end
             dt.preferences.write("assisted_culling", "last_rank_mode", "integer", widget.selected)
             trigger_custom_override()
         end
@@ -825,6 +828,7 @@ local function install_panel()
         _("subject tracking (AI)"), _("face & eyes (OpenCV)"), _("edge-to-edge uniformity"), _("absolute peak 1%"), _("center crop"),
         selected = dt.preferences.read("assisted_culling", "last_sharp_mode", "integer") or 1, 
         changed_callback = function(widget)
+            if is_updating then return end
             dt.preferences.write("assisted_culling", "last_sharp_mode", "integer", widget.selected)
             trigger_custom_override()
         end
@@ -836,6 +840,7 @@ local function install_panel()
         _("whole frame"), _("subject only (ignore sky)"), _("strict histogram"), _("ignore exposure"),
         selected = dt.preferences.read("assisted_culling", "last_exp_mode", "integer") or 1, 
         changed_callback = function(widget)
+            if is_updating then return end
             dt.preferences.write("assisted_culling", "last_exp_mode", "integer", widget.selected)
             trigger_custom_override()
         end
@@ -847,6 +852,7 @@ local function install_panel()
         _("dynamic (1 to 5)"), _("portrait (1 or 2)"), _("single best only"), _("keep all (focus stack)"),
         selected = dt.preferences.read("assisted_culling", "last_keep_mode", "integer") or 1, 
         changed_callback = function(widget)
+            if is_updating then return end
             dt.preferences.write("assisted_culling", "last_keep_mode", "integer", widget.selected)
             trigger_custom_override()
         end
@@ -858,6 +864,7 @@ local function install_panel()
         _("leave alone"), _("reject (-1)"), _("0 stars"), _("1 star"), _("2 stars"), _("3 stars"), _("4 stars"), _("5 stars"),
         selected = dt.preferences.read("assisted_culling", "last_nk_mode", "integer") or 1, 
         changed_callback = function(widget)
+            if is_updating then return end
             dt.preferences.write("assisted_culling", "last_nk_mode", "integer", widget.selected)
             trigger_custom_override()
         end
