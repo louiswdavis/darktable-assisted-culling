@@ -330,11 +330,11 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode)
                 if num and total and total > 0 then
                     if culling_job then
                         culling_job.percent = math.min(1.0, num / total)
+                        culling_job.text = string.format(
+                            "Assisted Culling: images %d / %d | bursts %s / %s",
+                            num, total, b_cur or "?", b_tot or "?"
+                        )
                     end
-                    dt.print_hinter(string.format(
-                        "Assisted Culling: images %d / %d | bursts %s / %s",
-                        num, total, b_cur or "?", b_tot or "?"
-                    ))
                 end
             end
         end
