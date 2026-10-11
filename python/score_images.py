@@ -45,7 +45,18 @@ TIER_THRESHOLDS = [
 EXPOSURE_PENALTY_STARS = 1
 
 
-def load_image(filepath: str) -> np.ndarray:
+def _open_rgb(source, fast_jpeg: bool) -> np.ndarray:
+    img = Image.open(source)
+    if fast_jpeg:
+        try:
+            # JPEG only: decode at 1/2, 1/4 or 1/8 scale (never below MAX_DIM); no-op for other formats
+            img.draft("RGB", (MAX_DIM, MAX_DIM))
+        except Exception:
+            pass
+    return np.array(img.convert("RGB"))
+
+
+def load_image(filepath: str, fast_jpeg: bool = False) -> np.ndarray:
     ext = Path(filepath).suffix.lower()
     if ext in RAW_EXTENSIONS:
         import rawpy
@@ -53,7 +64,7 @@ def load_image(filepath: str) -> np.ndarray:
             try:
                 thumb = raw.extract_thumb()
                 if thumb.format == rawpy.ThumbFormat.JPEG:
-                    rgb = np.array(Image.open(io.BytesIO(thumb.data)).convert("RGB"))
+                    rgb = _open_rgb(io.BytesIO(thumb.data), fast_jpeg)
                 elif thumb.format == rawpy.ThumbFormat.BITMAP:
                     rgb = thumb.data
                 else:
@@ -61,7 +72,7 @@ def load_image(filepath: str) -> np.ndarray:
             except Exception:
                 rgb = raw.postprocess(half_size=True, use_camera_wb=True, no_auto_bright=True)
     else:
-        rgb = np.array(Image.open(filepath).convert("RGB"))
+        rgb = _open_rgb(filepath, fast_jpeg)
 
     h, w = rgb.shape[:2]
     scale = MAX_DIM / max(h, w)
@@ -121,8 +132,6 @@ def write_progress(progress_path: str, cur: int, tot: int, b_cur: int, b_tot: in
         try:
             with open(progress_path, "w", encoding="utf-8") as pf:
                 pf.write(payload)
-                pf.flush()
-                os.fsync(pf.fileno())
             return
         except OSError:
             time.sleep(0.02)
@@ -142,12 +151,12 @@ def _init_worker():
         pass
 
 
-def process_single_image(filepath: str, sharp_mode: str, exp_mode: str, cancel_path: str = ""):
+def process_single_image(filepath: str, sharp_mode: str, exp_mode: str, cancel_path: str = "", fast_jpeg: bool = False):
     """Worker function for concurrent processing."""
     if cancel_path and os.path.exists(cancel_path):
         return filepath, None, None, "cancelled"
     try:
-        rgb = load_image(filepath)
+        rgb = load_image(filepath, fast_jpeg)
         sharp = sharpness_score(rgb, sharp_mode)
         exp = exposure_status(rgb, exp_mode)
         return filepath, sharp, exp, None
@@ -217,8 +226,6 @@ def process_burst_logic(burst_id, burst_sharpness, burst_exposure, burst_size, a
 
     with open(results_path, "a", newline="", encoding="utf-8") as f:
         csv.writer(f).writerows(burst_rows)
-        f.flush()
-        os.fsync(f.fileno())
 
 
 def main(args):
@@ -258,6 +265,7 @@ def main(args):
 
     processed_count = 0
     completed_bursts = 0
+    last_progress = 0.0
     write_progress(args.progress, 0, total_images, 0, total_bursts)
 
     cancel_path = (args.progress + ".cancel") if args.progress else ""
@@ -268,7 +276,7 @@ def main(args):
         future_to_item = {}
         for burst_id, items in burst_groups.items():
             for image_id, filepath in items:
-                fut = executor.submit(process_single_image, filepath, args.sharp_mode, args.exp_mode, cancel_path)
+                fut = executor.submit(process_single_image, filepath, args.sharp_mode, args.exp_mode, cancel_path, args.fast_jpeg)
                 future_to_item[fut] = (burst_id, image_id, filepath)
 
         for future in concurrent.futures.as_completed(future_to_item):
@@ -315,7 +323,10 @@ def main(args):
                 if completed_bursts % 25 == 0:
                     gc.collect()
 
-            write_progress(args.progress, processed_count, total_images, completed_bursts, total_bursts)
+            now = time.monotonic()
+            if now - last_progress >= 0.1 or processed_count == total_images:
+                last_progress = now
+                write_progress(args.progress, processed_count, total_images, completed_bursts, total_bursts)
 
 
 if __name__ == "__main__":
@@ -328,6 +339,8 @@ if __name__ == "__main__":
     parser.add_argument("--exp-mode", default="whole_frame", help="Exposure evaluation mode")
     parser.add_argument("--keep-mode", default="dynamic_burst", help="Keeper allowance logic")
     parser.add_argument("--nk-mode", default="leave", help="Handling for non-keepers")
+    parser.add_argument("--fast-jpeg", action="store_true",
+                        help="Decode JPEGs at reduced scale (faster; scores shift slightly)")
 
     args = parser.parse_args()
 
