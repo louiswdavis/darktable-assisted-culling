@@ -13,9 +13,17 @@ import time
 import concurrent.futures
 from pathlib import Path
 
-import numpy as np
-import cv2
-from PIL import Image
+try:
+    import numpy as np
+    import cv2
+    from PIL import Image
+except ImportError as _e:
+    print(
+        f"Missing Python package '{_e.name or _e}' in {sys.executable}. "
+        f"Install with: \"{sys.executable}\" -m pip install opencv-python-headless numpy Pillow rawpy",
+        file=sys.stderr,
+    )
+    sys.exit(3)
 
 RAW_EXTENSIONS = {".cr2", ".cr3", ".nef", ".arw", ".rw2", ".dng", ".raf", ".orf"}
 MAX_DIM = 800
@@ -126,8 +134,18 @@ def cancel_requested(progress_path: str) -> bool:
     return Path(progress_path + ".cancel").exists()
 
 
-def process_single_image(filepath: str, sharp_mode: str, exp_mode: str):
+def _init_worker():
+    """Each worker is already a separate process; stop OpenCV oversubscribing cores."""
+    try:
+        cv2.setNumThreads(1)
+    except Exception:
+        pass
+
+
+def process_single_image(filepath: str, sharp_mode: str, exp_mode: str, cancel_path: str = ""):
     """Worker function for concurrent processing."""
+    if cancel_path and os.path.exists(cancel_path):
+        return filepath, None, None, "cancelled"
     try:
         rgb = load_image(filepath)
         sharp = sharpness_score(rgb, sharp_mode)
@@ -217,6 +235,18 @@ def main(args):
         burst_groups.setdefault(burst_id, []).append((image_id, filepath))
 
     total_bursts = len(burst_groups)
+
+    # Pre-flight: fail fast with a clear message if RAW support is missing.
+    if any(Path(fp).suffix.lower() in RAW_EXTENSIONS for _, fp, _ in manifest):
+        try:
+            import rawpy  # noqa: F401
+        except ImportError:
+            print(
+                f"Missing Python package 'rawpy' in {sys.executable} (needed for RAW files). "
+                f"Install with: \"{sys.executable}\" -m pip install rawpy",
+                file=sys.stderr,
+            )
+            sys.exit(3)
     
     # Track completion state for cross-burst concurrency
     burst_completion = {b_id: 0 for b_id in burst_groups}
@@ -230,21 +260,32 @@ def main(args):
     completed_bursts = 0
     write_progress(args.progress, 0, total_images, 0, total_bursts)
 
-    with concurrent.futures.ProcessPoolExecutor() as executor:
+    cancel_path = (args.progress + ".cancel") if args.progress else ""
+    workers = max(1, (os.cpu_count() or 2) - 1)  # leave a core for darktable's UI
+
+    with concurrent.futures.ProcessPoolExecutor(max_workers=workers, initializer=_init_worker) as executor:
         # Submit ALL images to the executor instantly to fully saturate all CPU cores
         future_to_item = {}
         for burst_id, items in burst_groups.items():
             for image_id, filepath in items:
-                fut = executor.submit(process_single_image, filepath, args.sharp_mode, args.exp_mode)
+                fut = executor.submit(process_single_image, filepath, args.sharp_mode, args.exp_mode, cancel_path)
                 future_to_item[fut] = (burst_id, image_id, filepath)
 
         for future in concurrent.futures.as_completed(future_to_item):
             if cancel_requested(args.progress):
                 print("cancelled", file=sys.stderr)
+                # drop everything still queued; only in-flight images finish
+                executor.shutdown(wait=False, cancel_futures=True)
                 sys.exit(130)
 
             burst_id, image_id, filepath = future_to_item[future]
-            _, sharp, exp, err = future.result()
+            try:
+                _, sharp, exp, err = future.result()
+            except concurrent.futures.CancelledError:
+                continue
+            if err == "cancelled":
+                executor.shutdown(wait=False, cancel_futures=True)
+                sys.exit(130)
 
             if err:
                 print(f"skip {image_id} ({filepath}): {err}", file=sys.stderr)
