@@ -728,11 +728,11 @@ local nk_opts = {"leave", "reject", "0", "1", "2", "3", "4", "5"}
 local genre_combo, rank_combo, sharp_combo, exp_combo, keep_combo, non_keeper_combo
 
 local function execute_current_config(images)
-    local r_val = rank_opts[rank_combo and rank_combo.value or 1] or "universal"
-    local s_val = sharp_opts[sharp_combo and sharp_combo.value or 1] or "subject_focus"
-    local e_val = exp_opts[exp_combo and exp_combo.value or 1] or "whole_frame"
-    local k_val = keep_opts[keep_combo and keep_combo.value or 1] or "dynamic_burst"
-    local nk_val = nk_opts[non_keeper_combo and non_keeper_combo.value or 1] or "leave"
+    local r_val = rank_opts[rank_combo and rank_combo.selected or 1] or "universal"
+    local s_val = sharp_opts[sharp_combo and sharp_combo.selected or 1] or "subject_focus"
+    local e_val = exp_opts[exp_combo and exp_combo.selected or 1] or "whole_frame"
+    local k_val = keep_opts[keep_combo and keep_combo.selected or 1] or "dynamic_burst"
+    local nk_val = nk_opts[non_keeper_combo and non_keeper_combo.selected or 1] or "leave"
     
     M.score_images(images, r_val, s_val, e_val, k_val, nk_val)
 end
@@ -777,24 +777,24 @@ local function install_panel()
         label = _("preset"),
         tooltip = _("Sets global configurations based on photography genre."),
         _("sport"), _("portrait"), _("landscape"), _("macro"), _("custom"),
-        value = dt.preferences.read("assisted_culling", "last_genre", "integer") or 1,
+        selected = dt.preferences.read("assisted_culling", "last_genre", "integer") or 1,
         changed_callback = function(widget)
             if is_updating then return end
             is_updating = true
-            dt.preferences.write("assisted_culling", "last_genre", "integer", widget.value)
+            dt.preferences.write("assisted_culling", "last_genre", "integer", widget.selected)
             
-            local conf = preset_configs[widget.value]
+            local conf = preset_configs[widget.selected]
             if conf then
-                rank_combo.value = conf[1]
-                sharp_combo.value = conf[2]
-                exp_combo.value = conf[3]
-                keep_combo.value = conf[4]
+                rank_combo.selected = conf[1]
+                sharp_combo.selected = conf[2]
+                exp_combo.selected = conf[3]
+                keep_combo.selected = conf[4]
             end
             
-            dt.preferences.write("assisted_culling", "last_rank_mode", "integer", rank_combo.value)
-            dt.preferences.write("assisted_culling", "last_sharp_mode", "integer", sharp_combo.value)
-            dt.preferences.write("assisted_culling", "last_exp_mode", "integer", exp_combo.value)
-            dt.preferences.write("assisted_culling", "last_keep_mode", "integer", keep_combo.value)
+            dt.preferences.write("assisted_culling", "last_rank_mode", "integer", rank_combo.selected)
+            dt.preferences.write("assisted_culling", "last_sharp_mode", "integer", sharp_combo.selected)
+            dt.preferences.write("assisted_culling", "last_exp_mode", "integer", exp_combo.selected)
+            dt.preferences.write("assisted_culling", "last_keep_mode", "integer", keep_combo.selected)
             
             is_updating = false
         end
@@ -803,7 +803,7 @@ local function install_panel()
     local function trigger_custom_override()
         if is_updating then return end
         is_updating = true
-        genre_combo.value = 5
+        genre_combo.selected = 5
         dt.preferences.write("assisted_culling", "last_genre", "integer", 5)
         is_updating = false
     end
@@ -812,9 +812,9 @@ local function install_panel()
         label = _("ranking mode"),
         tooltip = _("universal: stars from fixed sharpness tiers.\nrelative: keepers get top stars, the rest none."),
         _("universal absolute"), _("relative batch percentile"),
-        value = dt.preferences.read("assisted_culling", "last_rank_mode", "integer") or 1, 
+        selected = dt.preferences.read("assisted_culling", "last_rank_mode", "integer") or 1, 
         changed_callback = function(widget)
-            dt.preferences.write("assisted_culling", "last_rank_mode", "integer", widget.value)
+            dt.preferences.write("assisted_culling", "last_rank_mode", "integer", widget.selected)
             trigger_custom_override()
         end
     }
@@ -823,9 +823,9 @@ local function install_panel()
         label = _("sharpness"),
         tooltip = _("How sharpness is measured. Note: 'subject tracking' and 'face & eyes' currently use the same edge-to-edge tile scoring."),
         _("subject tracking (AI)"), _("face & eyes (OpenCV)"), _("edge-to-edge uniformity"), _("absolute peak 1%"), _("center crop"),
-        value = dt.preferences.read("assisted_culling", "last_sharp_mode", "integer") or 1, 
+        selected = dt.preferences.read("assisted_culling", "last_sharp_mode", "integer") or 1, 
         changed_callback = function(widget)
-            dt.preferences.write("assisted_culling", "last_sharp_mode", "integer", widget.value)
+            dt.preferences.write("assisted_culling", "last_sharp_mode", "integer", widget.selected)
             trigger_custom_override()
         end
     }
@@ -834,9 +834,9 @@ local function install_panel()
         label = _("exposure"),
         tooltip = _("Flags clipped shadows/highlights (yellow label, one star lower). Note: 'subject only' currently behaves like 'whole frame'."),
         _("whole frame"), _("subject only (ignore sky)"), _("strict histogram"), _("ignore exposure"),
-        value = dt.preferences.read("assisted_culling", "last_exp_mode", "integer") or 1, 
+        selected = dt.preferences.read("assisted_culling", "last_exp_mode", "integer") or 1, 
         changed_callback = function(widget)
-            dt.preferences.write("assisted_culling", "last_exp_mode", "integer", widget.value)
+            dt.preferences.write("assisted_culling", "last_exp_mode", "integer", widget.selected)
             trigger_custom_override()
         end
     }
@@ -845,9 +845,9 @@ local function install_panel()
         label = _("keepers"),
         tooltip = _("How many of each burst are kept (the sharpest ones)."),
         _("dynamic (1 to 5)"), _("portrait (1 or 2)"), _("single best only"), _("keep all (focus stack)"),
-        value = dt.preferences.read("assisted_culling", "last_keep_mode", "integer") or 1, 
+        selected = dt.preferences.read("assisted_culling", "last_keep_mode", "integer") or 1, 
         changed_callback = function(widget)
-            dt.preferences.write("assisted_culling", "last_keep_mode", "integer", widget.value)
+            dt.preferences.write("assisted_culling", "last_keep_mode", "integer", widget.selected)
             trigger_custom_override()
         end
     }
@@ -856,9 +856,9 @@ local function install_panel()
         label = _("non-keepers"),
         tooltip = _("What to do with images that are not kept. They always get the red label and the Rejected tag."),
         _("leave alone"), _("reject (-1)"), _("0 stars"), _("1 star"), _("2 stars"), _("3 stars"), _("4 stars"), _("5 stars"),
-        value = dt.preferences.read("assisted_culling", "last_nk_mode", "integer") or 1, 
+        selected = dt.preferences.read("assisted_culling", "last_nk_mode", "integer") or 1, 
         changed_callback = function(widget)
-            dt.preferences.write("assisted_culling", "last_nk_mode", "integer", widget.value)
+            dt.preferences.write("assisted_culling", "last_nk_mode", "integer", widget.selected)
             trigger_custom_override()
         end
     }
@@ -893,12 +893,12 @@ local function install_panel()
         reset_callback = function()
             if is_updating then return end
             is_updating = true
-            genre_combo.value = 1
-            rank_combo.value = 1
-            sharp_combo.value = 1
-            exp_combo.value = 1
-            keep_combo.value = 1
-            non_keeper_combo.value = 1
+            genre_combo.selected = 1
+            rank_combo.selected = 1
+            sharp_combo.selected = 1
+            exp_combo.selected = 1
+            keep_combo.selected = 1
+            non_keeper_combo.selected = 1
             
             dt.preferences.write("assisted_culling", "last_genre", "integer", 1)
             dt.preferences.write("assisted_culling", "last_rank_mode", "integer", 1)
