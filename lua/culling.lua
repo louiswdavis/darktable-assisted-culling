@@ -314,13 +314,14 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode)
     local applied_total = 0
 
     -- =========================================================================
-    -- STAGE 2: Post-processing batch read and application pass
+    -- STAGE 2: Post-processing batched read and application pass
     -- =========================================================================
     if not M.cancel_requested and done_code == 0 then
         dt.print_hinter(_("Assisted Culling: applying ratings to database..."))
         
         local f = io.open(RESULTS_PATH, "r")
         if f then
+            local batch_count = 0
             for line in f:lines() do
                 local parts = M.parse_csv_line(line, 6)
                 if parts then
@@ -331,6 +332,13 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode)
                         img.yellow = (parts[3] ~= "ok")
                         img.red = tonumber(parts[5]) ~= 1
                         applied_total = applied_total + 1
+                        batch_count = batch_count + 1
+                        
+                        -- Yield every 50 updates to keep the UI fully responsive
+                        if batch_count >= 50 then
+                            batch_count = 0
+                            dt.control.sleep(10)
+                        end
                     end
                 end
             end
