@@ -575,8 +575,6 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                 dt.print(string.format(overlap and "Assisted Culling: analysis done, applying the last %d..."
                     or "Assisted Culling: applying ratings to %d...", remaining))
             end
-            
-            -- >>> INSERT STAGE 2 TIMING HERE <<<
             local started = os.time()
             local last_toast_pct = 0
 
@@ -591,11 +589,9 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                 local done = pending_idx - start_idx
                 local pct = done / remaining
                 if culling_job then culling_job.percent = math.min(1.0, (pending_idx - 1) / total_lines) end
-                
                 dt.print_hinter(string.format(
                     "Assisted Culling: applying ratings %d / %d (%d%%)%s", pending_idx - 1, total_lines,
                     math.floor(((pending_idx - 1) / total_lines) * 100), fmt_eta(os.time() - started, done, remaining)))
-                    
                 local milestone = math.floor(((pending_idx - 1) / total_lines) * 4) * 25
                 if milestone > last_toast_pct and milestone < 100 then
                     last_toast_pct = milestone
@@ -828,8 +824,8 @@ local function install_panel()
 
     sharp_combo = dt.new_widget("combobox") {
         label = _("sharpness"),
-        tooltip = _("How sharpness is measured. Note: 'subject tracking' and 'face & eyes' currently use the same edge-to-edge tile scoring."),
-         _("center crop"), _("edge-to-edge uniformity"), _("absolute peak 1%"), _("face & eyes (OpenCV)"), _("subject tracking (AI)"),
+        tooltip = _("How sharpness is measured."),
+        _("center crop"), _("edge-to-edge uniformity"), _("absolute peak 1%"), _("face & eyes (OpenCV)"), _("subject tracking (AI)"),
         selected = dt.preferences.read("assisted_culling", "last_sharp_mode", "integer") or 1, 
         changed_callback = function(widget)
             if is_updating then return end
@@ -840,7 +836,7 @@ local function install_panel()
 
     exp_combo = dt.new_widget("combobox") {
         label = _("exposure"),
-        tooltip = _("Flags clipped shadows/highlights (yellow label, one star lower). Note: 'subject only' currently behaves like 'whole frame'."),
+        tooltip = _("Flags clipped shadows/highlights (yellow label, one star lower)."),
         _("whole frame"), _("subject only (ignore sky)"), _("strict histogram"), _("ignore exposure"),
         selected = dt.preferences.read("assisted_culling", "last_exp_mode", "integer") or 1, 
         changed_callback = function(widget)
@@ -984,4 +980,5 @@ if dt.gui then
     end
 end
 
+M.fmt_eta = fmt_eta
 return M
