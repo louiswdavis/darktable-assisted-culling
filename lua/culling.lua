@@ -300,8 +300,10 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode)
         if file_exists(DONE_PATH) then
             local df_done = io.open(DONE_PATH, "r")
             if df_done then
-                done_code = tonumber((df_done:read("*a") or ""):match("%d+"))
+                local raw_content = df_done:read("*a") or ""
                 df_done:close()
+                done_code = tonumber(raw_content:match("%d+"))
+                dt.print("DEBUG: DONE_PATH content was: [" .. raw_content .. "] parsed as: " .. tostring(done_code))
             end
             break
         end
@@ -320,21 +322,25 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode)
     local applied_total = 0
 
     -- =========================================================================
-    -- STAGE 2: Applying Ratings Job with dedicated progress tracking & yields
+    -- STAGE 2: Applying Ratings Job with diagnostics & forced entry testing
     -- =========================================================================
     local apply_job = nil
-    if not M.cancel_requested and done_code == 0 then
+    if not M.cancel_requested then
+        dt.print(_("Assisted Culling: Entering Stage 2 block..."))
+        
         if dt.gui then
             apply_job = dt.gui.create_job(_("Assisted Culling: Applying Ratings"), true, stop_job)
             apply_job.percent = 0.0
-            dt.control.sleep(50)
+            dt.control.sleep(100)
         end
 
         dt.print_hinter(_("Assisted Culling: applying ratings to database..."))
-        dt.print(_("Assisted Culling: Stage 2 starting..."))
+        dt.print(_("Assisted Culling: Stage 2 job created."))
         
         local f = io.open(RESULTS_PATH, "r")
-        if f then
+        if not f then
+            dt.print_error(_("Assisted Culling Error: Could not open results file at: ") .. RESULTS_PATH)
+        else
             local total_images = #images
             local processed_count = 0
             local batch_count = 0
@@ -360,6 +366,8 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode)
                         if not success then
                             dt.print_error(string.format("Assisted Culling Error setting ID %s: %s", tostring(id), tostring(err)))
                         end
+                    else
+                        dt.print_error(string.format("Assisted Culling Warning: ID %s from CSV not found in img_map", tostring(parts[1])))
                     end
                 end
 
@@ -375,7 +383,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode)
                 end
             end
             f:close()
-            dt.print(string.format("Assisted Culling: Stage 2 complete. Updated %d images.", applied_total))
+            dt.print(string.format("Assisted Culling: Stage 2 complete. Read %d lines, successfully updated %d images.", processed_count, applied_total))
         end
 
         if apply_job then
@@ -389,7 +397,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode)
 
     if M.cancel_requested then
         dt.print(_("Assisted Culling cancelled."))
-    elseif done_code ~= 0 then
+    elseif done_code ~= 0 and done_code ~= nil then
         local tail = read_log_tail()
         if tail ~= "" then
             dt.print_error(_("Assisted Culling failed: ") .. tail)
