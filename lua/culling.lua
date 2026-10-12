@@ -1289,7 +1289,7 @@ function M.clear_marks(images)
         cleared, total, failed > 0 and (", " .. failed .. " couldn't be updated") or ""))
 end
 
-local rank_opts = {"universal", "relative"}
+local rank_opts = {"universal", "binary", "relative"}
 local sharp_opts = {"center", "tiles_uniformity", "peak", "face_detect", "subject_focus", "sam_subject"}
 local exp_opts = {"whole_frame", "subject_only", "strict", "none"}
 local keep_opts = {"single_best", "portrait_mode", "dynamic_burst", "keep_all"}
@@ -1382,9 +1382,9 @@ local function install_panel()
 
     rank_combo = dt.new_widget("combobox") {
         label = _("ranking mode"),
-        tooltip = _("universal: keepers get stars from fixed sharpness tiers.\nrelative: keepers get top stars.\nEither way, the rest follow the non-keepers setting."),
-        _("universal absolute"), _("relative batch percentile"),
-        selected = read_choice("last_rank_mode", preset_configs[1][1], 2),
+        tooltip = _("universal: keepers get stars from fixed sharpness tiers.\nbinary: keepers get top stars; only flags lower them.\nrelative: tiers scale to this selection, so its sharpest frames get 5 stars.\nIn every mode, the rest follow the non-keepers setting."),
+        _("universal absolute"), _("binary (keepers top)"), _("relative to selection"),
+        selected = read_choice("last_rank_mode", preset_configs[1][1], 3),
         changed_callback = function(widget)
             if is_updating then return end
             dt.preferences.write("assisted_culling", "last_rank_mode", "integer", widget.selected)
