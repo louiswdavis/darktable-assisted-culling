@@ -133,7 +133,13 @@ Two safeguards keep deliberate shots from being punished:
 
 ### Re-running and clearing
 
-Re-running is safe: every tag is re-synced to the new result, so a frame that was a keeper last pass and isn't now loses its `Keeper` tag. It does overwrite star ratings, including ones you set by hand.
+Re-running is safe: every tag is re-synced to the new result, so a frame that was a keeper last pass and isn't now loses its `Keeper` tag. It does overwrite star ratings, including ones you set by hand, except on non-keepers when *non-keepers* is *leave alone*.
+
+A few things a re-run doesn't touch:
+
+- **Frames that can't be read** (counted as "unreadable" in the done message) keep whatever an earlier run left on them, tags and stars included.
+- **Frames outside the selection** aren't re-scored. Bursts are grouped from the selected frames only, so re-running on part of a burst can leave a keeper from each run. Select whole bursts, or the whole shoot.
+- **A cancelled run** keeps the changes it already made; the rest keep their old values.
 
 To protect a frame, tag it `Assisted Culling|Locked` yourself (create the tag in the **tagging** module). Runs then leave it out entirely: its stars and tags stay as they are, and it doesn't take a keeper slot in its burst, so another frame from that burst can be kept as well. The done message counts the locked frames it left alone.
 
