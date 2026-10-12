@@ -61,11 +61,13 @@ def run_tests():
 
     # parse_manifest_row -----------------------------------------------------
     check("manifest: 4-column row keeps mask path",
-          S.parse_manifest_row(["1", "/a.jpg", "3", "/m.png"]), ("1", "/a.jpg", "3", "/m.png", ""))
+          S.parse_manifest_row(["1", "/a.jpg", "3", "/m.png"]), ("1", "/a.jpg", "3", "/m.png", "", ""))
     check("manifest: 5-column row keeps shortlist flag",
-          S.parse_manifest_row(["1", "/a.jpg", "3", "", "0"]), ("1", "/a.jpg", "3", "", "0"))
+          S.parse_manifest_row(["1", "/a.jpg", "3", "", "0"]), ("1", "/a.jpg", "3", "", "0", ""))
+    check("manifest: 6-column row keeps edit time",
+          S.parse_manifest_row(["1", "/a.jpg", "3", "", "", "t"]), ("1", "/a.jpg", "3", "", "", "t"))
     check("manifest: 3-column row gets empty mask path",
-          S.parse_manifest_row(["1", "/a.jpg", "3"]), ("1", "/a.jpg", "3", "", ""))
+          S.parse_manifest_row(["1", "/a.jpg", "3"]), ("1", "/a.jpg", "3", "", "", ""))
 
     # mask-aware sharpness ---------------------------------------------------
     tmp = tempfile.mkdtemp()
@@ -196,7 +198,8 @@ def run_tests():
     shortlisted_ids = {r[0] for r in point_rows}
     check("stage A: points only for the shortlist", len(shortlisted_ids), 3)
     check("stage A: point prompts leave the box corner empty", {(len(r), r[3], r[4]) for r in point_rows},
-          {(5, "", "")})
+          {(6, "", "")})
+    check("stage A: no cache means nothing is marked cached", {r[5] for r in point_rows}, {"0"})
     try:
         S.main(Namespace(manifest=man_a, results=points_p, progress="", emit_saliency_points=True,
                          keep_mode="single_best", exp_mode="whole_frame", fast_jpeg=False, prescores="",
@@ -221,6 +224,78 @@ def run_tests():
           ["0", "1", "2", "3", "4"])
     check("stage C: keeper comes from the shortlist",
           [r[0] for r in res_rows if r[4] == "1"][0] in shortlisted_ids, True)
+
+    # score cache: plain modes ------------------------------------------------
+    import sqlite3 as _sq
+
+    cache_p = os.path.join(tmp, "cache", "scores.sqlite")
+    man_p = os.path.join(tmp, "plain.csv")
+    with open(man_p, "w", newline="") as f:
+        _csv.writer(f).writerows([[str(i), p, str(i)] for i, p in enumerate(frames[:2])])
+
+    def plain_run(**kw):
+        opts = dict(manifest=man_p, results=os.path.join(tmp, "plain_res.csv"), progress="",
+                    emit_saliency_points=False, rank_mode="universal", sharp_mode="subject_focus",
+                    exp_mode="whole_frame", keep_mode="single_best", nk_mode="leave", fast_jpeg=False,
+                    prescores="", cache=cache_p)
+        opts.update(kw)
+        S.main(Namespace(**opts))
+        return {r[0]: r[1] for r in _csv.reader(open(opts["results"]))}
+
+    fresh = plain_run()
+    db = _sq.connect(cache_p)
+    check("cache: one entry per frame", db.execute("SELECT COUNT(*) FROM scores").fetchone()[0], 2)
+    db.execute("UPDATE scores SET value = '{\"sharp\": 12345.0, \"flags\": []}'")
+    db.commit()
+    db.close()
+    check("cache: a rerun with other ranking reads the cache instead of decoding",
+          plain_run(rank_mode="relative"), {"0": "12345.0", "1": "12345.0"})
+    check("cache: another sharpness mode misses", plain_run(sharp_mode="tiles_uniformity")["0"] != "12345.0", True)
+    st = os.stat(frames[0])
+    os.utime(frames[0], ns=(st.st_atime_ns, st.st_mtime_ns + 10**9))
+    check("cache: a modified file is re-scored", plain_run(), {"0": fresh["0"], "1": "12345.0"})
+
+    db = _sq.connect(cache_p)
+    db.execute("UPDATE scores SET used = 0")
+    db.commit()
+    db.close()
+    S.ScoreCache(cache_p).close()
+    db = _sq.connect(cache_p)
+    check("cache: entries unused for 90 days are dropped", db.execute("SELECT COUNT(*) FROM scores").fetchone()[0], 0)
+    db.close()
+
+    # score cache: sam_subject masked scores ------------------------------------
+    sam_cache = os.path.join(tmp, "sam.sqlite")
+    mask_p = os.path.join(tmp, "mask.png")
+    cv2.imwrite(mask_p, np.full((120, 120), 255, dtype=np.uint8))
+
+    def sam_stage_a(edited):
+        with open(man_a, "w", newline="") as f:
+            _csv.writer(f).writerows([[str(i), p, "9", "", "", edited] for i, p in enumerate(frames)])
+        S.main(Namespace(manifest=man_a, results=points_p, progress="", emit_saliency_points=True,
+                         keep_mode="single_best", exp_mode="whole_frame", fast_jpeg=False, prescores=pre_p,
+                         cache=sam_cache, sam_model="sam-test"))
+        return {r[0]: r[5] for r in _csv.reader(open(points_p))}
+
+    def sam_stage_b(edited, masked_ids):
+        man_b = os.path.join(tmp, "b.csv")
+        with open(man_b, "w", newline="") as f:
+            _csv.writer(f).writerows([[str(i), p, "9", mask_p if str(i) in masked_ids else "",
+                                       "1" if str(i) in short else "0", edited] for i, p in enumerate(frames)])
+        res_b = os.path.join(tmp, "resb.csv")
+        S.main(Namespace(manifest=man_b, results=res_b, progress="", emit_saliency_points=False,
+                         rank_mode="universal", sharp_mode="sam_subject", exp_mode="whole_frame",
+                         keep_mode="single_best", nk_mode="leave", fast_jpeg=False, prescores=pre_p,
+                         cache=sam_cache, sam_model="sam-test"))
+        return sorted((r[0], r[1], r[4]) for r in _csv.reader(open(res_b)))
+
+    marks = sam_stage_a("t1")
+    short = set(marks)
+    check("sam cache: a first run has no masked scores cached", set(marks.values()), {"0"})
+    first = sam_stage_b("t1", short)
+    check("sam cache: masked scores are cached for the next run", set(sam_stage_a("t1").values()), {"1"})
+    check("sam cache: cached masked scores match the masked run", sam_stage_b("t1", set()), first)
+    check("sam cache: a darktable edit invalidates the masked score", set(sam_stage_a("t2").values()), {"0"})
 
     # edge-to-edge uniformity rewards the weakest areas, ignoring featureless sky --
     # a "landscape": large tonal shapes plus fine texture, like rock or foliage
