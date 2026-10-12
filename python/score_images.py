@@ -207,7 +207,27 @@ def pick_vehicle(boxes: list, w: int, h: int):
             min(max(x1 / w, 0.0), 1.0), min(max(y1 / h, 0.0), 1.0))
 
 
-def vehicle_box(rgb: np.ndarray, model_path: str):
+COCO_NAMES = {0: "person", 1: "bicycle", 2: "car", 3: "motorcycle", 4: "airplane", 5: "bus",
+               6: "train", 7: "truck", 8: "boat"}
+
+
+def strongest_detections(raw: np.ndarray, scale: float, w: int, h: int) -> str:
+    """For the log when no vehicle passes: the strongest detection of any
+    class, and the strongest vehicle one, each with its size in the frame."""
+    _, stride = _yolox_anchors()
+    cls = raw[:, 4:5] * raw[:, 5:]
+
+    def describe(i, c):
+        bw, bh = np.exp(raw[i, 2:4]) * stride[i, 0] / scale
+        return f"{COCO_NAMES.get(c, f'class {c}')} {cls[i, c]:.2f} ({bw / w:.2f}x{bh / h:.2f} of frame)"
+
+    i, c = np.unravel_index(np.argmax(cls), cls.shape)
+    vi, vc = np.unravel_index(np.argmax(cls[:, VEHICLE_CLASSES]), (len(cls), len(VEHICLE_CLASSES)))
+    return f"strongest {describe(i, c)}, strongest vehicle {describe(vi, VEHICLE_CLASSES[vc])}"
+
+
+def vehicle_box(rgb: np.ndarray, model_path: str) -> tuple:
+    """(box as frame fractions or None, log note: "" when a vehicle was found)."""
     h, w = rgb.shape[:2]
     scale = min(DETECTOR_INPUT / h, DETECTOR_INPUT / w)
     canvas = np.full((DETECTOR_INPUT, DETECTOR_INPUT, 3), 114.0, np.float32)
@@ -215,7 +235,8 @@ def vehicle_box(rgb: np.ndarray, model_path: str):
     net = _detector(model_path)
     net.setInput(np.transpose(canvas, (2, 0, 1))[np.newaxis])
     raw = net.forward(net.getUnconnectedOutLayersNames())[0][0]
-    return pick_vehicle(decode_vehicles(raw, scale), w, h)
+    box = pick_vehicle(decode_vehicles(raw, scale), w, h)
+    return box, "" if box else f"no vehicle at {DETECTOR_MIN_SCORE}: {strongest_detections(raw, scale, w, h)}"
 
 
 _CASCADES: dict = {}
@@ -506,7 +527,7 @@ def burst_sharp_mode(sharp_mode: str, exposures, apertures) -> str:
 
 
 # Bump whenever a change to the scoring code changes any number stored in the cache.
-SCORE_CACHE_VERSION = 1
+SCORE_CACHE_VERSION = 2
 SCORE_CACHE_MAX_AGE_DAYS = 90
 SCORE_CACHE_COMMIT_EVERY = 50
 
@@ -615,14 +636,14 @@ def process_single_image(filepath: str, sharp_mode: str, exp_mode: str, cancel_p
 def process_single_saliency(filepath: str, fast_jpeg: bool = False, exp_mode: str = "whole_frame",
                             detector: str = ""):
     """The SAM prompt is a vehicle box (x0, y0, x1, y1) when `detector` finds one,
-    else the saliency point (x, y)."""
+    else the saliency point (x, y). The last field is the detector's log note."""
     try:
         rgb = load_image(filepath, fast_jpeg)
-        prompt = vehicle_box(rgb, detector) if detector else None
+        prompt, note = vehicle_box(rgb, detector) if detector else (None, "")
         return (filepath, prompt or saliency_point(rgb), sharpness_score(rgb, "subject_focus"),
-                exposure_status(rgb, exp_mode), None)
+                exposure_status(rgb, exp_mode), None, note)
     except Exception as e:
-        return filepath, None, None, None, str(e)
+        return filepath, None, None, None, str(e), ""
 
 
 def read_prescores(path: str) -> dict:
@@ -695,6 +716,8 @@ def emit_saliency_points(manifest, args, cache):
     for row in manifest:
         hit = cache.get(*stage_a_key(row[1]))
         if hit:
+            if hit.get("note"):
+                log(f"{row[0]} ({os.path.basename(row[1])}): {hit['note']} (cached)")
             record(row[0], hit["prompt"], hit["heuristic"], hit["exposure"])
         else:
             to_decode.append(row)
@@ -713,13 +736,15 @@ def emit_saliency_points(manifest, args, cache):
                 executor.shutdown(wait=False, cancel_futures=True)
                 sys.exit(130)
             image_id = future_to_id[future]
-            filepath, prompt, heuristic, exposure, err = future.result()
+            filepath, prompt, heuristic, exposure, err, note = future.result()
             if err:
                 log(f"skip saliency {image_id} ({filepath}): {err}")
                 prompt = None
             else:
-                cache.put({"prompt": [float(v) for v in prompt], "heuristic": float(heuristic), "exposure": exposure},
-                          *stage_a_key(filepath))
+                if note:
+                    log(f"{image_id} ({os.path.basename(filepath)}): {note}")
+                cache.put({"prompt": [float(v) for v in prompt], "heuristic": float(heuristic), "exposure": exposure,
+                           "note": note}, *stage_a_key(filepath))
             record(image_id, prompt, heuristic, exposure)
     log("finding subjects: done")
 

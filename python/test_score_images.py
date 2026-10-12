@@ -51,6 +51,14 @@ def run_tests():
           [round(float(v), 1) for v in boxes[0]], [128.0, 48.0, 208.0, 128.0, 0.9])
     check("detector: nothing above threshold → no boxes", S.decode_vehicles(np.zeros((8400, 85), np.float32), 1.0), [])
 
+    weak = np.zeros((8400, 85), np.float32)
+    weak[410, :4] = (0.5, 0.5, np.log(5), np.log(5))  # 40 px box at scale 0.5 → 80 px of a 400 px frame
+    weak[410, 4], weak[410, 5 + 2] = 0.5, 0.4         # a car at 0.20, under the threshold
+    weak[500, 4], weak[500, 5 + 0] = 0.9, 0.5         # a person at 0.45
+    check("detector log: names the strongest detection and the strongest vehicle",
+          S.strongest_detections(weak, 0.5, 400, 400),
+          "strongest person 0.45 (0.04x0.04 of frame), strongest vehicle car 0.20 (0.20x0.20 of frame)")
+
     small_sure = (10, 10, 30, 30, 0.95)
     big_unsure = (100, 50, 300, 250, 0.5)
     check("pick vehicle: prominence beats raw confidence",
