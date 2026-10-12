@@ -85,7 +85,7 @@ local function _(msgid)
     return gettext(msgid)
 end
 
--- Stage 2 pacing. Every darktable property write (rating, colour label, tag
+-- Stage 2 pacing. Every darktable property write (rating, tag
 -- attach/detach) reloads the lighttable collection and/or rewrites the XMP
 -- sidecar, so we count writes and yield to the GUI after a small budget.
 local STAGE2_WRITE_BUDGET = 12   -- writes per slice before yielding
@@ -246,6 +246,9 @@ end
 local TAG_KEEPER = "Assisted Culling|Keeper"
 local TAG_REJECT = "Assisted Culling|Rejected"
 local TAG_CULLED = "Assisted Culling|Culled"
+local TAG_OVEREXPOSED = "Assisted Culling|Overexposed"
+local TAG_UNDEREXPOSED = "Assisted Culling|Underexposed"
+local ALL_TAGS = { TAG_KEEPER, TAG_REJECT, TAG_CULLED, TAG_OVEREXPOSED, TAG_UNDEREXPOSED }
 
 local function fmt_eta(elapsed, done, total)
     if elapsed < 3 or done <= 0 or done >= total then return "" end
@@ -394,41 +397,33 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         local stats = { keepers = 0, others = 0, flagged = 0 }
 
         -- ---- result application (shared by "while scoring" and the final drain) ----
-        local keeper_tag, reject_tag, culled_tag
+        local keeper_tag, reject_tag, culled_tag, over_tag, under_tag
         local function ensure_tags()
             if not keeper_tag then
                 keeper_tag = tags.create(TAG_KEEPER)
                 reject_tag = tags.create(TAG_REJECT)
                 culled_tag = tags.create(TAG_CULLED)
+                over_tag = tags.create(TAG_OVEREXPOSED)
+                under_tag = tags.create(TAG_UNDEREXPOSED)
             end
         end
 
         -- Reads are cheap; writes reload the lighttable collection / rewrite XMP, so skip no-ops.
-        -- Labels already on an image are only cleared if the plugin touched it before
-        -- (it carries our "Culled" tag), so hand-applied labels survive a first run.
-        local function apply_to_image(img, want_rating, is_keeper, want_yellow)
+        -- Every mark is a tag, never a colour label, so a re-run or "clear" can undo exactly
+        -- what earlier passes set without touching labels the user applied by hand.
+        local function apply_to_image(img, want_rating, is_keeper, exposure)
             ensure_tags()
             local writes = 0
             local have = tags_of(img)
-            local touched_before = have[TAG_CULLED]
 
             if want_rating ~= nil and img.rating ~= want_rating then
                 img.rating = want_rating; writes = writes + 1
             end
 
-            local function set_label(name, wanted)
-                local cur = img[name] and true or false
-                if wanted and not cur then
-                    img[name] = true; writes = writes + 1
-                elseif (not wanted) and cur then
-                    img[name] = false; writes = writes + 1
-                end
-            end
-            set_label("yellow", want_yellow)
-            set_label("red", not is_keeper)
-
             writes = writes + sync_tag(img, have, keeper_tag, TAG_KEEPER, is_keeper)
             writes = writes + sync_tag(img, have, reject_tag, TAG_REJECT, not is_keeper)
+            writes = writes + sync_tag(img, have, over_tag, TAG_OVEREXPOSED, exposure == "overexposed")
+            writes = writes + sync_tag(img, have, under_tag, TAG_UNDEREXPOSED, exposure == "underexposed")
             writes = writes + sync_tag(img, have, culled_tag, TAG_CULLED, true)
             return writes
         end
@@ -445,15 +440,15 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             if not group then return 0 end
 
             local is_keeper = (tonumber(parts[5]) == 1)
-            local want_yellow = (parts[3] ~= "ok")
+            local exposure = parts[3]
             if is_keeper then stats.keepers = stats.keepers + 1 else stats.others = stats.others + 1 end
-            if want_yellow then stats.flagged = stats.flagged + 1 end
+            if exposure ~= "ok" then stats.flagged = stats.flagged + 1 end
             local want_rating = nil
             if parts[6] ~= "leave" then want_rating = tonumber(parts[6]) or 0 end
 
             local writes = 0
             for _, img in ipairs(group) do
-                local ok_apply, res = pcall(apply_to_image, img, want_rating, is_keeper, want_yellow)
+                local ok_apply, res = pcall(apply_to_image, img, want_rating, is_keeper, exposure)
                 if ok_apply then
                     applied_total = applied_total + 1
                     writes = writes + res
@@ -663,14 +658,14 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
     end
 end
 
--- Removes the plugin's tags and the red/yellow labels it set. Ratings are NOT reverted.
+-- Removes the plugin's tags. Ratings are NOT reverted.
 function M.clear_marks(images)
     if not images or #images == 0 then
         dt.print(_("Assisted Culling: select some images first"))
         return
     end
     local found = {}
-    for _, name in ipairs({ TAG_KEEPER, TAG_REJECT, TAG_CULLED }) do
+    for _, name in ipairs(ALL_TAGS) do
         local t = tags.find(name)
         if t then table.insert(found, { tag = t, name = name }) end
     end
@@ -690,10 +685,6 @@ function M.clear_marks(images)
                 local ok_one, res = pcall(function()
                     local have = tags_of(img)
                     local writes = 0
-                    if have[TAG_CULLED] then
-                        if img.red then img.red = false; writes = writes + 1 end
-                        if img.yellow then img.yellow = false; writes = writes + 1 end
-                    end
                     for _, ft in ipairs(found) do
                         if have[ft.name] then tags.detach(ft.tag, img); writes = writes + 1 end
                     end
@@ -824,7 +815,7 @@ local function install_panel()
 
     sharp_combo = dt.new_widget("combobox") {
         label = _("sharpness"),
-        tooltip = _("How sharpness is measured."),
+        tooltip = _("How sharpness is measured. Face & eyes falls back to edge-to-edge uniformity when no face is found, so it adds nothing over that mode for bursts with no people in them."),
         _("center crop"), _("edge-to-edge uniformity"), _("absolute peak 1%"), _("face & eyes (OpenCV)"), _("subject bias (center-weighted)"),
         selected = dt.preferences.read("assisted_culling", "last_sharp_mode", "integer") or 1, 
         changed_callback = function(widget)
@@ -836,7 +827,7 @@ local function install_panel()
 
     exp_combo = dt.new_widget("combobox") {
         label = _("exposure"),
-        tooltip = _("Flags clipped shadows/highlights (yellow label, one star lower)."),
+        tooltip = _("Flags clipped shadows/highlights (Overexposed/Underexposed tag, one star lower)."),
         _("whole frame"), _("subject only (ignore sky)"), _("strict histogram"), _("ignore exposure"),
         selected = dt.preferences.read("assisted_culling", "last_exp_mode", "integer") or 1, 
         changed_callback = function(widget)
@@ -860,7 +851,7 @@ local function install_panel()
 
     non_keeper_combo = dt.new_widget("combobox") {
         label = _("non-keepers"),
-        tooltip = _("What to do with images that are not kept. They always get the red label and the Rejected tag."),
+        tooltip = _("What to do with images that are not kept. They always get the Rejected tag."),
         _("leave alone"), _("reject (-1)"), _("0 stars"), _("1 star"), _("2 stars"), _("3 stars"), _("4 stars"), _("5 stars"),
         selected = dt.preferences.read("assisted_culling", "last_nk_mode", "integer") or 1, 
         changed_callback = function(widget)
@@ -881,7 +872,7 @@ local function install_panel()
 
     clear_button = dt.new_widget("button") {
         label = _("Clear culling marks"),
-        tooltip = _("Remove the Assisted Culling tags and red/yellow labels from the selected images. Star ratings are not changed."),
+        tooltip = _("Remove the Assisted Culling tags from the selected images. Star ratings and colour labels are not changed."),
     }
 
     clear_button.clicked_callback = function()
