@@ -1,36 +1,1215 @@
-14:23:22 lua: run started: darktable 5.6.0, 39 images (0 locked left out)
-14:23:22 lua: settings: rank universal, sharpness sam_subject, exposure whole_frame, keepers dynamic_burst, non-keepers leave
-14:23:22 lua: fast JPEG false, apply while scoring false, SAM model mask-object-sam21-small
-14:23:22 lua: Assisted Culling: scoring 39 images in 4 bursts (dynamic burst keepers, universal ranking, 2s burst gap)
-14:23:27 lua: finding subjects: "C:\Users\Louis\Pictures\DarkTable\Settings\Plugins\darktable-assisted-culling\.venv\Scripts\python.exe" -u "C:\Users\Louis\Pictures\DarkTable\Settings\Plugins\darktable-assisted-culling\python\score_images.py" "C:\Users\Louis\AppData\Local\Temp/dt_assisted_culling_manifest.csv" "C:\Users\Louis\AppData\Local\Temp/dt_assisted_culling_points.csv" --emit-saliency-points --detector "C:\Users\Louis\Pictures\DarkTable\Settings\Plugins\darktable-assisted-culling\models\object_detection_yolox_2022nov.onnx" --keep-mode "dynamic_burst" --exp-mode "whole_frame" --prescores "C:\Users\Louis\AppData\Local\Temp/dt_assisted_culling_prescores.csv" --cache "C:\Users\Louis\AppData\Local\darktable/assisted_culling/scores.sqlite" --sam-model "mask-object-sam21-small" --progress "C:\Users\Louis\AppData\Local\Temp/dt_assisted_culling_progress.txt" 2>> "C:\Users\Louis\AppData\Local\darktable/assisted_culling.log"
-14:23:29 py: burst 1: shortlist of 6 frames: 180989 point, 180993 box, 181000 point
-14:23:29 py: burst 2: shortlist of 14 frames: 181041 box, 181045 box, 181049 box, 181053 point
-14:23:29 py: burst 3: shortlist of 8 frames: 181070 point, 181074 box, 181078 box
-14:23:30 py: burst 4: shortlist of 11 frames: 181102 point, 181114 point, 181118 point
-14:23:30 py: finding subjects: 39 frames in 4 bursts, 39 from cache, detector C:\Users\Louis\Pictures\DarkTable\Settings\Plugins\darktable-assisted-culling\models\object_detection_yolox_2022nov.onnx
-14:23:30 py: finding subjects: done
-14:23:30 lua: finding subjects: scorer exit 0
-14:23:30 lua: SAM: 13 shortlisted, 0 already cached, 13 to segment
-14:23:31 lua: SAM 180989 (DSC00174.ARW) point 0.300,0.900: masked
-14:23:33 lua: SAM 180993 (DSC00175.ARW) box 0.210,0.444-0.581,0.573: masked
-14:23:34 lua: SAM 181000 (DSC00177.ARW) point 0.100,0.900: masked
-14:23:35 lua: SAM 181041 (DSC00187.ARW) box 0.301,0.569-0.559,0.685: masked
-14:23:35 lua: SAM 181045 (DSC00188.ARW) box 0.276,0.567-0.569,0.688: masked
-14:23:36 lua: SAM 181049 (DSC00189.ARW) box 0.271,0.562-0.564,0.680: masked
-14:23:37 lua: SAM 181053 (DSC00190.ARW) point 0.900,0.900: masked
-14:23:38 lua: SAM 181070 (DSC00194.ARW) point 0.900,0.100: masked
-14:23:39 lua: SAM 181074 (DSC00195.ARW) box 0.377,0.544-0.710,0.681: masked
-14:23:40 lua: SAM 181078 (DSC00196.ARW) box 0.367,0.552-0.711,0.691: masked
-14:23:41 lua: SAM 181102 (DSC00202.ARW) point 0.300,0.900: masked
-14:23:42 lua: SAM 181114 (DSC00205.ARW) point 0.700,0.900: masked
-14:23:43 lua: SAM 181118 (DSC00206.ARW) point 0.900,0.900: masked
-14:23:44 lua: scoring: "C:\Users\Louis\Pictures\DarkTable\Settings\Plugins\darktable-assisted-culling\.venv\Scripts\python.exe" -u "C:\Users\Louis\Pictures\DarkTable\Settings\Plugins\darktable-assisted-culling\python\score_images.py" "C:\Users\Louis\AppData\Local\Temp/dt_assisted_culling_manifest.csv" "C:\Users\Louis\AppData\Local\Temp/dt_assisted_culling_results.csv" --progress "C:\Users\Louis\AppData\Local\Temp/dt_assisted_culling_progress.txt" --rank-mode "universal" --sharp-mode "sam_subject" --exp-mode "whole_frame" --keep-mode "dynamic_burst" --nk-mode "leave" --tag-only-flags "" --prescores "C:\Users\Louis\AppData\Local\Temp/dt_assisted_culling_prescores.csv" --sam-model "mask-object-sam21-small" --cache "C:\Users\Louis\AppData\Local\darktable/assisted_culling/scores.sqlite" 2>> "C:\Users\Louis\AppData\Local\darktable/assisted_culling.log"
-14:23:46 py: scoring: 39 frames in 4 bursts, 26 from cache or stage A, 13 to decode, sharpness sam_subject
-14:23:47 py: burst 1: 6 of 6 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 180993, 180989
-14:23:47 py: burst 4: 11 of 11 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 181114, 181102, 181118
-14:23:47 py: burst 2: 14 of 14 frames scored, mode sam_subject, masked 4 of 4 shortlisted, keepers 181053, 181045, 181049, 181041
-14:23:47 py: burst 3: 8 of 8 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 181074, 181078
-14:23:47 lua: scoring: scorer exit 0
-14:23:47 lua: Assisted Culling: applying ratings to 39...
-14:23:52 lua: Assisted Culling done: 11 keepers, 28 not kept
-14:23:52 lua: run finished
+14:53:16 lua: run started: darktable 5.6.0, 1589 images (0 locked left out)
+14:53:16 lua: settings: rank universal, sharpness sam_subject, exposure whole_frame, keepers dynamic_burst, non-keepers 0
+14:53:16 lua: fast JPEG false, apply while scoring false, SAM model mask-object-sam21-small
+14:53:16 lua: Assisted Culling: scoring 1589 images in 143 bursts (dynamic burst keepers, universal ranking, 2s burst gap)
+14:53:16 lua: Assisted Culling: large selection, this can take a few minutes. You can cancel any time.
+14:53:22 lua: finding subjects: "C:\Users\Louis\Pictures\DarkTable\Settings\Plugins\darktable-assisted-culling\.venv\Scripts\python.exe" -u "C:\Users\Louis\Pictures\DarkTable\Settings\Plugins\darktable-assisted-culling\python\score_images.py" "C:\Users\Louis\AppData\Local\Temp/dt_assisted_culling_manifest.csv" "C:\Users\Louis\AppData\Local\Temp/dt_assisted_culling_points.csv" --emit-saliency-points --detector "C:\Users\Louis\Pictures\DarkTable\Settings\Plugins\darktable-assisted-culling\models\object_detection_yolox_2022nov.onnx" --keep-mode "dynamic_burst" --exp-mode "whole_frame" --prescores "C:\Users\Louis\AppData\Local\Temp/dt_assisted_culling_prescores.csv" --cache "C:\Users\Louis\AppData\Local\darktable/assisted_culling/scores.sqlite" --sam-model "mask-object-sam21-small" --progress "C:\Users\Louis\AppData\Local\Temp/dt_assisted_culling_progress.txt" 2>> "C:\Users\Louis\AppData\Local\darktable/assisted_culling.log"
+14:53:25 py: finding subjects: 1589 frames in 143 bursts, 0 from cache, detector C:\Users\Louis\Pictures\DarkTable\Settings\Plugins\darktable-assisted-culling\models\object_detection_yolox_2022nov.onnx
+14:53:29 py: 183618 (DSC00790.ARW): no vehicle at 0.35: strongest class 25 0.81 (0.10x0.06 of frame), strongest vehicle truck 0.21 (0.34x0.13 of frame)
+14:53:29 py: 183609 (DSC00788.ARW): no vehicle at 0.35: strongest person 0.81 (0.03x0.12 of frame), strongest vehicle motorcycle 0.08 (0.33x0.14 of frame)
+14:53:29 py: 183606 (DSC00787.ARW): no vehicle at 0.35: strongest person 0.82 (0.02x0.11 of frame), strongest vehicle car 0.12 (0.30x0.14 of frame)
+14:53:29 py: 183613 (DSC00789.ARW): no vehicle at 0.35: strongest class 25 0.82 (0.10x0.06 of frame), strongest vehicle truck 0.22 (0.33x0.14 of frame)
+14:53:29 py: 183630 (DSC00793.ARW): no vehicle at 0.35: strongest person 0.82 (0.02x0.12 of frame), strongest vehicle truck 0.35 (0.37x0.13 of frame)
+14:53:29 py: 183638 (DSC00795.ARW): no vehicle at 0.35: strongest person 0.80 (0.02x0.12 of frame), strongest vehicle truck 0.31 (0.37x0.13 of frame)
+14:53:29 py: burst 1: shortlist of 9 frames: 183609 point, 183613 point, 183618 point
+14:53:29 py: 183654 (DSC00799.ARW): no vehicle at 0.35: strongest class 25 0.61 (0.09x0.05 of frame), strongest vehicle motorcycle 0.17 (0.18x0.13 of frame)
+14:53:30 py: 183658 (DSC00800.ARW): no vehicle at 0.35: strongest class 25 0.76 (0.07x0.06 of frame), strongest vehicle truck 0.21 (0.21x0.13 of frame)
+14:53:30 py: burst 2: shortlist of 5 frames: 183650 box, 183654 point, 183658 point
+14:53:32 py: 183707 (DSC00812.ARW): no vehicle at 0.35: strongest class 25 0.69 (0.10x0.05 of frame), strongest vehicle truck 0.25 (0.27x0.17 of frame)
+14:53:32 py: burst 3: shortlist of 9 frames: 183670 box, 183682 box, 183690 box
+14:53:32 py: 183703 (DSC00811.ARW): no vehicle at 0.35: strongest class 25 0.66 (0.08x0.04 of frame), strongest vehicle truck 0.34 (0.22x0.13 of frame)
+14:53:32 py: burst 4: shortlist of 6 frames: 183699 box, 183703 point, 183715 box
+14:53:34 py: burst 5: shortlist of 15 frames: 183751 box, 183755 box, 183759 box, 183763 box
+14:53:34 py: 183783 (DSC00831.ARW): no vehicle at 0.35: strongest person 0.46 (0.02x0.04 of frame), strongest vehicle truck 0.32 (0.15x0.10 of frame)
+14:53:37 py: burst 6: shortlist of 12 frames: 183788 box, 183792 box, 183796 box
+14:53:38 py: 183876 (DSC00854.ARW): no vehicle at 0.35: strongest class 24 0.58 (0.05x0.06 of frame), strongest vehicle car 0.27 (0.20x0.11 of frame)
+14:53:38 py: burst 7: shortlist of 13 frames: 183864 box, 183868 box, 183872 box, 183876 point
+14:53:39 py: burst 8: shortlist of 6 frames: 183888 box, 183900 box, 183903 box
+14:53:40 py: burst 9: shortlist of 7 frames: 183907 box, 183912 box, 183915 box
+14:53:40 py: 183964 (DSC00876.ARW): no vehicle at 0.35: strongest person 0.81 (0.03x0.11 of frame), strongest vehicle motorcycle 0.02 (0.19x0.11 of frame)
+14:53:40 py: 183960 (DSC00875.ARW): no vehicle at 0.35: strongest person 0.81 (0.03x0.11 of frame), strongest vehicle motorcycle 0.33 (0.31x0.13 of frame)
+14:53:41 py: 183952 (DSC00873.ARW): no vehicle at 0.35: strongest class 25 0.72 (0.10x0.06 of frame), strongest vehicle motorcycle 0.30 (0.26x0.13 of frame)
+14:53:42 py: 183991 (DSC00883.ARW): no vehicle at 0.35: strongest person 0.80 (0.03x0.12 of frame), strongest vehicle truck 0.30 (0.32x0.14 of frame)
+14:53:42 py: 183996 (DSC00884.ARW): no vehicle at 0.35: strongest person 0.83 (0.03x0.12 of frame), strongest vehicle truck 0.18 (0.32x0.14 of frame)
+14:53:42 py: 183968 (DSC00877.ARW): no vehicle at 0.35: strongest person 0.82 (0.03x0.12 of frame), strongest vehicle car 0.01 (0.07x0.10 of frame)
+14:53:42 py: burst 10: shortlist of 9 frames: 183947 box, 183952 point, 183960 point
+14:53:42 py: 184012 (DSC00888.ARW): no vehicle at 0.35: strongest person 0.82 (0.03x0.12 of frame), strongest vehicle car 0.01 (0.07x0.07 of frame)
+14:53:42 py: 184016 (DSC00889.ARW): no vehicle at 0.35: strongest person 0.79 (0.03x0.12 of frame), strongest vehicle car 0.20 (0.28x0.11 of frame)
+14:53:42 py: 184004 (DSC00886.ARW): no vehicle at 0.35: strongest person 0.82 (0.03x0.11 of frame), strongest vehicle truck 0.30 (0.22x0.10 of frame)
+14:53:42 py: 184000 (DSC00885.ARW): no vehicle at 0.35: strongest person 0.84 (0.03x0.12 of frame), strongest vehicle truck 0.22 (0.33x0.13 of frame)
+14:53:43 py: 184008 (DSC00887.ARW): no vehicle at 0.35: strongest person 0.81 (0.03x0.12 of frame), strongest vehicle car 0.00 (0.06x0.04 of frame)
+14:53:44 py: 184060 (DSC00900.ARW): no vehicle at 0.35: strongest person 0.46 (0.02x0.03 of frame), strongest vehicle truck 0.24 (0.26x0.10 of frame)
+14:53:44 py: burst 11: shortlist of 23 frames: 184040 box, 184044 box, 184051 box, 184055 box, 184060 point
+14:53:45 py: burst 12: shortlist of 7 frames: 184064 box, 184084 box, 184087 box
+14:53:46 py: burst 13: shortlist of 12 frames: 184092 box, 184096 box, 184123 box
+14:53:46 py: 184138 (DSC00920.ARW): no vehicle at 0.35: strongest person 0.70 (0.02x0.09 of frame), strongest vehicle motorcycle 0.33 (0.28x0.13 of frame)
+14:53:47 py: burst 14: shortlist of 4 frames: 184138 point, 184143 box, 184150 box
+14:53:48 py: 184168 (DSC00927.ARW): no vehicle at 0.35: strongest person 0.83 (0.03x0.11 of frame), strongest vehicle truck 0.23 (0.30x0.13 of frame)
+14:53:48 py: 184176 (DSC00929.ARW): no vehicle at 0.35: strongest person 0.78 (0.03x0.10 of frame), strongest vehicle car 0.18 (0.34x0.14 of frame)
+14:53:48 py: 184159 (DSC00925.ARW): no vehicle at 0.35: strongest class 25 0.63 (0.10x0.05 of frame), strongest vehicle car 0.26 (0.29x0.15 of frame)
+14:53:48 py: 184172 (DSC00928.ARW): no vehicle at 0.35: strongest person 0.81 (0.03x0.11 of frame), strongest vehicle car 0.28 (0.32x0.14 of frame)
+14:53:48 py: 184163 (DSC00926.ARW): no vehicle at 0.35: strongest person 0.81 (0.03x0.11 of frame), strongest vehicle car 0.29 (0.30x0.14 of frame)
+14:53:48 py: 184192 (DSC00933.ARW): no vehicle at 0.35: strongest person 0.82 (0.03x0.11 of frame), strongest vehicle car 0.16 (0.35x0.12 of frame)
+14:53:48 py: 184195 (DSC00934.ARW): no vehicle at 0.35: strongest person 0.81 (0.03x0.10 of frame), strongest vehicle truck 0.25 (0.22x0.12 of frame)
+14:53:48 py: burst 15: shortlist of 11 frames: 184159 point, 184163 point, 184168 point
+14:53:50 py: 184224 (DSC00941.ARW): no vehicle at 0.35: strongest class 25 0.64 (0.10x0.05 of frame), strongest vehicle truck 0.35 (0.28x0.12 of frame)
+14:53:50 py: 184228 (DSC00942.ARW): no vehicle at 0.35: strongest person 0.79 (0.03x0.10 of frame), strongest vehicle motorcycle 0.24 (0.29x0.13 of frame)
+14:53:50 py: 184216 (DSC00939.ARW): no vehicle at 0.35: strongest person 0.58 (0.02x0.06 of frame), strongest vehicle motorcycle 0.20 (0.15x0.09 of frame)
+14:53:50 py: 184232 (DSC00943.ARW): no vehicle at 0.35: strongest person 0.84 (0.03x0.10 of frame), strongest vehicle motorcycle 0.21 (0.13x0.07 of frame)
+14:53:50 py: burst 16: shortlist of 9 frames: 184200 box, 184204 box, 184216 point
+14:53:50 py: 184256 (DSC00949.ARW): no vehicle at 0.35: strongest class 25 0.76 (0.07x0.04 of frame), strongest vehicle truck 0.32 (0.24x0.10 of frame)
+14:53:50 py: burst 17: shortlist of 6 frames: 184240 box, 184245 box, 184256 point
+14:53:52 py: burst 18: shortlist of 10 frames: 184269 box, 184273 box, 184277 box
+14:53:52 py: 184304 (DSC00961.ARW): no vehicle at 0.35: strongest person 0.73 (0.02x0.10 of frame), strongest vehicle truck 0.20 (0.13x0.12 of frame)
+14:53:52 py: 184300 (DSC00960.ARW): no vehicle at 0.35: strongest person 0.69 (0.02x0.10 of frame), strongest vehicle truck 0.22 (0.10x0.11 of frame)
+14:53:52 py: 184309 (DSC00962.ARW): no vehicle at 0.35: strongest person 0.70 (0.02x0.10 of frame), strongest vehicle truck 0.14 (0.09x0.11 of frame)
+14:53:52 py: 184321 (DSC00965.ARW): no vehicle at 0.35: strongest person 0.71 (0.02x0.06 of frame), strongest vehicle car 0.22 (0.29x0.13 of frame)
+14:53:52 py: 184325 (DSC00966.ARW): no vehicle at 0.35: strongest person 0.57 (0.02x0.06 of frame), strongest vehicle car 0.16 (0.33x0.14 of frame)
+14:53:53 py: 184329 (DSC00967.ARW): no vehicle at 0.35: strongest person 0.65 (0.03x0.11 of frame), strongest vehicle truck 0.25 (0.11x0.09 of frame)
+14:53:53 py: burst 19: shortlist of 10 frames: 184316 box, 184329 point, 184333 box
+14:53:53 py: 184341 (DSC00970.ARW): no vehicle at 0.35: strongest class 25 0.63 (0.05x0.03 of frame), strongest vehicle motorcycle 0.15 (0.13x0.06 of frame)
+14:53:54 py: 184349 (DSC00972.ARW): no vehicle at 0.35: strongest person 0.62 (0.02x0.07 of frame), strongest vehicle motorcycle 0.09 (0.15x0.07 of frame)
+14:53:54 py: 184352 (DSC00973.ARW): no vehicle at 0.35: strongest class 36 0.65 (0.17x0.09 of frame), strongest vehicle car 0.04 (0.03x0.02 of frame)
+14:53:54 py: 184357 (DSC00974.ARW): no vehicle at 0.35: strongest class 25 0.66 (0.05x0.03 of frame), strongest vehicle car 0.06 (0.49x0.27 of frame)
+14:53:54 py: burst 20: shortlist of 5 frames: 184341 point, 184345 box, 184352 point
+14:53:54 py: 184361 (DSC00975.ARW): no vehicle at 0.35: strongest class 25 0.65 (0.15x0.03 of frame), strongest vehicle truck 0.20 (0.30x0.08 of frame)
+14:53:54 py: 184368 (DSC00977.ARW): no vehicle at 0.35: strongest person 0.72 (0.04x0.07 of frame), strongest vehicle car 0.23 (0.38x0.10 of frame)
+14:53:54 py: 184364 (DSC00976.ARW): no vehicle at 0.35: strongest person 0.61 (0.03x0.07 of frame), strongest vehicle motorcycle 0.32 (0.32x0.09 of frame)
+14:53:54 py: burst 21: shortlist of 7 frames: 184376 box, 184380 box, 184384 box
+14:53:56 py: burst 22: shortlist of 11 frames: 184404 box, 184408 box, 184412 box
+14:53:57 py: 184449 (DSC00997.ARW): no vehicle at 0.35: strongest car 0.19 (0.51x0.09 of frame), strongest vehicle car 0.19 (0.51x0.09 of frame)
+14:53:58 py: burst 23: shortlist of 17 frames: 184445 box, 184449 point, 184454 box, 184465 box
+14:53:59 py: burst 24: shortlist of 7 frames: 184501 box, 184508 box, 184524 box
+14:53:59 py: 184532 (DSC01018.ARW): no vehicle at 0.35: strongest person 0.75 (0.04x0.08 of frame), strongest vehicle motorcycle 0.27 (0.23x0.08 of frame)
+14:54:00 py: 184548 (DSC01022.ARW): no vehicle at 0.35: strongest person 0.72 (0.04x0.07 of frame), strongest vehicle motorcycle 0.32 (0.37x0.09 of frame)
+14:54:00 py: 184540 (DSC01020.ARW): no vehicle at 0.35: strongest person 0.72 (0.04x0.07 of frame), strongest vehicle car 0.33 (0.30x0.08 of frame)
+14:54:00 py: 184556 (DSC01024.ARW): no vehicle at 0.35: strongest person 0.71 (0.04x0.07 of frame), strongest vehicle truck 0.29 (0.29x0.08 of frame)
+14:54:00 py: 184565 (DSC01026.ARW): no vehicle at 0.35: strongest person 0.68 (0.04x0.07 of frame), strongest vehicle motorcycle 0.15 (0.44x0.10 of frame)
+14:54:01 py: 184577 (DSC01029.ARW): no vehicle at 0.35: strongest motorcycle 0.21 (0.42x0.09 of frame), strongest vehicle motorcycle 0.21 (0.42x0.09 of frame)
+14:54:01 py: 184586 (DSC01031.ARW): no vehicle at 0.35: strongest person 0.79 (0.04x0.07 of frame), strongest vehicle motorcycle 0.25 (0.45x0.09 of frame)
+14:54:01 py: 184590 (DSC01032.ARW): no vehicle at 0.35: strongest person 0.79 (0.04x0.08 of frame), strongest vehicle truck 0.22 (0.47x0.09 of frame)
+14:54:02 py: 184610 (DSC01037.ARW): no vehicle at 0.35: strongest person 0.80 (0.04x0.08 of frame), strongest vehicle motorcycle 0.19 (0.55x0.08 of frame)
+14:54:02 py: 184618 (DSC01039.ARW): no vehicle at 0.35: strongest person 0.55 (0.03x0.03 of frame), strongest vehicle truck 0.31 (0.55x0.08 of frame)
+14:54:02 py: 184614 (DSC01038.ARW): no vehicle at 0.35: strongest class 25 0.44 (0.09x0.02 of frame), strongest vehicle car 0.27 (0.56x0.08 of frame)
+14:54:02 py: 184622 (DSC01040.ARW): no vehicle at 0.35: strongest airplane 0.52 (0.60x0.08 of frame), strongest vehicle truck 0.06 (0.55x0.09 of frame)
+14:54:02 py: 184626 (DSC01041.ARW): no vehicle at 0.35: strongest airplane 0.31 (0.54x0.08 of frame), strongest vehicle truck 0.21 (0.54x0.08 of frame)
+14:54:02 py: burst 25: shortlist of 25 frames: 184544 box, 184582 box, 184586 point, 184594 box, 184597 box
+14:54:03 py: 184654 (DSC01048.ARW): no vehicle at 0.35: strongest person 0.62 (0.04x0.07 of frame), strongest vehicle truck 0.13 (0.43x0.09 of frame)
+14:54:03 py: 184650 (DSC01047.ARW): no vehicle at 0.35: strongest motorcycle 0.25 (0.38x0.09 of frame), strongest vehicle motorcycle 0.25 (0.38x0.09 of frame)
+14:54:04 py: 184658 (DSC01049.ARW): no vehicle at 0.35: strongest car 0.27 (0.06x0.07 of frame), strongest vehicle car 0.27 (0.06x0.07 of frame)
+14:54:04 py: 184662 (DSC01050.ARW): no vehicle at 0.35: strongest class 25 0.41 (0.06x0.04 of frame), strongest vehicle motorcycle 0.33 (0.45x0.09 of frame)
+14:54:04 py: 184666 (DSC01051.ARW): no vehicle at 0.35: strongest person 0.66 (0.03x0.06 of frame), strongest vehicle motorcycle 0.21 (0.48x0.10 of frame)
+14:54:04 py: 184670 (DSC01052.ARW): no vehicle at 0.35: strongest person 0.79 (0.04x0.07 of frame), strongest vehicle motorcycle 0.33 (0.49x0.10 of frame)
+14:54:04 py: 184674 (DSC01053.ARW): no vehicle at 0.35: strongest person 0.78 (0.04x0.07 of frame), strongest vehicle truck 0.29 (0.52x0.09 of frame)
+14:54:04 py: 184686 (DSC01056.ARW): no vehicle at 0.35: strongest person 0.77 (0.04x0.07 of frame), strongest vehicle truck 0.18 (0.55x0.09 of frame)
+14:54:04 py: burst 26: shortlist of 15 frames: 184630 box, 184634 box, 184637 box, 184641 box
+14:54:05 py: 184710 (DSC01062.ARW): no vehicle at 0.35: strongest person 0.63 (0.03x0.07 of frame), strongest vehicle truck 0.20 (0.47x0.10 of frame)
+14:54:06 py: 184714 (DSC01063.ARW): no vehicle at 0.35: strongest truck 0.22 (0.56x0.11 of frame), strongest vehicle truck 0.22 (0.56x0.11 of frame)
+14:54:06 py: burst 27: shortlist of 10 frames: 184710 point, 184714 point, 184718 box
+14:54:06 py: 184733 (DSC01068.ARW): no vehicle at 0.35: strongest class 25 0.68 (0.08x0.04 of frame), strongest vehicle motorcycle 0.20 (0.27x0.15 of frame)
+14:54:07 py: burst 28: shortlist of 9 frames: 184745 box, 184749 box, 184752 box
+14:54:07 py: 184764 (DSC01076.ARW): no vehicle at 0.35: strongest person 0.69 (0.06x0.08 of frame), strongest vehicle car 0.27 (0.11x0.05 of frame)
+14:54:07 py: 184769 (DSC01077.ARW): no vehicle at 0.35: strongest person 0.64 (0.06x0.08 of frame), strongest vehicle car 0.08 (0.09x0.05 of frame)
+14:54:07 py: 184777 (DSC01079.ARW): no vehicle at 0.35: strongest person 0.29 (0.06x0.07 of frame), strongest vehicle car 0.03 (0.31x0.12 of frame)
+14:54:08 py: 184773 (DSC01078.ARW): no vehicle at 0.35: strongest person 0.58 (0.06x0.08 of frame), strongest vehicle car 0.09 (0.44x0.23 of frame)
+14:54:08 py: 184780 (DSC01080.ARW): no vehicle at 0.35: strongest person 0.24 (0.44x0.21 of frame), strongest vehicle car 0.02 (0.06x0.05 of frame)
+14:54:08 py: 184784 (DSC01081.ARW): no vehicle at 0.35: strongest person 0.33 (0.12x0.15 of frame), strongest vehicle car 0.03 (0.07x0.05 of frame)
+14:54:08 py: 184788 (DSC01082.ARW): no vehicle at 0.35: strongest person 0.44 (0.12x0.16 of frame), strongest vehicle car 0.05 (0.45x0.23 of frame)
+14:54:08 py: burst 29: shortlist of 7 frames: 184764 point, 184784 point, 184788 point
+14:54:08 py: 184792 (DSC01083.ARW): no vehicle at 0.35: strongest person 0.54 (0.05x0.13 of frame), strongest vehicle car 0.02 (0.16x0.06 of frame)
+14:54:08 py: 184796 (DSC01084.ARW): no vehicle at 0.35: strongest person 0.57 (0.05x0.13 of frame), strongest vehicle car 0.05 (0.05x0.04 of frame)
+14:54:08 py: 184800 (DSC01085.ARW): no vehicle at 0.35: strongest person 0.57 (0.05x0.13 of frame), strongest vehicle car 0.17 (0.07x0.04 of frame)
+14:54:08 py: 184804 (DSC01086.ARW): no vehicle at 0.35: strongest person 0.61 (0.06x0.14 of frame), strongest vehicle car 0.22 (0.06x0.04 of frame)
+14:54:09 py: 184811 (DSC01088.ARW): no vehicle at 0.35: strongest person 0.38 (0.05x0.13 of frame), strongest vehicle car 0.34 (0.07x0.04 of frame)
+14:54:09 py: 184819 (DSC01090.ARW): no vehicle at 0.35: strongest person 0.39 (0.02x0.04 of frame), strongest vehicle car 0.04 (0.03x0.03 of frame)
+14:54:09 py: 184815 (DSC01089.ARW): no vehicle at 0.35: strongest person 0.38 (0.02x0.04 of frame), strongest vehicle car 0.07 (0.02x0.03 of frame)
+14:54:09 py: 184824 (DSC01091.ARW): no vehicle at 0.35: strongest person 0.47 (0.02x0.04 of frame), strongest vehicle car 0.02 (0.24x0.07 of frame)
+14:54:09 py: burst 30: shortlist of 9 frames: 184796 point, 184800 point, 184804 point
+14:54:10 py: 184835 (DSC01094.ARW): no vehicle at 0.35: strongest person 0.47 (0.06x0.15 of frame), strongest vehicle car 0.06 (0.08x0.05 of frame)
+14:54:10 py: 184839 (DSC01095.ARW): no vehicle at 0.35: strongest person 0.41 (0.06x0.16 of frame), strongest vehicle car 0.11 (0.15x0.05 of frame)
+14:54:10 py: 184848 (DSC01097.ARW): no vehicle at 0.35: strongest person 0.52 (0.06x0.17 of frame), strongest vehicle truck 0.06 (0.34x0.79 of frame)
+14:54:10 py: 184852 (DSC01098.ARW): no vehicle at 0.35: strongest person 0.52 (0.06x0.16 of frame), strongest vehicle car 0.12 (0.20x0.11 of frame)
+14:54:10 py: burst 31: shortlist of 7 frames: 184828 box, 184831 box, 184835 point
+14:54:10 py: 184855 (DSC01099.ARW): no vehicle at 0.35: strongest person 0.36 (0.02x0.05 of frame), strongest vehicle car 0.02 (0.07x0.05 of frame)
+14:54:10 py: 184860 (DSC01100.ARW): no vehicle at 0.35: strongest person 0.41 (0.01x0.04 of frame), strongest vehicle motorcycle 0.07 (0.09x0.05 of frame)
+14:54:10 py: 184865 (DSC01101.ARW): no vehicle at 0.35: strongest person 0.36 (0.01x0.05 of frame), strongest vehicle motorcycle 0.09 (0.08x0.05 of frame)
+14:54:11 py: 184869 (DSC01102.ARW): no vehicle at 0.35: strongest person 0.37 (0.01x0.05 of frame), strongest vehicle truck 0.02 (0.35x0.77 of frame)
+14:54:11 py: 184872 (DSC01103.ARW): no vehicle at 0.35: strongest person 0.48 (0.01x0.05 of frame), strongest vehicle truck 0.04 (0.34x0.76 of frame)
+14:54:11 py: 184876 (DSC01104.ARW): no vehicle at 0.35: strongest person 0.50 (0.02x0.05 of frame), strongest vehicle truck 0.07 (0.34x0.76 of frame)
+14:54:11 py: 184881 (DSC01105.ARW): no vehicle at 0.35: strongest person 0.60 (0.02x0.05 of frame), strongest vehicle truck 0.02 (0.35x0.78 of frame)
+14:54:11 py: 184884 (DSC01106.ARW): no vehicle at 0.35: strongest person 0.56 (0.02x0.05 of frame), strongest vehicle truck 0.03 (0.35x0.78 of frame)
+14:54:11 py: burst 32: shortlist of 8 frames: 184855 point, 184860 point, 184881 point
+14:54:11 py: 184889 (DSC01107.ARW): no vehicle at 0.35: strongest bicycle 0.30 (0.05x0.06 of frame), strongest vehicle truck 0.13 (0.03x0.04 of frame)
+14:54:11 py: 184893 (DSC01108.ARW): no vehicle at 0.35: strongest bicycle 0.26 (0.05x0.08 of frame), strongest vehicle car 0.23 (0.02x0.02 of frame)
+14:54:12 py: 184897 (DSC01109.ARW): no vehicle at 0.35: strongest bicycle 0.55 (0.05x0.07 of frame), strongest vehicle truck 0.24 (0.03x0.05 of frame)
+14:54:12 py: 184904 (DSC01111.ARW): no vehicle at 0.35: strongest car 0.29 (0.03x0.02 of frame), strongest vehicle car 0.29 (0.03x0.02 of frame)
+14:54:12 py: 184916 (DSC01114.ARW): no vehicle at 0.35: strongest bicycle 0.40 (0.05x0.07 of frame), strongest vehicle car 0.26 (0.06x0.04 of frame)
+14:54:12 py: 184909 (DSC01112.ARW): no vehicle at 0.35: strongest bicycle 0.40 (0.05x0.07 of frame), strongest vehicle car 0.29 (0.04x0.03 of frame)
+14:54:12 py: 184924 (DSC01116.ARW): no vehicle at 0.35: strongest bicycle 0.40 (0.05x0.06 of frame), strongest vehicle car 0.25 (0.04x0.03 of frame)
+14:54:13 py: 184928 (DSC01117.ARW): no vehicle at 0.35: strongest bicycle 0.31 (0.04x0.06 of frame), strongest vehicle car 0.15 (0.03x0.03 of frame)
+14:54:13 py: 184932 (DSC01118.ARW): no vehicle at 0.35: strongest bicycle 0.33 (0.05x0.07 of frame), strongest vehicle car 0.19 (0.02x0.02 of frame)
+14:54:13 py: 184936 (DSC01119.ARW): no vehicle at 0.35: strongest bicycle 0.39 (0.05x0.06 of frame), strongest vehicle car 0.18 (0.02x0.02 of frame)
+14:54:13 py: 184941 (DSC01120.ARW): no vehicle at 0.35: strongest bicycle 0.34 (0.05x0.06 of frame), strongest vehicle car 0.16 (0.03x0.05 of frame)
+14:54:13 py: 184944 (DSC01121.ARW): no vehicle at 0.35: strongest bicycle 0.43 (0.05x0.06 of frame), strongest vehicle car 0.13 (0.03x0.05 of frame)
+14:54:13 py: 184953 (DSC01123.ARW): no vehicle at 0.35: strongest bicycle 0.40 (0.05x0.07 of frame), strongest vehicle car 0.17 (0.03x0.04 of frame)
+14:54:13 py: 184949 (DSC01122.ARW): no vehicle at 0.35: strongest bicycle 0.38 (0.05x0.06 of frame), strongest vehicle car 0.13 (0.02x0.03 of frame)
+14:54:13 py: 184957 (DSC01124.ARW): no vehicle at 0.35: strongest bicycle 0.44 (0.05x0.07 of frame), strongest vehicle car 0.15 (0.03x0.04 of frame)
+14:54:13 py: 184962 (DSC01125.ARW): no vehicle at 0.35: strongest person 0.42 (0.20x0.43 of frame), strongest vehicle car 0.10 (0.03x0.05 of frame)
+14:54:14 py: 184966 (DSC01126.ARW): no vehicle at 0.35: strongest bicycle 0.31 (0.05x0.07 of frame), strongest vehicle car 0.16 (0.03x0.05 of frame)
+14:54:14 py: burst 33: shortlist of 20 frames: 184932 point, 184936 point, 184944 point, 184957 point, 184966 point
+14:54:14 py: 184970 (DSC01127.ARW): no vehicle at 0.35: strongest train 0.32 (0.97x0.27 of frame), strongest vehicle car 0.08 (0.10x0.04 of frame)
+14:54:14 py: 184974 (DSC01128.ARW): no vehicle at 0.35: strongest train 0.37 (0.98x0.25 of frame), strongest vehicle car 0.05 (0.08x0.04 of frame)
+14:54:14 py: 184982 (DSC01130.ARW): no vehicle at 0.35: strongest train 0.32 (0.94x0.23 of frame), strongest vehicle car 0.06 (0.10x0.03 of frame)
+14:54:14 py: 184978 (DSC01129.ARW): no vehicle at 0.35: strongest train 0.37 (0.94x0.22 of frame), strongest vehicle car 0.03 (0.03x0.02 of frame)
+14:54:14 py: 184986 (DSC01131.ARW): no vehicle at 0.35: strongest train 0.25 (0.98x0.25 of frame), strongest vehicle car 0.02 (0.08x0.04 of frame)
+14:54:14 py: 184989 (DSC01132.ARW): no vehicle at 0.35: strongest class 25 0.17 (0.32x0.08 of frame), strongest vehicle truck 0.08 (0.15x0.15 of frame)
+14:54:15 py: 184994 (DSC01133.ARW): no vehicle at 0.35: strongest train 0.27 (0.93x0.24 of frame), strongest vehicle car 0.03 (0.03x0.03 of frame)
+14:54:15 py: 184998 (DSC01134.ARW): no vehicle at 0.35: strongest class 25 0.36 (0.08x0.03 of frame), strongest vehicle truck 0.02 (0.15x0.10 of frame)
+14:54:15 py: 185002 (DSC01135.ARW): no vehicle at 0.35: strongest class 25 0.62 (0.10x0.11 of frame), strongest vehicle car 0.00 (0.03x0.03 of frame)
+14:54:15 py: 185006 (DSC01136.ARW): no vehicle at 0.35: strongest class 25 0.63 (0.10x0.09 of frame), strongest vehicle car 0.02 (0.04x0.02 of frame)
+14:54:15 py: 185010 (DSC01137.ARW): no vehicle at 0.35: strongest class 25 0.55 (0.11x0.10 of frame), strongest vehicle car 0.01 (0.06x0.03 of frame)
+14:54:15 py: 185014 (DSC01138.ARW): no vehicle at 0.35: strongest class 25 0.48 (0.11x0.11 of frame), strongest vehicle car 0.01 (0.10x0.03 of frame)
+14:54:15 py: 185022 (DSC01140.ARW): no vehicle at 0.35: strongest class 25 0.36 (0.08x0.03 of frame), strongest vehicle car 0.03 (0.03x0.02 of frame)
+14:54:15 py: 185018 (DSC01139.ARW): no vehicle at 0.35: strongest class 25 0.36 (0.08x0.03 of frame), strongest vehicle car 0.02 (0.03x0.02 of frame)
+14:54:16 py: 185026 (DSC01141.ARW): no vehicle at 0.35: strongest class 25 0.45 (0.08x0.03 of frame), strongest vehicle car 0.04 (0.03x0.02 of frame)
+14:54:16 py: 185031 (DSC01142.ARW): no vehicle at 0.35: strongest class 25 0.39 (0.08x0.03 of frame), strongest vehicle car 0.05 (0.04x0.02 of frame)
+14:54:16 py: burst 34: shortlist of 16 frames: 185006 point, 185022 point, 185026 point, 185031 point
+14:54:17 py: 185055 (DSC01148.ARW): no vehicle at 0.35: strongest person 0.80 (0.03x0.10 of frame), strongest vehicle truck 0.30 (0.31x0.13 of frame)
+14:54:17 py: 185067 (DSC01151.ARW): no vehicle at 0.35: strongest person 0.82 (0.03x0.10 of frame), strongest vehicle car 0.02 (0.07x0.03 of frame)
+14:54:17 py: 185070 (DSC01152.ARW): no vehicle at 0.35: strongest person 0.80 (0.03x0.10 of frame), strongest vehicle car 0.08 (0.07x0.04 of frame)
+14:54:18 py: burst 36: shortlist of 2 frames: 185094 box, 185099 box
+14:54:18 py: 185107 (DSC01161.ARW): no vehicle at 0.35: strongest person 0.39 (0.02x0.07 of frame), strongest vehicle car 0.10 (0.03x0.04 of frame)
+14:54:18 py: 185103 (DSC01160.ARW): no vehicle at 0.35: strongest bicycle 0.28 (0.03x0.06 of frame), strongest vehicle car 0.15 (0.02x0.03 of frame)
+14:54:18 py: burst 35: shortlist of 15 frames: 185034 box, 185039 box, 185043 box, 185046 box
+14:54:18 py: 185111 (DSC01162.ARW): no vehicle at 0.35: strongest person 0.40 (0.03x0.06 of frame), strongest vehicle car 0.16 (0.02x0.03 of frame)
+14:54:19 py: 185118 (DSC01164.ARW): no vehicle at 0.35: strongest person 0.32 (0.03x0.06 of frame), strongest vehicle car 0.09 (0.03x0.03 of frame)
+14:54:19 py: 185114 (DSC01163.ARW): no vehicle at 0.35: strongest person 0.31 (0.03x0.06 of frame), strongest vehicle car 0.12 (0.02x0.03 of frame)
+14:54:19 py: 185122 (DSC01165.ARW): no vehicle at 0.35: strongest person 0.45 (0.02x0.07 of frame), strongest vehicle car 0.09 (0.02x0.02 of frame)
+14:54:19 py: 185127 (DSC01166.ARW): no vehicle at 0.35: strongest bicycle 0.21 (0.05x0.06 of frame), strongest vehicle car 0.08 (0.03x0.03 of frame)
+14:54:19 py: 185131 (DSC01167.ARW): no vehicle at 0.35: strongest person 0.36 (0.02x0.07 of frame), strongest vehicle car 0.14 (0.03x0.03 of frame)
+14:54:19 py: 185135 (DSC01168.ARW): no vehicle at 0.35: strongest bicycle 0.28 (0.03x0.07 of frame), strongest vehicle car 0.18 (0.03x0.03 of frame)
+14:54:19 py: burst 37: shortlist of 9 frames: 185103 point, 185114 point, 185118 point
+14:54:19 py: 185143 (DSC01170.ARW): no vehicle at 0.35: strongest class 25 0.69 (0.08x0.04 of frame), strongest vehicle car 0.22 (0.24x0.13 of frame)
+14:54:19 py: 185147 (DSC01171.ARW): no vehicle at 0.35: strongest person 0.62 (0.03x0.11 of frame), strongest vehicle motorcycle 0.17 (0.26x0.14 of frame)
+14:54:20 py: 185151 (DSC01172.ARW): no vehicle at 0.35: strongest class 25 0.76 (0.06x0.06 of frame), strongest vehicle motorcycle 0.33 (0.28x0.14 of frame)
+14:54:20 py: 185163 (DSC01175.ARW): no vehicle at 0.35: strongest person 0.78 (0.03x0.11 of frame), strongest vehicle truck 0.25 (0.32x0.14 of frame)
+14:54:20 py: 185158 (DSC01174.ARW): no vehicle at 0.35: strongest person 0.79 (0.02x0.10 of frame), strongest vehicle motorcycle 0.27 (0.31x0.14 of frame)
+14:54:20 py: burst 38: shortlist of 7 frames: 185139 box, 185143 point, 185163 point
+14:54:20 py: 185171 (DSC01177.ARW): no vehicle at 0.35: strongest person 0.81 (0.02x0.11 of frame), strongest vehicle truck 0.30 (0.24x0.12 of frame)
+14:54:21 py: burst 39: shortlist of 6 frames: 185178 box, 185182 box, 185187 box
+14:54:21 py: 185198 (DSC01184.ARW): no vehicle at 0.35: strongest person 0.51 (0.04x0.07 of frame), strongest vehicle motorcycle 0.29 (0.23x0.08 of frame)
+14:54:21 py: 185194 (DSC01183.ARW): no vehicle at 0.35: strongest class 25 0.51 (0.14x0.04 of frame), strongest vehicle truck 0.04 (0.22x0.08 of frame)
+14:54:22 py: 185218 (DSC01189.ARW): no vehicle at 0.35: strongest car 0.34 (0.38x0.09 of frame), strongest vehicle car 0.34 (0.38x0.09 of frame)
+14:54:25 py: burst 40: shortlist of 26 frames: 185190 box, 185194 point, 185222 box, 185226 box, 185286 box
+14:54:25 py: 185298 (DSC01209.ARW): no vehicle at 0.35: strongest class 25 0.64 (0.08x0.04 of frame), strongest vehicle motorcycle 0.24 (0.15x0.11 of frame)
+14:54:27 py: 185346 (DSC01221.ARW): no vehicle at 0.35: strongest person 0.82 (0.03x0.09 of frame), strongest vehicle motorcycle 0.28 (0.32x0.13 of frame)
+14:54:27 py: burst 41: shortlist of 14 frames: 185298 point, 185302 box, 185333 box, 185337 box
+14:54:28 py: 185383 (DSC01230.ARW): no vehicle at 0.35: strongest person 0.83 (0.03x0.12 of frame), strongest vehicle truck 0.09 (0.30x0.13 of frame)
+14:54:28 py: 185374 (DSC01228.ARW): no vehicle at 0.35: strongest person 0.75 (0.03x0.08 of frame), strongest vehicle motorcycle 0.18 (0.30x0.14 of frame)
+14:54:28 py: 185387 (DSC01231.ARW): no vehicle at 0.35: strongest person 0.84 (0.03x0.11 of frame), strongest vehicle car 0.31 (0.15x0.11 of frame)
+14:54:29 py: 185390 (DSC01232.ARW): no vehicle at 0.35: strongest person 0.82 (0.03x0.11 of frame), strongest vehicle truck 0.01 (0.29x0.14 of frame)
+14:54:29 py: burst 42: shortlist of 11 frames: 185370 box, 185374 point, 185378 box
+14:54:30 py: burst 43: shortlist of 10 frames: 185394 box, 185398 box, 185423 box
+14:54:31 py: 185459 (DSC01249.ARW): no vehicle at 0.35: strongest class 25 0.79 (0.10x0.06 of frame), strongest vehicle motorcycle 0.19 (0.12x0.08 of frame)
+14:54:31 py: burst 44: shortlist of 7 frames: 185438 box, 185447 box, 185451 box
+14:54:32 py: burst 45: shortlist of 4 frames: 185463 box, 185467 box, 185471 box
+14:54:33 py: burst 46: shortlist of 6 frames: 185487 box, 185490 box, 185494 box
+14:54:33 py: 185502 (DSC01260.ARW): no vehicle at 0.35: strongest airplane 0.53 (0.36x0.13 of frame), strongest vehicle truck 0.27 (0.36x0.13 of frame)
+14:54:34 py: burst 47: shortlist of 10 frames: 185526 box, 185535 box, 185539 box
+14:54:34 py: 185542 (DSC01270.ARW): no vehicle at 0.35: strongest class 25 0.68 (0.08x0.04 of frame), strongest vehicle truck 0.35 (0.11x0.11 of frame)
+14:54:34 py: 185550 (DSC01272.ARW): no vehicle at 0.35: strongest class 25 0.63 (0.07x0.04 of frame), strongest vehicle truck 0.30 (0.11x0.09 of frame)
+14:54:35 py: 185559 (DSC01274.ARW): no vehicle at 0.35: strongest class 25 0.60 (0.09x0.04 of frame), strongest vehicle truck 0.31 (0.12x0.12 of frame)
+14:54:35 py: burst 48: shortlist of 8 frames: 185542 point, 185566 box, 185570 box
+14:54:37 py: burst 49: shortlist of 12 frames: 185574 box, 185579 box, 185599 box
+14:54:37 py: 185635 (DSC01293.ARW): no vehicle at 0.35: strongest class 25 0.59 (0.10x0.05 of frame), strongest vehicle car 0.23 (0.29x0.14 of frame)
+14:54:37 py: 185639 (DSC01294.ARW): no vehicle at 0.35: strongest class 25 0.78 (0.10x0.06 of frame), strongest vehicle motorcycle 0.10 (0.33x0.15 of frame)
+14:54:37 py: 185643 (DSC01295.ARW): no vehicle at 0.35: strongest person 0.78 (0.02x0.10 of frame), strongest vehicle motorcycle 0.25 (0.30x0.14 of frame)
+14:54:37 py: 185648 (DSC01296.ARW): no vehicle at 0.35: strongest person 0.82 (0.02x0.10 of frame), strongest vehicle motorcycle 0.05 (0.31x0.15 of frame)
+14:54:38 py: 185652 (DSC01297.ARW): no vehicle at 0.35: strongest class 25 0.80 (0.10x0.06 of frame), strongest vehicle motorcycle 0.34 (0.31x0.14 of frame)
+14:54:38 py: burst 50: shortlist of 10 frames: 185643 point, 185648 point, 185652 point
+14:54:39 py: burst 51: shortlist of 7 frames: 185664 box, 185668 box, 185672 box
+14:54:39 py: 185709 (DSC01311.ARW): no vehicle at 0.35: strongest class 25 0.55 (0.09x0.04 of frame), strongest vehicle car 0.25 (0.26x0.14 of frame)
+14:54:39 py: 185712 (DSC01312.ARW): no vehicle at 0.35: strongest class 25 0.73 (0.10x0.06 of frame), strongest vehicle car 0.09 (0.29x0.16 of frame)
+14:54:40 py: 185717 (DSC01313.ARW): no vehicle at 0.35: strongest person 0.81 (0.03x0.10 of frame), strongest vehicle car 0.18 (0.31x0.17 of frame)
+14:54:40 py: 185721 (DSC01314.ARW): no vehicle at 0.35: strongest person 0.81 (0.03x0.10 of frame), strongest vehicle motorcycle 0.15 (0.34x0.15 of frame)
+14:54:40 py: burst 52: shortlist of 8 frames: 185709 point, 185712 point, 185721 point
+14:54:40 py: 185729 (DSC01316.ARW): no vehicle at 0.35: strongest class 25 0.56 (0.10x0.05 of frame), strongest vehicle motorcycle 0.31 (0.26x0.15 of frame)
+14:54:41 py: 185749 (DSC01321.ARW): no vehicle at 0.35: strongest person 0.80 (0.03x0.10 of frame), strongest vehicle truck 0.24 (0.35x0.14 of frame)
+14:54:41 py: 185742 (DSC01319.ARW): no vehicle at 0.35: strongest person 0.82 (0.03x0.10 of frame), strongest vehicle truck 0.25 (0.32x0.15 of frame)
+14:54:41 py: burst 53: shortlist of 9 frames: 185729 point, 185733 box, 185737 box
+14:54:41 py: 185769 (DSC01326.ARW): no vehicle at 0.35: strongest person 0.72 (0.02x0.10 of frame), strongest vehicle car 0.17 (0.31x0.14 of frame)
+14:54:42 py: burst 54: shortlist of 6 frames: 185761 box, 185765 box, 185769 point
+14:54:42 py: 185785 (DSC01330.ARW): no vehicle at 0.35: strongest class 25 0.66 (0.10x0.05 of frame), strongest vehicle truck 0.26 (0.23x0.14 of frame)
+14:54:42 py: 185793 (DSC01332.ARW): no vehicle at 0.35: strongest class 25 0.67 (0.08x0.06 of frame), strongest vehicle car 0.35 (0.28x0.13 of frame)
+14:54:42 py: 185789 (DSC01331.ARW): no vehicle at 0.35: strongest class 36 0.83 (0.26x0.14 of frame), strongest vehicle motorcycle 0.33 (0.26x0.15 of frame)
+14:54:43 py: 185801 (DSC01334.ARW): no vehicle at 0.35: strongest person 0.77 (0.02x0.10 of frame), strongest vehicle car 0.09 (0.31x0.13 of frame)
+14:54:43 py: burst 55: shortlist of 5 frames: 185789 point, 185793 point, 185801 point
+14:54:43 py: burst 56: shortlist of 6 frames: 185813 box, 185817 box, 185821 box
+14:54:44 py: burst 57: shortlist of 5 frames: 185833 box, 185837 box, 185841 box
+14:54:45 py: 185870 (DSC01351.ARW): no vehicle at 0.35: strongest class 25 0.40 (0.09x0.07 of frame), strongest vehicle car 0.13 (0.27x0.14 of frame)
+14:54:45 py: 185882 (DSC01354.ARW): no vehicle at 0.35: strongest class 25 0.67 (0.10x0.06 of frame), strongest vehicle motorcycle 0.22 (0.30x0.14 of frame)
+14:54:45 py: 185886 (DSC01355.ARW): no vehicle at 0.35: strongest class 25 0.74 (0.10x0.06 of frame), strongest vehicle motorcycle 0.20 (0.32x0.13 of frame)
+14:54:45 py: 185890 (DSC01356.ARW): no vehicle at 0.35: strongest class 25 0.75 (0.10x0.06 of frame), strongest vehicle truck 0.32 (0.35x0.13 of frame)
+14:54:45 py: burst 58: shortlist of 12 frames: 185878 box, 185882 point, 185886 point
+14:54:46 py: 185919 (DSC01363.ARW): no vehicle at 0.35: strongest class 25 0.40 (0.11x0.06 of frame), strongest vehicle car 0.28 (0.29x0.15 of frame)
+14:54:46 py: 185927 (DSC01365.ARW): no vehicle at 0.35: strongest person 0.69 (0.02x0.09 of frame), strongest vehicle truck 0.06 (0.28x0.14 of frame)
+14:54:47 py: 185923 (DSC01364.ARW): no vehicle at 0.35: strongest class 25 0.69 (0.10x0.06 of frame), strongest vehicle car 0.12 (0.30x0.13 of frame)
+14:54:47 py: 185935 (DSC01367.ARW): no vehicle at 0.35: strongest class 25 0.68 (0.10x0.06 of frame), strongest vehicle car 0.00 (1.00x0.91 of frame)
+14:54:47 py: 185931 (DSC01366.ARW): no vehicle at 0.35: strongest class 25 0.73 (0.10x0.06 of frame), strongest vehicle motorcycle 0.14 (0.19x0.11 of frame)
+14:54:47 py: burst 59: shortlist of 10 frames: 185903 box, 185915 box, 185923 point
+14:54:48 py: 185987 (DSC01380.ARW): no vehicle at 0.35: strongest person 0.79 (0.02x0.09 of frame), strongest vehicle car 0.11 (0.35x0.15 of frame)
+14:54:49 py: 185995 (DSC01382.ARW): no vehicle at 0.35: strongest person 0.78 (0.02x0.10 of frame), strongest vehicle car 0.25 (0.35x0.15 of frame)
+14:54:49 py: 185999 (DSC01383.ARW): no vehicle at 0.35: strongest class 25 0.79 (0.10x0.06 of frame), strongest vehicle car 0.30 (0.06x0.04 of frame)
+14:54:49 py: burst 60: shortlist of 20 frames: 185952 box, 185987 point, 185991 box, 186011 box, 186015 box
+14:54:50 py: burst 61: shortlist of 4 frames: 186030 box, 186034 box, 186038 box
+14:54:51 py: burst 62: shortlist of 5 frames: 186046 box, 186050 box, 186054 box
+14:54:51 py: 186087 (DSC01402.ARW): no vehicle at 0.35: strongest class 25 0.72 (0.12x0.03 of frame), strongest vehicle truck 0.31 (0.41x0.09 of frame)
+14:54:52 py: 186090 (DSC01403.ARW): no vehicle at 0.35: strongest person 0.71 (0.04x0.07 of frame), strongest vehicle truck 0.03 (0.29x0.07 of frame)
+14:54:52 py: 186094 (DSC01404.ARW): no vehicle at 0.35: strongest person 0.63 (0.04x0.07 of frame), strongest vehicle car 0.01 (0.19x0.07 of frame)
+14:54:52 py: burst 63: shortlist of 8 frames: 186066 box, 186070 box, 186074 box
+14:54:52 py: 186098 (DSC01405.ARW): no vehicle at 0.35: strongest person 0.63 (0.04x0.07 of frame), strongest vehicle truck 0.24 (0.31x0.09 of frame)
+14:54:52 py: 186106 (DSC01407.ARW): no vehicle at 0.35: strongest person 0.68 (0.04x0.07 of frame), strongest vehicle car 0.33 (0.41x0.09 of frame)
+14:54:52 py: 186123 (DSC01411.ARW): no vehicle at 0.35: strongest person 0.84 (0.04x0.07 of frame), strongest vehicle truck 0.27 (0.48x0.09 of frame)
+14:54:53 py: 186118 (DSC01410.ARW): no vehicle at 0.35: strongest person 0.83 (0.04x0.07 of frame), strongest vehicle truck 0.23 (0.46x0.09 of frame)
+14:54:53 py: 186143 (DSC01416.ARW): no vehicle at 0.35: strongest airplane 0.38 (0.60x0.08 of frame), strongest vehicle truck 0.27 (0.57x0.08 of frame)
+14:54:54 py: burst 64: shortlist of 14 frames: 186110 box, 186114 box, 186118 point, 186123 point
+14:54:54 py: 186175 (DSC01424.ARW): no vehicle at 0.35: strongest person 0.31 (0.20x0.04 of frame), strongest vehicle car 0.14 (0.49x0.10 of frame)
+14:54:54 py: 186179 (DSC01425.ARW): no vehicle at 0.35: strongest motorcycle 0.18 (0.51x0.09 of frame), strongest vehicle motorcycle 0.18 (0.51x0.09 of frame)
+14:54:57 py: burst 65: shortlist of 27 frames: 186175 point, 186183 box, 186250 box, 186253 box, 186257 box
+14:54:57 py: 186265 (DSC01447.ARW): no vehicle at 0.35: strongest class 25 0.57 (0.14x0.03 of frame), strongest vehicle car 0.31 (0.31x0.08 of frame)
+14:54:58 py: 186278 (DSC01450.ARW): no vehicle at 0.35: strongest person 0.71 (0.04x0.04 of frame), strongest vehicle car 0.29 (0.42x0.09 of frame)
+14:54:58 py: 186281 (DSC01451.ARW): no vehicle at 0.35: strongest car 0.32 (0.44x0.09 of frame), strongest vehicle car 0.32 (0.44x0.09 of frame)
+14:54:59 py: burst 66: shortlist of 12 frames: 186289 box, 186294 box, 186305 box
+14:54:59 py: burst 67: shortlist of 10 frames: 186339 box, 186342 box, 186346 box
+14:55:01 py: burst 68: shortlist of 10 frames: 186350 box, 186383 box, 186387 box
+14:55:02 py: 186391 (DSC01478.ARW): no vehicle at 0.35: strongest class 25 0.62 (0.15x0.03 of frame), strongest vehicle motorcycle 0.28 (0.28x0.08 of frame)
+14:55:03 py: burst 69: shortlist of 15 frames: 186407 box, 186414 box, 186418 box, 186422 box
+14:55:04 py: burst 70: shortlist of 7 frames: 186479 box, 186484 box, 186499 box
+14:55:05 py: 186543 (DSC01510.ARW): no vehicle at 0.35: strongest person 0.76 (0.04x0.05 of frame), strongest vehicle car 0.21 (0.50x0.09 of frame)
+14:55:05 py: burst 71: shortlist of 11 frames: 186524 box, 186532 box, 186536 box
+14:55:06 py: 186560 (DSC01514.ARW): no vehicle at 0.35: strongest car 0.28 (0.39x0.09 of frame), strongest vehicle car 0.28 (0.39x0.09 of frame)
+14:55:06 py: 186576 (DSC01518.ARW): no vehicle at 0.35: strongest class 25 0.80 (0.15x0.04 of frame), strongest vehicle car 0.34 (0.50x0.09 of frame)
+14:55:06 py: 186563 (DSC01515.ARW): no vehicle at 0.35: strongest motorcycle 0.28 (0.41x0.09 of frame), strongest vehicle motorcycle 0.28 (0.41x0.09 of frame)
+14:55:06 py: 186567 (DSC01516.ARW): no vehicle at 0.35: strongest motorcycle 0.30 (0.45x0.09 of frame), strongest vehicle motorcycle 0.30 (0.45x0.09 of frame)
+14:55:06 py: burst 72: shortlist of 8 frames: 186563 point, 186571 box, 186576 point
+14:55:07 py: burst 73: shortlist of 9 frames: 186585 box, 186589 box, 186604 box
+14:55:09 py: burst 74: shortlist of 9 frames: 186616 box, 186620 box, 186625 box
+14:55:11 py: burst 75: shortlist of 14 frames: 186652 box, 186656 box, 186660 box, 186701 box
+14:55:11 py: 186713 (DSC01552.ARW): no vehicle at 0.35: strongest class 25 0.46 (0.15x0.04 of frame), strongest vehicle car 0.24 (0.30x0.09 of frame)
+14:55:11 py: 186729 (DSC01556.ARW): no vehicle at 0.35: strongest motorcycle 0.32 (0.23x0.06 of frame), strongest vehicle motorcycle 0.32 (0.23x0.06 of frame)
+14:55:11 py: burst 76: shortlist of 8 frames: 186721 box, 186733 box, 186737 box
+14:55:13 py: burst 77: shortlist of 14 frames: 186753 box, 186786 box, 186789 box, 186794 box
+14:55:13 py: 186797 (DSC01573.ARW): no vehicle at 0.35: strongest person 0.83 (0.04x0.08 of frame), strongest vehicle truck 0.09 (0.56x0.08 of frame)
+14:55:14 py: burst 78: shortlist of 2 frames: 186797 point, 186802 box
+14:55:14 py: 186817 (DSC01578.ARW): no vehicle at 0.35: strongest class 36 0.63 (0.78x0.21 of frame), strongest vehicle car 0.11 (0.56x0.10 of frame)
+14:55:14 py: 186822 (DSC01579.ARW): no vehicle at 0.35: strongest class 25 0.79 (0.09x0.04 of frame), strongest vehicle motorcycle 0.32 (0.51x0.09 of frame)
+14:55:14 py: 186829 (DSC01581.ARW): no vehicle at 0.35: strongest class 25 0.75 (0.15x0.04 of frame), strongest vehicle car 0.07 (0.32x0.09 of frame)
+14:55:15 py: burst 79: shortlist of 7 frames: 186822 point, 186826 box, 186829 point
+14:55:15 py: 186833 (DSC01582.ARW): no vehicle at 0.35: strongest class 25 0.66 (0.12x0.03 of frame), strongest vehicle motorcycle 0.27 (0.22x0.08 of frame)
+14:55:15 py: 186840 (DSC01584.ARW): no vehicle at 0.35: strongest person 0.65 (0.04x0.07 of frame), strongest vehicle truck 0.31 (0.28x0.09 of frame)
+14:55:16 py: 186853 (DSC01587.ARW): no vehicle at 0.35: strongest car 0.26 (0.40x0.09 of frame), strongest vehicle car 0.26 (0.40x0.09 of frame)
+14:55:16 py: burst 80: shortlist of 7 frames: 186840 point, 186853 point, 186857 box
+14:55:17 py: burst 81: shortlist of 9 frames: 186880 box, 186884 box, 186888 box
+14:55:17 py: burst 82: shortlist of 5 frames: 186893 box, 186895 box, 186897 box
+14:55:17 py: 186903 (DSC01603.ARW): no vehicle at 0.35: strongest person 0.44 (0.01x0.05 of frame), strongest vehicle motorcycle 0.24 (0.12x0.10 of frame)
+14:55:18 py: 186905 (DSC01604.ARW): no vehicle at 0.35: strongest person 0.41 (0.02x0.04 of frame), strongest vehicle truck 0.18 (0.11x0.10 of frame)
+14:55:18 py: 186907 (DSC01605.ARW): no vehicle at 0.35: strongest person 0.42 (0.01x0.05 of frame), strongest vehicle truck 0.32 (0.10x0.10 of frame)
+14:55:18 py: burst 83: shortlist of 7 frames: 186903 point, 186905 point, 186907 point
+14:55:20 py: burst 84: shortlist of 17 frames: 186917 box, 186921 box, 186978 box, 186982 box
+14:55:22 py: 189171 (DSC02175.ARW): no vehicle at 0.35: strongest person 0.84 (0.03x0.12 of frame), strongest vehicle truck 0.34 (0.34x0.13 of frame)
+14:55:22 py: burst 85: shortlist of 14 frames: 189154 box, 189175 box, 189187 box, 189191 box
+14:55:22 py: 189203 (DSC02183.ARW): no vehicle at 0.35: strongest person 0.82 (0.03x0.12 of frame), strongest vehicle truck 0.23 (0.33x0.15 of frame)
+14:55:22 py: 189199 (DSC02182.ARW): no vehicle at 0.35: strongest person 0.85 (0.03x0.12 of frame), strongest vehicle motorcycle 0.29 (0.32x0.14 of frame)
+14:55:23 py: 189223 (DSC02188.ARW): no vehicle at 0.35: strongest person 0.85 (0.03x0.12 of frame), strongest vehicle truck 0.22 (0.38x0.12 of frame)
+14:55:24 py: burst 86: shortlist of 13 frames: 189219 box, 189223 point, 189227 box, 189235 box
+14:55:24 py: 189267 (DSC02199.ARW): no vehicle at 0.35: strongest airplane 0.50 (0.39x0.17 of frame), strongest vehicle car 0.12 (0.29x0.14 of frame)
+14:55:24 py: 189263 (DSC02198.ARW): no vehicle at 0.35: strongest class 25 0.54 (0.07x0.05 of frame), strongest vehicle car 0.24 (0.27x0.14 of frame)
+14:55:25 py: 189271 (DSC02200.ARW): no vehicle at 0.35: strongest class 25 0.49 (0.10x0.14 of frame), strongest vehicle motorcycle 0.15 (0.38x0.15 of frame)
+14:55:25 py: 189278 (DSC02202.ARW): no vehicle at 0.35: strongest person 0.80 (0.03x0.12 of frame), strongest vehicle motorcycle 0.10 (0.32x0.14 of frame)
+14:55:26 py: 189290 (DSC02205.ARW): no vehicle at 0.35: strongest person 0.81 (0.03x0.12 of frame), strongest vehicle truck 0.26 (0.35x0.13 of frame)
+14:55:26 py: burst 87: shortlist of 14 frames: 189274 box, 189278 point, 189282 box, 189287 box
+14:55:26 py: 189327 (DSC02214.ARW): no vehicle at 0.35: strongest person 0.80 (0.03x0.12 of frame), strongest vehicle truck 0.20 (0.35x0.13 of frame)
+14:55:26 py: 189331 (DSC02215.ARW): no vehicle at 0.35: strongest person 0.79 (0.03x0.12 of frame), strongest vehicle truck 0.34 (0.36x0.13 of frame)
+14:55:27 py: 189343 (DSC02218.ARW): no vehicle at 0.35: strongest person 0.83 (0.03x0.12 of frame), strongest vehicle motorcycle 0.34 (0.35x0.13 of frame)
+14:55:29 py: burst 88: shortlist of 21 frames: 189307 box, 189311 box, 189314 box, 189384 box, 189388 box
+14:55:30 py: burst 89: shortlist of 18 frames: 189400 box, 189403 box, 189408 box, 189435 box
+14:55:32 py: burst 90: shortlist of 10 frames: 189463 box, 189483 box, 189487 box
+14:55:32 py: 189510 (DSC02260.ARW): no vehicle at 0.35: strongest person 0.67 (0.02x0.07 of frame), strongest vehicle truck 0.34 (0.14x0.11 of frame)
+14:55:32 py: 189514 (DSC02261.ARW): no vehicle at 0.35: strongest person 0.70 (0.02x0.06 of frame), strongest vehicle truck 0.30 (0.15x0.12 of frame)
+14:55:32 py: burst 91: shortlist of 6 frames: 189514 point, 189518 box, 189522 box
+14:55:33 py: 189546 (DSC02269.ARW): no vehicle at 0.35: strongest class 25 0.64 (0.11x0.03 of frame), strongest vehicle truck 0.21 (0.41x0.10 of frame)
+14:55:33 py: 189550 (DSC02270.ARW): no vehicle at 0.35: strongest class 25 0.54 (0.17x0.03 of frame), strongest vehicle truck 0.10 (0.40x0.10 of frame)
+14:55:33 py: 189554 (DSC02271.ARW): no vehicle at 0.35: strongest class 36 0.62 (0.71x0.24 of frame), strongest vehicle truck 0.07 (0.39x0.11 of frame)
+14:55:34 py: 189557 (DSC02272.ARW): no vehicle at 0.35: strongest class 36 0.38 (0.78x0.26 of frame), strongest vehicle truck 0.08 (0.29x0.09 of frame)
+14:55:34 py: burst 92: shortlist of 9 frames: 189550 point, 189554 point, 189557 point
+14:55:34 py: 189562 (DSC02273.ARW): no vehicle at 0.35: strongest person 0.52 (0.03x0.05 of frame), strongest vehicle truck 0.32 (0.20x0.08 of frame)
+14:55:35 py: 189594 (DSC02281.ARW): no vehicle at 0.35: strongest motorcycle 0.33 (0.42x0.09 of frame), strongest vehicle motorcycle 0.33 (0.42x0.09 of frame)
+14:55:36 py: burst 93: shortlist of 17 frames: 189594 point, 189598 box, 189602 box, 189610 box
+14:55:36 py: 189638 (DSC02292.ARW): no vehicle at 0.35: strongest class 25 0.66 (0.11x0.03 of frame), strongest vehicle motorcycle 0.27 (0.23x0.08 of frame)
+14:55:36 py: 189646 (DSC02294.ARW): no vehicle at 0.35: strongest class 25 0.64 (0.08x0.02 of frame), strongest vehicle motorcycle 0.32 (0.29x0.09 of frame)
+14:55:37 py: 189654 (DSC02296.ARW): no vehicle at 0.35: strongest car 0.33 (0.37x0.09 of frame), strongest vehicle car 0.33 (0.37x0.09 of frame)
+14:55:37 py: 189663 (DSC02298.ARW): no vehicle at 0.35: strongest car 0.33 (0.43x0.10 of frame), strongest vehicle car 0.33 (0.43x0.10 of frame)
+14:55:38 py: 189679 (DSC02302.ARW): no vehicle at 0.35: strongest person 0.80 (0.03x0.07 of frame), strongest vehicle truck 0.22 (0.54x0.10 of frame)
+14:55:38 py: burst 94: shortlist of 13 frames: 189658 box, 189667 box, 189671 box, 189675 box
+14:55:42 py: burst 95: shortlist of 34 frames: 189715 box, 189719 box, 189804 box, 189811 box, 189815 box
+14:55:42 py: 189827 (DSC02339.ARW): no vehicle at 0.35: strongest car 0.29 (0.39x0.09 of frame), strongest vehicle car 0.29 (0.39x0.09 of frame)
+14:55:43 py: 189836 (DSC02341.ARW): no vehicle at 0.35: strongest car 0.31 (0.44x0.09 of frame), strongest vehicle car 0.31 (0.44x0.09 of frame)
+14:55:43 py: 189868 (DSC02349.ARW): no vehicle at 0.35: strongest person 0.81 (0.03x0.07 of frame), strongest vehicle motorcycle 0.26 (0.49x0.08 of frame)
+14:55:44 py: burst 96: shortlist of 14 frames: 189836 point, 189840 box, 189843 box, 189847 box
+14:55:45 py: 189891 (DSC02355.ARW): no vehicle at 0.35: strongest airplane 0.12 (0.50x0.11 of frame), strongest vehicle truck 0.12 (0.38x0.09 of frame)
+14:55:45 py: 189900 (DSC02357.ARW): no vehicle at 0.35: strongest person 0.71 (0.03x0.07 of frame), strongest vehicle car 0.33 (0.41x0.09 of frame)
+14:55:45 py: 189896 (DSC02356.ARW): no vehicle at 0.35: strongest car 0.30 (0.40x0.09 of frame), strongest vehicle car 0.30 (0.40x0.09 of frame)
+14:55:45 py: 189908 (DSC02359.ARW): no vehicle at 0.35: strongest person 0.81 (0.05x0.08 of frame), strongest vehicle truck 0.32 (0.47x0.10 of frame)
+14:55:45 py: 189920 (DSC02362.ARW): no vehicle at 0.35: strongest person 0.75 (0.05x0.07 of frame), strongest vehicle car 0.13 (0.54x0.09 of frame)
+14:55:45 py: 189928 (DSC02364.ARW): no vehicle at 0.35: strongest person 0.75 (0.04x0.07 of frame), strongest vehicle car 0.12 (0.52x0.09 of frame)
+14:55:45 py: burst 97: shortlist of 14 frames: 189896 point, 189900 point, 189904 box, 189916 box
+14:55:47 py: burst 98: shortlist of 9 frames: 189945 box, 189961 box, 189965 box
+14:55:49 py: 190020 (DSC02387.ARW): no vehicle at 0.35: strongest person 0.69 (0.04x0.09 of frame), strongest vehicle truck 0.18 (0.37x0.13 of frame)
+14:55:49 py: burst 99: shortlist of 16 frames: 189981 box, 189992 box, 189996 box, 190004 box
+14:55:49 py: 190064 (DSC02398.ARW): no vehicle at 0.35: strongest person 0.79 (0.03x0.12 of frame), strongest vehicle truck 0.32 (0.35x0.14 of frame)
+14:55:51 py: burst 100: shortlist of 18 frames: 190045 box, 190049 box, 190052 box, 190060 box
+14:55:53 py: burst 101: shortlist of 13 frames: 190121 box, 190128 box, 190136 box, 190148 box
+14:55:53 py: 190157 (DSC02421.ARW): no vehicle at 0.35: strongest person 0.79 (0.03x0.11 of frame), strongest vehicle motorcycle 0.27 (0.31x0.14 of frame)
+14:55:53 py: 190164 (DSC02423.ARW): no vehicle at 0.35: strongest person 0.80 (0.03x0.11 of frame), strongest vehicle truck 0.30 (0.36x0.13 of frame)
+14:55:53 py: 190176 (DSC02426.ARW): no vehicle at 0.35: strongest person 0.77 (0.03x0.11 of frame), strongest vehicle truck 0.25 (0.38x0.13 of frame)
+14:55:53 py: 190181 (DSC02427.ARW): no vehicle at 0.35: strongest airplane 0.63 (0.37x0.12 of frame), strongest vehicle truck 0.15 (0.38x0.13 of frame)
+14:55:54 py: burst 102: shortlist of 9 frames: 190172 box, 190176 point, 190181 point
+14:55:55 py: burst 103: shortlist of 14 frames: 190193 box, 190197 box, 190204 box, 190208 box
+14:55:57 py: 190279 (DSC02452.ARW): no vehicle at 0.35: strongest person 0.82 (0.03x0.12 of frame), strongest vehicle car 0.17 (0.35x0.14 of frame)
+14:55:57 py: burst 104: shortlist of 9 frames: 190248 box, 190252 box, 190259 box
+14:55:57 py: 190292 (DSC02455.ARW): no vehicle at 0.35: strongest class 25 0.59 (0.10x0.04 of frame), strongest vehicle car 0.35 (0.27x0.14 of frame)
+14:55:57 py: 190309 (DSC02459.ARW): no vehicle at 0.35: strongest person 0.77 (0.03x0.12 of frame), strongest vehicle motorcycle 0.34 (0.29x0.11 of frame)
+14:55:58 py: 190312 (DSC02460.ARW): no vehicle at 0.35: strongest person 0.76 (0.03x0.11 of frame), strongest vehicle car 0.01 (0.73x0.48 of frame)
+14:55:58 py: 190316 (DSC02461.ARW): no vehicle at 0.35: strongest person 0.75 (0.03x0.12 of frame), strongest vehicle car 0.00 (0.87x0.47 of frame)
+14:55:59 py: burst 105: shortlist of 19 frames: 190283 box, 190345 box, 190349 box, 190353 box, 190357 box
+14:56:00 py: 190382 (DSC02477.ARW): no vehicle at 0.35: strongest class 25 0.61 (0.08x0.04 of frame), strongest vehicle motorcycle 0.21 (0.30x0.15 of frame)
+14:56:00 py: 190386 (DSC02478.ARW): no vehicle at 0.35: strongest person 0.71 (0.02x0.10 of frame), strongest vehicle motorcycle 0.29 (0.30x0.13 of frame)
+14:56:01 py: burst 106: shortlist of 11 frames: 190361 box, 190365 box, 190378 box
+14:56:01 py: 190406 (DSC02483.ARW): no vehicle at 0.35: strongest person 0.81 (0.03x0.11 of frame), strongest vehicle car 0.08 (0.31x0.14 of frame)
+14:56:03 py: burst 107: shortlist of 19 frames: 190462 box, 190465 box, 190469 box, 190473 box, 190477 box
+14:56:03 py: 190482 (DSC02502.ARW): no vehicle at 0.35: strongest person 0.68 (0.02x0.06 of frame), strongest vehicle truck 0.29 (0.12x0.12 of frame)
+14:56:05 py: 190527 (DSC02513.ARW): no vehicle at 0.35: strongest class 25 0.81 (0.09x0.04 of frame), strongest vehicle motorcycle 0.35 (0.35x0.13 of frame)
+14:56:05 py: 190539 (DSC02516.ARW): no vehicle at 0.35: strongest person 0.78 (0.02x0.09 of frame), strongest vehicle truck 0.20 (0.39x0.13 of frame)
+14:56:05 py: burst 108: shortlist of 15 frames: 190516 box, 190520 box, 190527 point, 190535 box
+14:56:06 py: 190555 (DSC02520.ARW): no vehicle at 0.35: strongest class 25 0.64 (0.12x0.03 of frame), strongest vehicle car 0.22 (0.41x0.10 of frame)
+14:56:06 py: 190563 (DSC02522.ARW): no vehicle at 0.35: strongest car 0.35 (0.49x0.10 of frame), strongest vehicle car 0.35 (0.49x0.10 of frame)
+14:56:06 py: 190559 (DSC02521.ARW): no vehicle at 0.35: strongest person 0.15 (0.11x0.03 of frame), strongest vehicle truck 0.08 (0.47x0.11 of frame)
+14:56:06 py: 190575 (DSC02525.ARW): no vehicle at 0.35: strongest person 0.81 (0.04x0.07 of frame), strongest vehicle truck 0.19 (0.54x0.10 of frame)
+14:56:06 py: 190567 (DSC02523.ARW): no vehicle at 0.35: strongest class 25 0.60 (0.07x0.03 of frame), strongest vehicle truck 0.09 (0.53x0.10 of frame)
+14:56:06 py: 190571 (DSC02524.ARW): no vehicle at 0.35: strongest person 0.81 (0.04x0.07 of frame), strongest vehicle motorcycle 0.33 (0.50x0.10 of frame)
+14:56:07 py: 190587 (DSC02528.ARW): no vehicle at 0.35: strongest person 0.83 (0.04x0.07 of frame), strongest vehicle truck 0.34 (0.59x0.09 of frame)
+14:56:07 py: burst 109: shortlist of 13 frames: 190567 point, 190571 point, 190575 point, 190587 point
+14:56:08 py: burst 110: shortlist of 10 frames: 190611 box, 190615 box, 190619 box
+14:56:08 py: 190635 (DSC02540.ARW): no vehicle at 0.35: strongest person 0.67 (0.03x0.04 of frame), strongest vehicle motorcycle 0.33 (0.18x0.08 of frame)
+14:56:08 py: 190639 (DSC02541.ARW): no vehicle at 0.35: strongest class 25 0.68 (0.11x0.03 of frame), strongest vehicle motorcycle 0.20 (0.22x0.08 of frame)
+14:56:09 py: 190676 (DSC02550.ARW): no vehicle at 0.35: strongest person 0.81 (0.04x0.07 of frame), strongest vehicle motorcycle 0.04 (0.51x0.09 of frame)
+14:56:10 py: burst 111: shortlist of 11 frames: 190639 point, 190643 box, 190672 box
+14:56:10 py: 190680 (DSC02551.ARW): no vehicle at 0.35: strongest person 0.44 (0.04x0.03 of frame), strongest vehicle truck 0.29 (0.28x0.09 of frame)
+14:56:10 py: 190692 (DSC02554.ARW): no vehicle at 0.35: strongest person 0.40 (0.04x0.03 of frame), strongest vehicle car 0.28 (0.43x0.10 of frame)
+14:56:10 py: 190701 (DSC02556.ARW): no vehicle at 0.35: strongest person 0.68 (0.05x0.06 of frame), strongest vehicle car 0.21 (0.46x0.10 of frame)
+14:56:10 py: 190705 (DSC02557.ARW): no vehicle at 0.35: strongest person 0.73 (0.04x0.06 of frame), strongest vehicle motorcycle 0.31 (0.47x0.10 of frame)
+14:56:11 py: 190712 (DSC02559.ARW): no vehicle at 0.35: strongest person 0.73 (0.05x0.06 of frame), strongest vehicle truck 0.30 (0.53x0.09 of frame)
+14:56:11 py: 190720 (DSC02561.ARW): no vehicle at 0.35: strongest person 0.39 (0.04x0.06 of frame), strongest vehicle truck 0.29 (0.55x0.09 of frame)
+14:56:11 py: 190728 (DSC02563.ARW): no vehicle at 0.35: strongest class 25 0.80 (0.14x0.03 of frame), strongest vehicle motorcycle 0.09 (0.57x0.10 of frame)
+14:56:11 py: 190733 (DSC02564.ARW): no vehicle at 0.35: strongest person 0.67 (0.05x0.07 of frame), strongest vehicle truck 0.15 (0.53x0.09 of frame)
+14:56:11 py: 190737 (DSC02565.ARW): no vehicle at 0.35: strongest class 25 0.80 (0.14x0.03 of frame), strongest vehicle motorcycle 0.20 (0.54x0.09 of frame)
+14:56:12 py: 190750 (DSC02568.ARW): no vehicle at 0.35: strongest airplane 0.67 (0.57x0.09 of frame), strongest vehicle motorcycle 0.22 (0.58x0.08 of frame)
+14:56:12 py: 190746 (DSC02567.ARW): no vehicle at 0.35: strongest airplane 0.67 (0.56x0.09 of frame), strongest vehicle motorcycle 0.08 (0.57x0.08 of frame)
+14:56:12 py: 190742 (DSC02566.ARW): no vehicle at 0.35: strongest person 0.61 (0.05x0.06 of frame), strongest vehicle motorcycle 0.35 (0.56x0.09 of frame)
+14:56:12 py: 190753 (DSC02569.ARW): no vehicle at 0.35: strongest airplane 0.69 (0.57x0.08 of frame), strongest vehicle truck 0.16 (0.57x0.09 of frame)
+14:56:12 py: 190757 (DSC02570.ARW): no vehicle at 0.35: strongest airplane 0.51 (0.56x0.08 of frame), strongest vehicle truck 0.13 (0.56x0.08 of frame)
+14:56:12 py: 190762 (DSC02571.ARW): no vehicle at 0.35: strongest person 0.48 (0.03x0.05 of frame), strongest vehicle truck 0.34 (0.56x0.08 of frame)
+14:56:12 py: 190773 (DSC02574.ARW): no vehicle at 0.35: strongest airplane 0.32 (0.72x0.13 of frame), strongest vehicle car 0.18 (0.44x0.09 of frame)
+14:56:12 py: burst 112: shortlist of 22 frames: 190728 point, 190733 point, 190742 point, 190746 point, 190750 point
+14:56:12 py: 190778 (DSC02575.ARW): no vehicle at 0.35: strongest class 25 0.74 (0.14x0.03 of frame), strongest vehicle motorcycle 0.28 (0.43x0.09 of frame)
+14:56:13 py: 190789 (DSC02578.ARW): no vehicle at 0.35: strongest person 0.73 (0.04x0.07 of frame), strongest vehicle motorcycle 0.31 (0.48x0.08 of frame)
+14:56:13 py: 190794 (DSC02579.ARW): no vehicle at 0.35: strongest person 0.76 (0.04x0.06 of frame), strongest vehicle motorcycle 0.19 (0.52x0.08 of frame)
+14:56:13 py: burst 113: shortlist of 7 frames: 190778 point, 190782 box, 190786 box
+14:56:14 py: 190810 (DSC02583.ARW): no vehicle at 0.35: strongest person 0.63 (0.04x0.03 of frame), strongest vehicle car 0.13 (0.45x0.09 of frame)
+14:56:14 py: 190818 (DSC02585.ARW): no vehicle at 0.35: strongest class 36 0.29 (0.88x0.19 of frame), strongest vehicle truck 0.13 (0.46x0.09 of frame)
+14:56:14 py: 190822 (DSC02586.ARW): no vehicle at 0.35: strongest class 25 0.49 (0.07x0.03 of frame), strongest vehicle motorcycle 0.27 (0.39x0.09 of frame)
+14:56:14 py: burst 114: shortlist of 7 frames: 190806 box, 190818 point, 190822 point
+14:56:14 py: 190826 (DSC02587.ARW): no vehicle at 0.35: strongest person 0.71 (0.04x0.03 of frame), strongest vehicle truck 0.10 (0.20x0.07 of frame)
+14:56:15 py: 190858 (DSC02595.ARW): no vehicle at 0.35: strongest person 0.73 (0.04x0.06 of frame), strongest vehicle motorcycle 0.30 (0.46x0.10 of frame)
+14:56:15 py: 190862 (DSC02596.ARW): no vehicle at 0.35: strongest class 25 0.76 (0.14x0.03 of frame), strongest vehicle truck 0.28 (0.47x0.09 of frame)
+14:56:15 py: 190870 (DSC02598.ARW): no vehicle at 0.35: strongest class 25 0.80 (0.14x0.03 of frame), strongest vehicle truck 0.24 (0.53x0.09 of frame)
+14:56:16 py: burst 115: shortlist of 14 frames: 190854 box, 190858 point, 190862 point, 190866 box
+14:56:18 py: burst 116: shortlist of 15 frames: 190902 box, 190907 box, 190911 box, 190914 box
+14:56:18 py: 190947 (DSC02617.ARW): no vehicle at 0.35: strongest person 0.51 (0.04x0.03 of frame), strongest vehicle car 0.15 (0.44x0.10 of frame)
+14:56:18 py: 190955 (DSC02619.ARW): no vehicle at 0.35: strongest class 36 0.24 (0.89x0.18 of frame), strongest vehicle car 0.08 (0.47x0.09 of frame)
+14:56:18 py: 190952 (DSC02618.ARW): no vehicle at 0.35: strongest airplane 0.39 (0.53x0.09 of frame), strongest vehicle car 0.20 (0.49x0.09 of frame)
+14:56:18 py: 190959 (DSC02620.ARW): no vehicle at 0.35: strongest class 25 0.70 (0.14x0.03 of frame), strongest vehicle truck 0.06 (0.50x0.09 of frame)
+14:56:19 py: 190971 (DSC02623.ARW): no vehicle at 0.35: strongest class 25 0.72 (0.14x0.03 of frame), strongest vehicle car 0.34 (0.53x0.08 of frame)
+14:56:20 py: burst 117: shortlist of 15 frames: 190959 point, 190964 box, 190967 box, 190971 point
+14:56:20 py: 191002 (DSC02631.ARW): no vehicle at 0.35: strongest airplane 0.30 (0.60x0.11 of frame), strongest vehicle motorcycle 0.09 (0.48x0.10 of frame)
+14:56:20 py: 191007 (DSC02632.ARW): no vehicle at 0.35: strongest class 25 0.50 (0.10x0.03 of frame), strongest vehicle car 0.08 (0.46x0.09 of frame)
+14:56:20 py: 191011 (DSC02633.ARW): no vehicle at 0.35: strongest class 25 0.69 (0.14x0.03 of frame), strongest vehicle truck 0.20 (0.47x0.09 of frame)
+14:56:20 py: 191026 (DSC02637.ARW): no vehicle at 0.35: strongest person 0.71 (0.04x0.06 of frame), strongest vehicle truck 0.12 (0.57x0.09 of frame)
+14:56:20 py: 191015 (DSC02634.ARW): no vehicle at 0.35: strongest class 25 0.66 (0.14x0.03 of frame), strongest vehicle truck 0.15 (0.50x0.09 of frame)
+14:56:20 py: 191018 (DSC02635.ARW): no vehicle at 0.35: strongest class 25 0.66 (0.14x0.03 of frame), strongest vehicle truck 0.26 (0.52x0.09 of frame)
+14:56:21 py: 191030 (DSC02638.ARW): no vehicle at 0.35: strongest boat 0.53 (0.58x0.08 of frame), strongest vehicle truck 0.25 (0.58x0.08 of frame)
+14:56:21 py: 191054 (DSC02644.ARW): no vehicle at 0.35: strongest person 0.62 (0.04x0.04 of frame), strongest vehicle truck 0.33 (0.60x0.09 of frame)
+14:56:21 py: 191046 (DSC02642.ARW): no vehicle at 0.35: strongest person 0.65 (0.04x0.06 of frame), strongest vehicle truck 0.23 (0.55x0.08 of frame)
+14:56:22 py: 191051 (DSC02643.ARW): no vehicle at 0.35: strongest boat 0.54 (0.55x0.08 of frame), strongest vehicle truck 0.20 (0.58x0.08 of frame)
+14:56:22 py: burst 118: shortlist of 15 frames: 191007 point, 191011 point, 191015 point, 191030 point
+14:56:23 py: burst 119: shortlist of 9 frames: 191086 box, 191090 box, 191094 box
+14:56:24 py: 191098 (DSC02655.ARW): no vehicle at 0.35: strongest person 0.65 (0.03x0.04 of frame), strongest vehicle truck 0.34 (0.34x0.08 of frame)
+14:56:24 py: 191102 (DSC02656.ARW): no vehicle at 0.35: strongest person 0.65 (0.03x0.04 of frame), strongest vehicle truck 0.29 (0.38x0.08 of frame)
+14:56:24 py: 191106 (DSC02657.ARW): no vehicle at 0.35: strongest person 0.61 (0.03x0.04 of frame), strongest vehicle motorcycle 0.26 (0.51x0.14 of frame)
+14:56:24 py: 191114 (DSC02659.ARW): no vehicle at 0.35: strongest person 0.66 (0.03x0.07 of frame), strongest vehicle car 0.25 (0.51x0.09 of frame)
+14:56:24 py: 191110 (DSC02658.ARW): no vehicle at 0.35: strongest motorcycle 0.30 (0.45x0.09 of frame), strongest vehicle motorcycle 0.30 (0.45x0.09 of frame)
+14:56:24 py: 191118 (DSC02660.ARW): no vehicle at 0.35: strongest person 0.79 (0.04x0.06 of frame), strongest vehicle truck 0.33 (0.49x0.09 of frame)
+14:56:25 py: 191130 (DSC02663.ARW): no vehicle at 0.35: strongest person 0.78 (0.04x0.06 of frame), strongest vehicle motorcycle 0.33 (0.54x0.09 of frame)
+14:56:25 py: burst 120: shortlist of 13 frames: 191102 point, 191110 point, 191114 point, 191118 point
+14:56:27 py: burst 121: shortlist of 16 frames: 191166 box, 191170 box, 191174 box, 191178 box
+14:56:28 py: 191215 (DSC02684.ARW): no vehicle at 0.35: strongest person 0.78 (0.04x0.05 of frame), strongest vehicle car 0.02 (0.06x0.02 of frame)
+14:56:28 py: 191227 (DSC02687.ARW): no vehicle at 0.35: strongest person 0.78 (0.04x0.05 of frame), strongest vehicle car 0.00 (0.06x0.02 of frame)
+14:56:28 py: 191219 (DSC02685.ARW): no vehicle at 0.35: strongest person 0.77 (0.04x0.05 of frame), strongest vehicle motorcycle 0.02 (0.07x0.03 of frame)
+14:56:28 py: 191235 (DSC02689.ARW): no vehicle at 0.35: strongest person 0.79 (0.04x0.05 of frame), strongest vehicle motorcycle 0.04 (0.15x0.04 of frame)
+14:56:29 py: 191223 (DSC02686.ARW): no vehicle at 0.35: strongest person 0.77 (0.04x0.05 of frame), strongest vehicle car 0.01 (0.07x0.02 of frame)
+14:56:29 py: 191231 (DSC02688.ARW): no vehicle at 0.35: strongest person 0.79 (0.04x0.05 of frame), strongest vehicle motorcycle 0.01 (0.08x0.03 of frame)
+14:56:29 py: 191238 (DSC02690.ARW): no vehicle at 0.35: strongest person 0.76 (0.04x0.05 of frame), strongest vehicle motorcycle 0.16 (0.16x0.04 of frame)
+14:56:29 py: 191242 (DSC02691.ARW): no vehicle at 0.35: strongest person 0.80 (0.04x0.05 of frame), strongest vehicle motorcycle 0.10 (0.07x0.04 of frame)
+14:56:29 py: 191246 (DSC02692.ARW): no vehicle at 0.35: strongest person 0.77 (0.04x0.05 of frame), strongest vehicle motorcycle 0.11 (0.05x0.05 of frame)
+14:56:29 py: 191251 (DSC02693.ARW): no vehicle at 0.35: strongest person 0.74 (0.05x0.05 of frame), strongest vehicle car 0.08 (0.04x0.02 of frame)
+14:56:31 py: burst 122: shortlist of 25 frames: 191266 box, 191281 box, 191286 box, 191290 box, 191294 box
+14:56:31 py: 191314 (DSC02709.ARW): no vehicle at 0.35: strongest motorcycle 0.29 (0.38x0.09 of frame), strongest vehicle motorcycle 0.29 (0.38x0.09 of frame)
+14:56:32 py: 191330 (DSC02713.ARW): no vehicle at 0.35: strongest person 0.79 (0.04x0.07 of frame), strongest vehicle truck 0.30 (0.50x0.09 of frame)
+14:56:34 py: burst 123: shortlist of 20 frames: 191322 box, 191326 box, 191330 point, 191334 box, 191338 box
+14:56:34 py: 191396 (DSC02729.ARW): no vehicle at 0.35: strongest person 0.66 (0.06x0.06 of frame), strongest vehicle motorcycle 0.30 (0.30x0.08 of frame)
+14:56:35 py: 191399 (DSC02730.ARW): no vehicle at 0.35: strongest motorcycle 0.25 (0.36x0.08 of frame), strongest vehicle motorcycle 0.25 (0.36x0.08 of frame)
+14:56:35 py: 191411 (DSC02733.ARW): no vehicle at 0.35: strongest class 25 0.57 (0.08x0.03 of frame), strongest vehicle truck 0.22 (0.41x0.08 of frame)
+14:56:35 py: 191436 (DSC02739.ARW): no vehicle at 0.35: strongest person 0.72 (0.04x0.06 of frame), strongest vehicle motorcycle 0.30 (0.52x0.08 of frame)
+14:56:36 py: burst 124: shortlist of 15 frames: 191403 box, 191411 point, 191414 box, 191418 box
+14:56:36 py: 191456 (DSC02744.ARW): no vehicle at 0.35: strongest truck 0.32 (0.32x0.08 of frame), strongest vehicle truck 0.32 (0.32x0.08 of frame)
+14:56:37 py: 191461 (DSC02745.ARW): no vehicle at 0.35: strongest car 0.22 (0.37x0.08 of frame), strongest vehicle car 0.22 (0.37x0.08 of frame)
+14:56:37 py: 191468 (DSC02747.ARW): no vehicle at 0.35: strongest car 0.25 (0.42x0.09 of frame), strongest vehicle car 0.25 (0.42x0.09 of frame)
+14:56:37 py: 191465 (DSC02746.ARW): no vehicle at 0.35: strongest truck 0.11 (0.48x0.10 of frame), strongest vehicle truck 0.11 (0.48x0.10 of frame)
+14:56:37 py: 191480 (DSC02750.ARW): no vehicle at 0.35: strongest person 0.72 (0.04x0.06 of frame), strongest vehicle truck 0.15 (0.47x0.09 of frame)
+14:56:37 py: 191484 (DSC02751.ARW): no vehicle at 0.35: strongest person 0.72 (0.03x0.07 of frame), strongest vehicle truck 0.33 (0.49x0.09 of frame)
+14:56:37 py: 191492 (DSC02753.ARW): no vehicle at 0.35: strongest person 0.79 (0.05x0.04 of frame), strongest vehicle truck 0.32 (0.52x0.08 of frame)
+14:56:37 py: 191500 (DSC02755.ARW): no vehicle at 0.35: strongest person 0.79 (0.05x0.07 of frame), strongest vehicle motorcycle 0.19 (0.56x0.09 of frame)
+14:56:39 py: burst 125: shortlist of 20 frames: 191468 point, 191472 box, 191476 box, 191480 point, 191484 point
+14:56:40 py: burst 126: shortlist of 11 frames: 191560 box, 191573 box, 191577 box
+14:56:40 py: 191580 (DSC02775.ARW): no vehicle at 0.35: strongest class 25 0.51 (0.11x0.02 of frame), strongest vehicle truck 0.17 (0.24x0.08 of frame)
+14:56:41 py: 191592 (DSC02778.ARW): no vehicle at 0.35: strongest motorcycle 0.33 (0.32x0.08 of frame), strongest vehicle motorcycle 0.33 (0.32x0.08 of frame)
+14:56:41 py: 191611 (DSC02783.ARW): no vehicle at 0.35: strongest person 0.73 (0.04x0.07 of frame), strongest vehicle truck 0.33 (0.48x0.09 of frame)
+14:56:42 py: burst 127: shortlist of 18 frames: 191607 box, 191611 point, 191615 box, 191627 box
+14:56:42 py: 191651 (DSC02793.ARW): no vehicle at 0.35: strongest person 0.77 (0.03x0.11 of frame), strongest vehicle truck 0.32 (0.33x0.14 of frame)
+14:56:43 py: burst 128: shortlist of 9 frames: 191651 point, 191655 box, 191659 box
+14:56:44 py: 191692 (DSC02803.ARW): no vehicle at 0.35: strongest person 0.83 (0.03x0.10 of frame), strongest vehicle car 0.22 (0.27x0.13 of frame)
+14:56:44 py: 191704 (DSC02806.ARW): no vehicle at 0.35: strongest person 0.77 (0.03x0.12 of frame), strongest vehicle motorcycle 0.28 (0.33x0.14 of frame)
+14:56:44 py: 191700 (DSC02805.ARW): no vehicle at 0.35: strongest person 0.80 (0.03x0.10 of frame), strongest vehicle motorcycle 0.24 (0.30x0.14 of frame)
+14:56:45 py: 191725 (DSC02811.ARW): no vehicle at 0.35: strongest person 0.77 (0.03x0.10 of frame), strongest vehicle truck 0.28 (0.37x0.13 of frame)
+14:56:45 py: 191728 (DSC02812.ARW): no vehicle at 0.35: strongest person 0.59 (0.02x0.04 of frame), strongest vehicle motorcycle 0.25 (0.35x0.12 of frame)
+14:56:45 py: burst 129: shortlist of 11 frames: 191688 box, 191692 point, 191696 box
+14:56:45 py: 191737 (DSC02814.ARW): no vehicle at 0.35: strongest person 0.75 (0.04x0.12 of frame), strongest vehicle truck 0.15 (0.37x0.13 of frame)
+14:56:46 py: 191765 (DSC02821.ARW): no vehicle at 0.35: strongest car 0.21 (0.36x0.12 of frame), strongest vehicle car 0.21 (0.36x0.12 of frame)
+14:56:46 py: 191769 (DSC02822.ARW): no vehicle at 0.35: strongest airplane 0.22 (0.36x0.13 of frame), strongest vehicle car 0.15 (0.35x0.12 of frame)
+14:56:47 py: burst 130: shortlist of 14 frames: 191741 box, 191745 box, 191782 box, 191786 box
+14:56:47 py: 191794 (DSC02828.ARW): no vehicle at 0.35: strongest class 25 0.59 (0.10x0.04 of frame), strongest vehicle motorcycle 0.29 (0.26x0.13 of frame)
+14:56:48 py: burst 131: shortlist of 8 frames: 191790 box, 191802 box, 191815 box
+14:56:48 py: 191834 (DSC02838.ARW): no vehicle at 0.35: strongest person 0.55 (0.47x0.20 of frame), strongest vehicle car 0.24 (0.08x0.04 of frame)
+14:56:48 py: 191830 (DSC02837.ARW): no vehicle at 0.35: strongest person 0.48 (0.47x0.20 of frame), strongest vehicle car 0.31 (0.06x0.03 of frame)
+14:56:48 py: 191838 (DSC02839.ARW): no vehicle at 0.35: strongest person 0.58 (0.46x0.20 of frame), strongest vehicle truck 0.13 (0.09x0.06 of frame)
+14:56:48 py: burst 132: shortlist of 5 frames: 191830 point, 191834 point, 191838 point
+14:56:48 py: 191842 (DSC02840.ARW): no vehicle at 0.35: strongest person 0.54 (0.41x0.15 of frame), strongest vehicle car 0.30 (0.05x0.04 of frame)
+14:56:49 py: 191846 (DSC02841.ARW): no vehicle at 0.35: strongest person 0.49 (0.41x0.15 of frame), strongest vehicle car 0.31 (0.06x0.04 of frame)
+14:56:49 py: 191851 (DSC02842.ARW): no vehicle at 0.35: strongest person 0.50 (0.41x0.15 of frame), strongest vehicle car 0.25 (0.06x0.04 of frame)
+14:56:49 py: 191866 (DSC02846.ARW): no vehicle at 0.35: strongest person 0.59 (0.42x0.19 of frame), strongest vehicle motorcycle 0.30 (0.06x0.04 of frame)
+14:56:49 py: burst 133: shortlist of 5 frames: 191842 point, 191846 point, 191859 box
+14:56:49 py: 191862 (DSC02845.ARW): no vehicle at 0.35: strongest person 0.58 (0.42x0.19 of frame), strongest vehicle car 0.13 (0.04x0.04 of frame)
+14:56:49 py: 191870 (DSC02847.ARW): no vehicle at 0.35: strongest person 0.62 (0.42x0.19 of frame), strongest vehicle car 0.25 (0.06x0.05 of frame)
+14:56:49 py: burst 134: shortlist of 4 frames: 191866 point, 191870 point, 191874 box
+14:56:50 py: 191878 (DSC02849.ARW): no vehicle at 0.35: strongest car 0.34 (0.04x0.03 of frame), strongest vehicle car 0.34 (0.04x0.03 of frame)
+14:56:50 py: 191882 (DSC02850.ARW): no vehicle at 0.35: strongest person 0.15 (0.01x0.05 of frame), strongest vehicle motorcycle 0.13 (0.04x0.04 of frame)
+14:56:50 py: 191887 (DSC02851.ARW): no vehicle at 0.35: strongest motorcycle 0.21 (0.03x0.04 of frame), strongest vehicle motorcycle 0.21 (0.03x0.04 of frame)
+14:56:50 py: 191898 (DSC02854.ARW): no vehicle at 0.35: strongest car 0.34 (0.08x0.05 of frame), strongest vehicle car 0.34 (0.08x0.05 of frame)
+14:56:50 py: burst 135: shortlist of 6 frames: 191882 point, 191887 point, 191891 box
+14:56:51 py: 191907 (DSC02856.ARW): no vehicle at 0.35: strongest person 0.71 (0.32x0.16 of frame), strongest vehicle car 0.07 (0.03x0.03 of frame)
+14:56:51 py: 191902 (DSC02855.ARW): no vehicle at 0.35: strongest person 0.72 (0.31x0.16 of frame), strongest vehicle car 0.25 (0.03x0.03 of frame)
+14:56:51 py: 191910 (DSC02857.ARW): no vehicle at 0.35: strongest person 0.72 (0.32x0.16 of frame), strongest vehicle car 0.09 (0.02x0.02 of frame)
+14:56:51 py: 191923 (DSC02860.ARW): no vehicle at 0.35: strongest person 0.75 (0.30x0.21 of frame), strongest vehicle car 0.05 (0.02x0.02 of frame)
+14:56:51 py: 191915 (DSC02858.ARW): no vehicle at 0.35: strongest person 0.72 (0.31x0.16 of frame), strongest vehicle car 0.08 (0.03x0.03 of frame)
+14:56:51 py: 191919 (DSC02859.ARW): no vehicle at 0.35: strongest person 0.71 (0.32x0.16 of frame), strongest vehicle car 0.11 (0.03x0.03 of frame)
+14:56:51 py: burst 136: shortlist of 5 frames: 191902 point, 191907 point, 191919 point
+14:56:51 py: 191927 (DSC02861.ARW): no vehicle at 0.35: strongest person 0.75 (0.30x0.21 of frame), strongest vehicle car 0.07 (0.02x0.02 of frame)
+14:56:51 py: 191931 (DSC02862.ARW): no vehicle at 0.35: strongest person 0.75 (0.29x0.21 of frame), strongest vehicle car 0.08 (0.03x0.02 of frame)
+14:56:51 py: 191935 (DSC02863.ARW): no vehicle at 0.35: strongest person 0.77 (0.30x0.20 of frame), strongest vehicle car 0.16 (0.05x0.02 of frame)
+14:56:51 py: burst 137: shortlist of 4 frames: 191923 point, 191927 point, 191935 point
+14:56:52 py: 191939 (DSC02864.ARW): no vehicle at 0.35: strongest person 0.73 (0.02x0.07 of frame), strongest vehicle motorcycle 0.19 (0.11x0.07 of frame)
+14:56:52 py: 191942 (DSC02865.ARW): no vehicle at 0.35: strongest person 0.68 (0.02x0.07 of frame), strongest vehicle motorcycle 0.29 (0.13x0.08 of frame)
+14:56:52 py: 191946 (DSC02866.ARW): no vehicle at 0.35: strongest person 0.75 (0.02x0.07 of frame), strongest vehicle motorcycle 0.15 (0.15x0.08 of frame)
+14:56:52 py: 191950 (DSC02867.ARW): no vehicle at 0.35: strongest person 0.75 (0.02x0.07 of frame), strongest vehicle motorcycle 0.26 (0.15x0.08 of frame)
+14:56:52 py: 191954 (DSC02868.ARW): no vehicle at 0.35: strongest class 36 0.80 (0.16x0.08 of frame), strongest vehicle car 0.01 (0.04x0.02 of frame)
+14:56:52 py: burst 138: shortlist of 5 frames: 191939 point, 191942 point, 191946 point
+14:56:53 py: 191966 (DSC02871.ARW): no vehicle at 0.35: strongest person 0.71 (0.02x0.08 of frame), strongest vehicle motorcycle 0.20 (0.13x0.07 of frame)
+14:56:53 py: 191974 (DSC02873.ARW): no vehicle at 0.35: strongest class 36 0.72 (0.15x0.08 of frame), strongest vehicle motorcycle 0.19 (0.17x0.08 of frame)
+14:56:53 py: 191978 (DSC02874.ARW): no vehicle at 0.35: strongest person 0.76 (0.02x0.07 of frame), strongest vehicle car 0.03 (0.14x0.07 of frame)
+14:56:53 py: burst 139: shortlist of 6 frames: 191958 box, 191962 box, 191966 point
+14:56:53 py: 191994 (DSC02878.ARW): no vehicle at 0.35: strongest class 25 0.54 (0.05x0.02 of frame), strongest vehicle truck 0.25 (0.14x0.07 of frame)
+14:56:54 py: 191998 (DSC02879.ARW): no vehicle at 0.35: strongest person 0.54 (0.02x0.05 of frame), strongest vehicle motorcycle 0.20 (0.16x0.07 of frame)
+14:56:54 py: 192006 (DSC02881.ARW): no vehicle at 0.35: strongest class 25 0.44 (0.05x0.03 of frame), strongest vehicle motorcycle 0.10 (0.17x0.08 of frame)
+14:56:54 py: 192010 (DSC02882.ARW): no vehicle at 0.35: strongest person 0.40 (0.02x0.06 of frame), strongest vehicle motorcycle 0.24 (0.19x0.07 of frame)
+14:56:54 py: 192018 (DSC02884.ARW): no vehicle at 0.35: strongest truck 0.30 (0.03x0.05 of frame), strongest vehicle truck 0.30 (0.03x0.05 of frame)
+14:56:54 py: 192022 (DSC02885.ARW): no vehicle at 0.35: strongest person 0.19 (0.03x0.14 of frame), strongest vehicle truck 0.17 (0.03x0.05 of frame)
+14:56:55 py: burst 140: shortlist of 11 frames: 192014 box, 192018 point, 192022 point
+14:56:55 py: burst 141: shortlist of 6 frames: 192026 box, 192030 box, 192033 box
+14:56:55 py: 192049 (DSC02892.ARW): no vehicle at 0.35: strongest person 0.75 (0.02x0.06 of frame), strongest vehicle truck 0.27 (0.06x0.05 of frame)
+14:56:55 py: 192054 (DSC02893.ARW): no vehicle at 0.35: strongest person 0.69 (0.02x0.06 of frame), strongest vehicle truck 0.16 (0.07x0.06 of frame)
+14:56:56 py: 192058 (DSC02894.ARW): no vehicle at 0.35: strongest person 0.70 (0.02x0.06 of frame), strongest vehicle car 0.18 (0.06x0.06 of frame)
+14:56:56 py: 192066 (DSC02896.ARW): no vehicle at 0.35: strongest person 0.70 (0.02x0.06 of frame), strongest vehicle motorcycle 0.23 (0.09x0.07 of frame)
+14:56:56 py: 192074 (DSC02898.ARW): no vehicle at 0.35: strongest car 0.30 (0.03x0.04 of frame), strongest vehicle car 0.30 (0.03x0.04 of frame)
+14:56:56 py: 192070 (DSC02897.ARW): no vehicle at 0.35: strongest person 0.75 (0.02x0.06 of frame), strongest vehicle motorcycle 0.24 (0.08x0.05 of frame)
+14:56:56 py: 192077 (DSC02899.ARW): no vehicle at 0.35: strongest car 0.31 (0.03x0.04 of frame), strongest vehicle car 0.31 (0.03x0.04 of frame)
+14:56:56 py: 192081 (DSC02900.ARW): no vehicle at 0.35: strongest class 36 0.28 (0.13x0.05 of frame), strongest vehicle truck 0.18 (0.03x0.04 of frame)
+14:56:56 py: burst 142: shortlist of 9 frames: 192054 point, 192058 point, 192081 point
+14:56:56 py: 192094 (DSC02903.ARW): no vehicle at 0.35: strongest boat 0.17 (0.13x0.07 of frame), strongest vehicle motorcycle 0.10 (0.09x0.06 of frame)
+14:56:57 py: 192098 (DSC02904.ARW): no vehicle at 0.35: strongest boat 0.30 (0.15x0.52 of frame), strongest vehicle motorcycle 0.26 (0.11x0.06 of frame)
+14:56:57 py: 192105 (DSC02906.ARW): no vehicle at 0.35: strongest class 36 0.32 (0.12x0.07 of frame), strongest vehicle truck 0.13 (0.13x0.06 of frame)
+14:56:57 py: 192102 (DSC02905.ARW): no vehicle at 0.35: strongest class 36 0.65 (0.12x0.06 of frame), strongest vehicle car 0.06 (0.12x0.06 of frame)
+14:56:57 py: 192109 (DSC02907.ARW): no vehicle at 0.35: strongest class 36 0.49 (0.14x0.07 of frame), strongest vehicle motorcycle 0.02 (0.15x0.08 of frame)
+14:56:57 py: 192113 (DSC02908.ARW): no vehicle at 0.35: strongest class 25 0.22 (0.08x0.04 of frame), strongest vehicle motorcycle 0.07 (0.15x0.06 of frame)
+14:56:57 py: 192117 (DSC02909.ARW): no vehicle at 0.35: strongest boat 0.48 (0.14x0.13 of frame), strongest vehicle car 0.03 (0.03x0.03 of frame)
+14:56:57 py: 192122 (DSC02910.ARW): no vehicle at 0.35: strongest class 36 0.29 (0.13x0.06 of frame), strongest vehicle car 0.25 (0.03x0.04 of frame)
+14:56:57 py: 192126 (DSC02911.ARW): no vehicle at 0.35: strongest car 0.31 (0.03x0.04 of frame), strongest vehicle car 0.31 (0.03x0.04 of frame)
+14:56:58 py: burst 143: shortlist of 16 frames: 192117 point, 192122 point, 192126 point, 192130 box
+14:56:58 py: finding subjects: done
+14:56:58 lua: finding subjects: scorer exit 0
+14:56:58 lua: SAM: 491 shortlisted, 0 already cached, 491 to segment
+14:57:01 lua: SAM 183609 (DSC00788.ARW) point 0.500,0.500: masked
+14:57:02 lua: SAM 183613 (DSC00789.ARW) point 0.500,0.300: masked
+14:57:03 lua: SAM 183618 (DSC00790.ARW) point 0.700,0.900: masked
+14:57:04 lua: SAM 183650 (DSC00798.ARW) box 0.493,0.470-0.659,0.598: masked
+14:57:05 lua: SAM 183654 (DSC00799.ARW) point 0.500,0.500: masked
+14:57:06 lua: SAM 183658 (DSC00800.ARW) point 0.300,0.100: masked
+14:57:07 lua: SAM 183670 (DSC00803.ARW) box 0.268,0.532-0.483,0.658: masked
+14:57:08 lua: SAM 183682 (DSC00806.ARW) box 0.262,0.474-0.518,0.607: masked
+14:57:09 lua: SAM 183690 (DSC00808.ARW) box 0.187,0.484-0.442,0.607: masked
+14:57:10 lua: SAM 183699 (DSC00810.ARW) box 0.371,0.497-0.567,0.614: masked
+14:57:11 lua: SAM 183703 (DSC00811.ARW) point 0.500,0.500: masked
+14:57:12 lua: SAM 183715 (DSC00814.ARW) box 0.176,0.510-0.442,0.646: masked
+14:57:13 lua: SAM 183751 (DSC00823.ARW) box 0.359,0.555-0.593,0.691: masked
+14:57:14 lua: SAM 183755 (DSC00824.ARW) box 0.310,0.564-0.567,0.702: masked
+14:57:15 lua: SAM 183759 (DSC00825.ARW) box 0.228,0.541-0.528,0.715: masked
+14:57:16 lua: SAM 183763 (DSC00826.ARW) box 0.512,0.358-0.640,0.460: masked
+14:57:17 lua: SAM 183788 (DSC00832.ARW) box 0.797,0.591-0.999,0.706: masked
+14:57:18 lua: SAM 183792 (DSC00833.ARW) box 0.734,0.570-0.999,0.689: masked
+14:57:19 lua: SAM 183796 (DSC00834.ARW) box 0.689,0.564-0.945,0.673: masked
+14:57:20 lua: SAM 183864 (DSC00851.ARW) box 0.446,0.547-0.738,0.660: masked
+14:57:21 lua: SAM 183868 (DSC00852.ARW) box 0.458,0.533-0.736,0.656: masked
+14:57:22 lua: SAM 183872 (DSC00853.ARW) box 0.463,0.527-0.719,0.648: masked
+14:57:23 lua: SAM 183876 (DSC00854.ARW) point 0.500,0.500: masked
+14:57:24 lua: SAM 183888 (DSC00857.ARW) box 0.533,0.421-0.658,0.524: masked
+14:57:25 lua: SAM 183900 (DSC00860.ARW) box 0.265,0.546-0.506,0.671: masked
+14:57:26 lua: SAM 183903 (DSC00861.ARW) box 0.199,0.575-0.463,0.706: masked
+14:57:27 lua: SAM 183907 (DSC00862.ARW) box 0.402,0.557-0.547,0.675: masked
+14:57:28 lua: SAM 183912 (DSC00863.ARW) box 0.379,0.571-0.542,0.693: masked
+14:57:29 lua: SAM 183915 (DSC00864.ARW) box 0.352,0.579-0.533,0.704: masked
+14:57:30 lua: SAM 183947 (DSC00872.ARW) box 0.344,0.565-0.591,0.691: masked
+14:57:31 lua: SAM 183952 (DSC00873.ARW) point 0.300,0.300: masked
+14:57:32 lua: SAM 183960 (DSC00875.ARW) point 0.500,0.900: masked
+14:57:33 lua: SAM 184040 (DSC00895.ARW) box 0.317,0.544-0.634,0.659: masked
+14:57:34 lua: SAM 184044 (DSC00896.ARW) box 0.350,0.542-0.647,0.656: masked
+14:57:35 lua: SAM 184051 (DSC00898.ARW) box 0.401,0.501-0.653,0.616: masked
+14:57:36 lua: SAM 184055 (DSC00899.ARW) box 0.384,0.471-0.669,0.580: masked
+14:57:37 lua: SAM 184060 (DSC00900.ARW) point 0.300,0.300: masked
+14:57:38 lua: SAM 184064 (DSC00901.ARW) box 0.346,0.507-0.572,0.633: masked
+14:57:39 lua: SAM 184084 (DSC00906.ARW) box 0.123,0.534-0.435,0.676: masked
+14:57:40 lua: SAM 184087 (DSC00907.ARW) box 0.068,0.561-0.407,0.697: masked
+14:57:41 lua: SAM 184092 (DSC00908.ARW) box 0.256,0.696-0.515,0.830: masked
+14:57:42 lua: SAM 184096 (DSC00909.ARW) box 0.230,0.684-0.507,0.812: masked
+14:57:43 lua: SAM 184123 (DSC00916.ARW) box 0.172,0.599-0.520,0.724: masked
+14:57:44 lua: SAM 184138 (DSC00920.ARW) point 0.900,0.100: masked
+14:57:45 lua: SAM 184143 (DSC00921.ARW) box 0.187,0.664-0.497,0.801: masked
+14:57:46 lua: SAM 184150 (DSC00923.ARW) box 0.057,0.706-0.394,0.834: masked
+14:57:47 lua: SAM 184159 (DSC00925.ARW) point 0.500,0.100: masked
+14:57:48 lua: SAM 184163 (DSC00926.ARW) point 0.700,0.100: masked
+14:57:49 lua: SAM 184168 (DSC00927.ARW) point 0.300,0.900: masked
+14:57:50 lua: SAM 184200 (DSC00935.ARW) box 0.193,0.444-0.346,0.532: masked
+14:57:51 lua: SAM 184204 (DSC00936.ARW) box 0.245,0.443-0.402,0.535: masked
+14:57:52 lua: SAM 184216 (DSC00939.ARW) point 0.900,0.100: masked
+14:57:53 lua: SAM 184240 (DSC00945.ARW) box 0.332,0.623-0.529,0.715: masked
+14:57:54 lua: SAM 184245 (DSC00946.ARW) box 0.305,0.629-0.522,0.724: masked
+14:57:55 lua: SAM 184256 (DSC00949.ARW) point 0.500,0.900: masked
+14:57:56 lua: SAM 184269 (DSC00952.ARW) box 0.341,0.504-0.612,0.627: masked
+14:57:57 lua: SAM 184273 (DSC00953.ARW) box 0.316,0.485-0.616,0.621: masked
+14:57:58 lua: SAM 184277 (DSC00954.ARW) box 0.290,0.497-0.607,0.629: masked
+14:57:59 lua: SAM 184316 (DSC00964.ARW) box 0.283,0.587-0.466,0.707: masked
+14:58:00 lua: SAM 184329 (DSC00967.ARW) point 0.300,0.900: masked
+14:58:01 lua: SAM 184333 (DSC00968.ARW) box 0.260,0.504-0.603,0.652: masked
+14:58:02 lua: SAM 184341 (DSC00970.ARW) point 0.100,0.100: masked
+14:58:03 lua: SAM 184345 (DSC00971.ARW) box 0.407,0.582-0.544,0.644: masked
+14:58:04 lua: SAM 184352 (DSC00973.ARW) point 0.100,0.100: masked
+14:58:05 lua: SAM 184376 (DSC00979.ARW) box 0.057,0.500-0.464,0.587: masked
+14:58:06 lua: SAM 184380 (DSC00980.ARW) box 0.004,0.506-0.456,0.604: masked
+14:58:07 lua: SAM 184384 (DSC00981.ARW) box 0.016,0.527-0.419,0.618: masked
+14:58:08 lua: SAM 184404 (DSC00986.ARW) box 0.263,0.474-0.638,0.551: masked
+14:58:09 lua: SAM 184408 (DSC00987.ARW) box 0.244,0.480-0.598,0.551: masked
+14:58:10 lua: SAM 184412 (DSC00988.ARW) box 0.294,0.471-0.553,0.542: masked
+14:58:11 lua: SAM 184445 (DSC00996.ARW) box 0.144,0.477-0.576,0.562: masked
+14:58:12 lua: SAM 184449 (DSC00997.ARW) point 0.900,0.900: masked
+14:58:13 lua: SAM 184454 (DSC00998.ARW) box 0.141,0.486-0.648,0.576: masked
+14:58:14 lua: SAM 184465 (DSC01001.ARW) box 0.162,0.503-0.699,0.584: masked
+14:58:15 lua: SAM 184501 (DSC01010.ARW) box 0.236,0.455-0.407,0.503: masked
+14:58:17 lua: SAM 184508 (DSC01012.ARW) box 0.149,0.232-0.232,0.297: masked
+14:58:17 lua: SAM 184524 (DSC01016.ARW) box 0.068,0.231-0.150,0.296: masked
+14:58:18 lua: SAM 184544 (DSC01021.ARW) box 0.192,0.512-0.532,0.597: masked
+14:58:22 lua: SAM 184582 (DSC01030.ARW) box 0.171,0.467-0.600,0.556: masked
+14:58:23 lua: SAM 184586 (DSC01031.ARW) point 0.500,0.900: masked
+14:58:24 lua: SAM 184594 (DSC01033.ARW) box 0.224,0.490-0.710,0.581: masked
+14:58:25 lua: SAM 184597 (DSC01034.ARW) box 0.214,0.508-0.717,0.591: masked
+14:58:26 lua: SAM 184630 (DSC01042.ARW) box 0.242,0.480-0.584,0.568: masked
+14:58:27 lua: SAM 184634 (DSC01043.ARW) box 0.416,0.344-0.642,0.408: masked
+14:58:28 lua: SAM 184637 (DSC01044.ARW) box 0.200,0.484-0.603,0.578: masked
+14:58:29 lua: SAM 184641 (DSC01045.ARW) box 0.135,0.489-0.573,0.579: masked
+14:58:30 lua: SAM 184710 (DSC01062.ARW) point 0.900,0.900: masked
+14:58:31 lua: SAM 184714 (DSC01063.ARW) point 0.700,0.900: masked
+14:58:34 lua: SAM 184718 (DSC01064.ARW) box 0.100,0.508-0.620,0.600: masked
+14:58:35 lua: SAM 184745 (DSC01071.ARW) box 0.271,0.497-0.571,0.647: masked
+14:58:36 lua: SAM 184749 (DSC01072.ARW) box 0.256,0.504-0.572,0.648: masked
+14:58:37 lua: SAM 184752 (DSC01073.ARW) box 0.270,0.520-0.577,0.655: masked
+14:58:38 lua: SAM 184764 (DSC01076.ARW) point 0.700,0.100: masked
+14:58:39 lua: SAM 184784 (DSC01081.ARW) point 0.700,0.100: masked
+14:58:40 lua: SAM 184788 (DSC01082.ARW) point 0.700,0.100: masked
+14:58:41 lua: SAM 184796 (DSC01084.ARW) point 0.300,0.500: masked
+14:58:42 lua: SAM 184800 (DSC01085.ARW) point 0.300,0.500: masked
+14:58:43 lua: SAM 184804 (DSC01086.ARW) point 0.300,0.500: masked
+14:58:44 lua: SAM 184828 (DSC01092.ARW) box 0.475,0.502-0.605,0.561: masked
+14:58:45 lua: SAM 184831 (DSC01093.ARW) box 0.341,0.517-0.511,0.575: masked
+14:58:46 lua: SAM 184835 (DSC01094.ARW) point 0.900,0.100: masked
+14:58:47 lua: SAM 184855 (DSC01099.ARW) point 0.900,0.100: masked
+14:58:48 lua: SAM 184860 (DSC01100.ARW) point 0.900,0.100: masked
+14:58:49 lua: SAM 184881 (DSC01105.ARW) point 0.900,0.100: masked
+14:58:50 lua: SAM 184932 (DSC01118.ARW) point 0.900,0.500: masked
+14:58:51 lua: SAM 184936 (DSC01119.ARW) point 0.900,0.500: masked
+14:58:52 lua: SAM 184944 (DSC01121.ARW) point 0.900,0.500: masked
+14:58:53 lua: SAM 184957 (DSC01124.ARW) point 0.900,0.500: masked
+14:58:54 lua: SAM 184966 (DSC01126.ARW) point 0.900,0.900: masked
+14:58:55 lua: SAM 185006 (DSC01136.ARW) point 0.100,0.700: masked
+14:58:56 lua: SAM 185022 (DSC01140.ARW) point 0.100,0.700: masked
+14:58:57 lua: SAM 185026 (DSC01141.ARW) point 0.100,0.700: masked
+14:58:58 lua: SAM 185031 (DSC01142.ARW) point 0.100,0.700: masked
+14:58:59 lua: SAM 185094 (DSC01158.ARW) box 0.789,0.390-0.840,0.482: masked
+14:59:00 lua: SAM 185099 (DSC01159.ARW) box 0.792,0.410-0.845,0.503: masked
+14:59:01 lua: SAM 185034 (DSC01143.ARW) box 0.330,0.637-0.552,0.758: masked
+14:59:02 lua: SAM 185039 (DSC01144.ARW) box 0.281,0.663-0.537,0.787: masked
+14:59:03 lua: SAM 185043 (DSC01145.ARW) box 0.274,0.678-0.519,0.801: masked
+14:59:04 lua: SAM 185046 (DSC01146.ARW) box 0.227,0.680-0.502,0.806: masked
+14:59:05 lua: SAM 185103 (DSC01160.ARW) point 0.900,0.900: masked
+14:59:06 lua: SAM 185114 (DSC01163.ARW) point 0.900,0.900: masked
+14:59:07 lua: SAM 185118 (DSC01164.ARW) point 0.900,0.900: masked
+14:59:08 lua: SAM 185139 (DSC01169.ARW) box 0.406,0.540-0.601,0.671: masked
+14:59:09 lua: SAM 185143 (DSC01170.ARW) point 0.500,0.500: masked
+14:59:10 lua: SAM 185163 (DSC01175.ARW) point 0.300,0.900: masked
+14:59:11 lua: SAM 185178 (DSC01179.ARW) box 0.200,0.547-0.507,0.665: masked
+14:59:12 lua: SAM 185182 (DSC01180.ARW) box 0.233,0.525-0.517,0.643: masked
+14:59:13 lua: SAM 185187 (DSC01181.ARW) box 0.264,0.495-0.525,0.612: masked
+14:59:14 lua: SAM 185190 (DSC01182.ARW) box 0.487,0.492-0.649,0.563: masked
+14:59:15 lua: SAM 185194 (DSC01183.ARW) point 0.900,0.900: masked
+14:59:16 lua: SAM 185222 (DSC01190.ARW) box 0.425,0.473-0.806,0.557: masked
+14:59:17 lua: SAM 185226 (DSC01191.ARW) box 0.430,0.464-0.841,0.552: masked
+14:59:18 lua: SAM 185286 (DSC01206.ARW) box 0.398,0.458-0.902,0.534: masked
+14:59:19 lua: SAM 185298 (DSC01209.ARW) point 0.700,0.300: masked
+14:59:20 lua: SAM 185302 (DSC01210.ARW) box 0.428,0.556-0.603,0.674: masked
+14:59:21 lua: SAM 185333 (DSC01218.ARW) box 0.280,0.585-0.585,0.718: masked
+14:59:22 lua: SAM 185337 (DSC01219.ARW) box 0.246,0.577-0.561,0.712: masked
+14:59:24 lua: SAM 185370 (DSC01227.ARW) box 0.277,0.518-0.588,0.655: masked
+14:59:25 lua: SAM 185374 (DSC01228.ARW) point 0.300,0.900: masked
+14:59:26 lua: SAM 185378 (DSC01229.ARW) box 0.215,0.540-0.549,0.676: masked
+14:59:27 lua: SAM 185394 (DSC01233.ARW) box 0.338,0.543-0.450,0.642: masked
+14:59:28 lua: SAM 185398 (DSC01234.ARW) box 0.299,0.086-0.355,0.185: masked
+14:59:29 lua: SAM 185423 (DSC01240.ARW) box 0.383,0.555-0.516,0.614: masked
+14:59:30 lua: SAM 185438 (DSC01244.ARW) box 0.491,0.559-0.621,0.686: masked
+14:59:31 lua: SAM 185447 (DSC01246.ARW) box 0.465,0.546-0.633,0.671: masked
+14:59:32 lua: SAM 185451 (DSC01247.ARW) box 0.317,0.563-0.599,0.684: masked
+14:59:33 lua: SAM 185463 (DSC01250.ARW) box 0.385,0.548-0.500,0.648: masked
+14:59:34 lua: SAM 185467 (DSC01251.ARW) box 0.392,0.536-0.495,0.630: masked
+14:59:35 lua: SAM 185471 (DSC01252.ARW) box 0.395,0.529-0.500,0.626: masked
+14:59:36 lua: SAM 185487 (DSC01256.ARW) box 0.223,0.551-0.583,0.678: masked
+14:59:37 lua: SAM 185490 (DSC01257.ARW) box 0.247,0.555-0.585,0.678: masked
+14:59:38 lua: SAM 185494 (DSC01258.ARW) box 0.265,0.546-0.595,0.670: masked
+14:59:39 lua: SAM 185526 (DSC01266.ARW) box 0.308,0.483-0.637,0.610: masked
+14:59:40 lua: SAM 185535 (DSC01268.ARW) box 0.276,0.462-0.588,0.586: masked
+14:59:41 lua: SAM 185539 (DSC01269.ARW) box 0.258,0.461-0.537,0.579: masked
+14:59:42 lua: SAM 185542 (DSC01270.ARW) point 0.700,0.300: masked
+14:59:43 lua: SAM 185566 (DSC01276.ARW) box 0.555,0.441-0.656,0.537: masked
+14:59:44 lua: SAM 185570 (DSC01277.ARW) box 0.343,0.528-0.522,0.649: masked
+14:59:45 lua: SAM 185574 (DSC01278.ARW) box 0.354,0.563-0.632,0.690: masked
+14:59:46 lua: SAM 185579 (DSC01279.ARW) box 0.336,0.572-0.639,0.710: masked
+14:59:47 lua: SAM 185599 (DSC01284.ARW) box 0.265,0.542-0.602,0.661: masked
+14:59:48 lua: SAM 185643 (DSC01295.ARW) point 0.300,0.900: masked
+14:59:49 lua: SAM 185648 (DSC01296.ARW) point 0.900,0.500: masked
+14:59:50 lua: SAM 185652 (DSC01297.ARW) point 0.500,0.900: masked
+14:59:51 lua: SAM 185664 (DSC01300.ARW) box 0.339,0.578-0.637,0.720: masked
+14:59:52 lua: SAM 185668 (DSC01301.ARW) box 0.322,0.583-0.635,0.721: masked
+14:59:53 lua: SAM 185672 (DSC01302.ARW) box 0.323,0.575-0.640,0.713: masked
+14:59:54 lua: SAM 185709 (DSC01311.ARW) point 0.900,0.100: masked
+14:59:55 lua: SAM 185712 (DSC01312.ARW) point 0.700,0.500: masked
+14:59:57 lua: SAM 185721 (DSC01314.ARW) point 0.300,0.900: masked
+14:59:58 lua: SAM 185729 (DSC01316.ARW) point 0.500,0.500: masked
+14:59:59 lua: SAM 185733 (DSC01317.ARW) box 0.307,0.544-0.601,0.692: masked
+15:00:00 lua: SAM 185737 (DSC01318.ARW) box 0.289,0.557-0.582,0.703: masked
+15:00:00 lua: SAM 185761 (DSC01324.ARW) box 0.378,0.549-0.608,0.666: masked
+15:00:02 lua: SAM 185765 (DSC01325.ARW) box 0.384,0.527-0.653,0.665: masked
+15:00:03 lua: SAM 185769 (DSC01326.ARW) point 0.300,0.900: masked
+15:00:03 lua: SAM 185789 (DSC01331.ARW) point 0.900,0.100: masked
+15:00:04 lua: SAM 185793 (DSC01332.ARW) point 0.900,0.100: masked
+15:00:05 lua: SAM 185801 (DSC01334.ARW) point 0.300,0.900: masked
+15:00:06 lua: SAM 185813 (DSC01337.ARW) box 0.350,0.477-0.668,0.621: masked
+15:00:07 lua: SAM 185817 (DSC01338.ARW) box 0.347,0.495-0.598,0.627: masked
+15:00:08 lua: SAM 185821 (DSC01339.ARW) box 0.314,0.496-0.590,0.628: masked
+15:00:09 lua: SAM 185833 (DSC01342.ARW) box 0.352,0.515-0.578,0.643: masked
+15:00:10 lua: SAM 185837 (DSC01343.ARW) box 0.330,0.535-0.561,0.658: masked
+15:00:11 lua: SAM 185841 (DSC01344.ARW) box 0.260,0.551-0.525,0.682: masked
+15:00:12 lua: SAM 185878 (DSC01353.ARW) box 0.325,0.556-0.616,0.690: masked
+15:00:13 lua: SAM 185882 (DSC01354.ARW) point 0.300,0.900: masked
+15:00:14 lua: SAM 185886 (DSC01355.ARW) point 0.500,0.900: masked
+15:00:15 lua: SAM 185903 (DSC01359.ARW) box 0.383,0.553-0.569,0.678: masked
+15:00:16 lua: SAM 185915 (DSC01362.ARW) box 0.363,0.565-0.598,0.691: masked
+15:00:17 lua: SAM 185923 (DSC01364.ARW) point 0.700,0.500: masked
+15:00:18 lua: SAM 185952 (DSC01371.ARW) box 0.423,0.506-0.685,0.653: masked
+15:00:20 lua: SAM 185987 (DSC01380.ARW) point 0.300,0.900: masked
+15:00:20 lua: SAM 185991 (DSC01381.ARW) box 0.384,0.580-0.756,0.731: masked
+15:00:22 lua: SAM 186011 (DSC01386.ARW) box 0.194,0.484-0.509,0.618: masked
+15:00:23 lua: SAM 186015 (DSC01387.ARW) box 0.146,0.487-0.442,0.616: masked
+15:00:24 lua: SAM 186030 (DSC01388.ARW) box 0.322,0.566-0.589,0.698: masked
+15:00:25 lua: SAM 186034 (DSC01389.ARW) box 0.315,0.568-0.583,0.698: masked
+15:00:26 lua: SAM 186038 (DSC01390.ARW) box 0.270,0.558-0.572,0.688: masked
+15:00:27 lua: SAM 186046 (DSC01392.ARW) box 0.341,0.127-0.395,0.223: masked
+15:00:28 lua: SAM 186050 (DSC01393.ARW) box 0.434,0.530-0.547,0.614: masked
+15:00:29 lua: SAM 186054 (DSC01394.ARW) box 0.322,0.118-0.375,0.217: masked
+15:00:30 lua: SAM 186066 (DSC01397.ARW) box 0.277,0.451-0.552,0.535: masked
+15:00:31 lua: SAM 186070 (DSC01398.ARW) box 0.227,0.454-0.536,0.537: masked
+15:00:32 lua: SAM 186074 (DSC01399.ARW) box 0.188,0.458-0.513,0.546: masked
+15:00:33 lua: SAM 186110 (DSC01408.ARW) box 0.146,0.474-0.532,0.564: masked
+15:00:34 lua: SAM 186114 (DSC01409.ARW) box 0.131,0.479-0.552,0.571: masked
+15:00:35 lua: SAM 186118 (DSC01410.ARW) point 0.300,0.900: masked
+15:00:36 lua: SAM 186123 (DSC01411.ARW) point 0.500,0.900: masked
+15:00:37 lua: SAM 186175 (DSC01424.ARW) point 0.700,0.900: masked
+15:00:38 lua: SAM 186183 (DSC01426.ARW) box 0.179,0.493-0.668,0.579: masked
+15:00:39 lua: SAM 186250 (DSC01443.ARW) box 0.327,0.480-0.727,0.561: masked
+15:00:40 lua: SAM 186253 (DSC01444.ARW) box 0.307,0.470-0.680,0.547: masked
+15:00:41 lua: SAM 186257 (DSC01445.ARW) box 0.243,0.474-0.600,0.546: masked
+15:00:43 lua: SAM 186289 (DSC01453.ARW) box 0.165,0.459-0.619,0.554: masked
+15:00:44 lua: SAM 186294 (DSC01454.ARW) box 0.155,0.458-0.639,0.556: masked
+15:00:45 lua: SAM 186305 (DSC01457.ARW) box 0.028,0.462-0.521,0.547: masked
+15:00:46 lua: SAM 186339 (DSC01465.ARW) box 0.446,0.422-0.762,0.506: masked
+15:00:47 lua: SAM 186342 (DSC01466.ARW) box 0.428,0.407-0.761,0.486: masked
+15:00:48 lua: SAM 186346 (DSC01467.ARW) box 0.378,0.416-0.742,0.501: masked
+15:00:49 lua: SAM 186350 (DSC01468.ARW) box 0.669,0.465-0.842,0.504: masked
+15:00:50 lua: SAM 186383 (DSC01476.ARW) box 0.506,0.547-0.702,0.602: masked
+15:00:51 lua: SAM 186387 (DSC01477.ARW) box 0.001,0.473-0.185,0.512: masked
+15:00:52 lua: SAM 186407 (DSC01482.ARW) box 0.148,0.443-0.546,0.533: masked
+15:00:53 lua: SAM 186414 (DSC01484.ARW) box 0.131,0.440-0.599,0.540: masked
+15:00:54 lua: SAM 186418 (DSC01485.ARW) box 0.137,0.468-0.627,0.558: masked
+15:00:55 lua: SAM 186422 (DSC01486.ARW) box 0.146,0.469-0.657,0.559: masked
+15:00:56 lua: SAM 186479 (DSC01494.ARW) box 0.264,0.450-0.587,0.536: masked
+15:00:58 lua: SAM 186484 (DSC01495.ARW) box 0.220,0.462-0.581,0.550: masked
+15:00:59 lua: SAM 186499 (DSC01499.ARW) box 0.019,0.464-0.453,0.553: masked
+15:01:00 lua: SAM 186524 (DSC01505.ARW) box 0.223,0.500-0.627,0.587: masked
+15:01:01 lua: SAM 186532 (DSC01507.ARW) box 0.722,0.322-0.966,0.386: masked
+15:01:02 lua: SAM 186536 (DSC01508.ARW) box 0.243,0.498-0.740,0.594: masked
+15:01:03 lua: SAM 186563 (DSC01515.ARW) point 0.100,0.900: masked
+15:01:04 lua: SAM 186571 (DSC01517.ARW) box 0.097,0.494-0.567,0.580: masked
+15:01:05 lua: SAM 186576 (DSC01518.ARW) point 0.700,0.900: masked
+15:01:06 lua: SAM 186585 (DSC01520.ARW) box 0.331,0.147-0.414,0.213: masked
+15:01:07 lua: SAM 186589 (DSC01521.ARW) box 0.341,0.153-0.425,0.222: masked
+15:01:08 lua: SAM 186604 (DSC01525.ARW) box 0.420,0.422-0.618,0.479: masked
+15:01:09 lua: SAM 186616 (DSC01528.ARW) box 0.287,0.497-0.691,0.578: masked
+15:01:10 lua: SAM 186620 (DSC01529.ARW) box 0.259,0.495-0.725,0.574: masked
+15:01:11 lua: SAM 186625 (DSC01530.ARW) box 0.290,0.499-0.739,0.579: masked
+15:01:12 lua: SAM 186652 (DSC01537.ARW) box 0.226,0.455-0.704,0.550: masked
+15:01:13 lua: SAM 186656 (DSC01538.ARW) box 0.243,0.470-0.751,0.560: masked
+15:01:17 lua: SAM 186660 (DSC01539.ARW) box 0.284,0.483-0.796,0.570: masked
+15:01:18 lua: SAM 186701 (DSC01549.ARW) box 0.289,0.482-0.783,0.564: masked
+15:01:19 lua: SAM 186721 (DSC01554.ARW) box 0.246,0.325-0.471,0.384: masked
+15:01:20 lua: SAM 186733 (DSC01557.ARW) box 0.712,0.316-0.929,0.380: masked
+15:01:21 lua: SAM 186737 (DSC01558.ARW) box 0.773,0.324-0.989,0.391: masked
+15:01:22 lua: SAM 186753 (DSC01562.ARW) box 0.113,0.505-0.577,0.594: masked
+15:01:23 lua: SAM 186786 (DSC01570.ARW) box 0.332,0.514-0.543,0.585: masked
+15:01:24 lua: SAM 186789 (DSC01571.ARW) box 0.319,0.510-0.513,0.578: masked
+15:01:25 lua: SAM 186794 (DSC01572.ARW) box 0.209,0.157-0.289,0.222: masked
+15:01:26 lua: SAM 186797 (DSC01573.ARW) point 0.700,0.900: masked
+15:01:27 lua: SAM 186802 (DSC01574.ARW) box 0.000,0.481-0.488,0.562: masked
+15:01:28 lua: SAM 186822 (DSC01579.ARW) point 0.300,0.900: masked
+15:01:29 lua: SAM 186826 (DSC01580.ARW) box 0.011,0.550-0.450,0.637: masked
+15:01:30 lua: SAM 186829 (DSC01581.ARW) point 0.300,0.900: masked
+15:01:31 lua: SAM 186840 (DSC01584.ARW) point 0.900,0.900: masked
+15:01:32 lua: SAM 186853 (DSC01587.ARW) point 0.700,0.900: masked
+15:01:33 lua: SAM 186857 (DSC01588.ARW) box 0.126,0.506-0.560,0.603: masked
+15:01:35 lua: SAM 186880 (DSC01594.ARW) box 0.234,0.499-0.586,0.582: masked
+15:01:35 lua: SAM 186884 (DSC01595.ARW) box 0.200,0.501-0.575,0.586: masked
+15:01:36 lua: SAM 186888 (DSC01596.ARW) box 0.126,0.503-0.541,0.588: masked
+15:01:38 lua: SAM 186893 (DSC01598.ARW) box 0.311,0.538-0.615,0.626: masked
+15:01:39 lua: SAM 186895 (DSC01599.ARW) box 0.397,0.403-0.580,0.470: masked
+15:01:39 lua: SAM 186897 (DSC01600.ARW) box 0.504,0.397-0.684,0.464: masked
+15:01:40 lua: SAM 186903 (DSC01603.ARW) point 0.300,0.100: masked
+15:01:42 lua: SAM 186905 (DSC01604.ARW) point 0.300,0.100: masked
+15:01:43 lua: SAM 186907 (DSC01605.ARW) point 0.700,0.500: masked
+15:01:44 lua: SAM 186917 (DSC01610.ARW) box 0.327,0.475-0.641,0.601: masked
+15:01:45 lua: SAM 186921 (DSC01611.ARW) box 0.288,0.470-0.620,0.597: masked
+15:01:46 lua: SAM 186978 (DSC01625.ARW) box 0.438,0.374-0.726,0.494: masked
+15:01:47 lua: SAM 186982 (DSC01626.ARW) box 0.401,0.386-0.683,0.502: masked
+15:01:48 lua: SAM 189154 (DSC02171.ARW) box 0.310,0.456-0.609,0.611: masked
+15:01:49 lua: SAM 189175 (DSC02176.ARW) box 0.231,0.451-0.582,0.577: masked
+15:01:50 lua: SAM 189187 (DSC02179.ARW) box 0.228,0.435-0.590,0.555: masked
+15:01:51 lua: SAM 189191 (DSC02180.ARW) box 0.223,0.426-0.594,0.547: masked
+15:01:52 lua: SAM 189219 (DSC02187.ARW) box 0.220,0.488-0.592,0.611: masked
+15:01:53 lua: SAM 189223 (DSC02188.ARW) point 0.500,0.900: masked
+15:01:54 lua: SAM 189227 (DSC02189.ARW) box 0.257,0.477-0.630,0.596: masked
+15:01:55 lua: SAM 189235 (DSC02191.ARW) box 0.286,0.469-0.642,0.587: masked
+15:01:56 lua: SAM 189274 (DSC02201.ARW) box 0.356,0.482-0.665,0.622: masked
+15:01:57 lua: SAM 189278 (DSC02202.ARW) point 0.500,0.500: masked
+15:01:58 lua: SAM 189282 (DSC02203.ARW) box 0.334,0.485-0.668,0.622: masked
+15:01:59 lua: SAM 189287 (DSC02204.ARW) box 0.347,0.476-0.689,0.610: masked
+15:02:00 lua: SAM 189307 (DSC02209.ARW) box 0.344,0.488-0.627,0.632: masked
+15:02:01 lua: SAM 189311 (DSC02210.ARW) box 0.367,0.473-0.676,0.623: masked
+15:02:02 lua: SAM 189314 (DSC02211.ARW) box 0.373,0.484-0.689,0.620: masked
+15:02:03 lua: SAM 189384 (DSC02228.ARW) box 0.284,0.460-0.583,0.580: masked
+15:02:04 lua: SAM 189388 (DSC02229.ARW) box 0.317,0.471-0.620,0.591: masked
+15:02:05 lua: SAM 189400 (DSC02232.ARW) box 0.318,0.547-0.652,0.686: masked
+15:02:06 lua: SAM 189403 (DSC02233.ARW) box 0.307,0.550-0.656,0.688: masked
+15:02:07 lua: SAM 189408 (DSC02234.ARW) box 0.290,0.560-0.648,0.693: masked
+15:02:08 lua: SAM 189435 (DSC02241.ARW) box 0.238,0.554-0.600,0.664: masked
+15:02:09 lua: SAM 189463 (DSC02248.ARW) box 0.294,0.525-0.577,0.657: masked
+15:02:10 lua: SAM 189483 (DSC02253.ARW) box 0.242,0.509-0.590,0.644: masked
+15:02:11 lua: SAM 189487 (DSC02254.ARW) box 0.216,0.508-0.573,0.643: masked
+15:02:12 lua: SAM 189514 (DSC02261.ARW) point 0.700,0.100: masked
+15:02:13 lua: SAM 189518 (DSC02262.ARW) box 0.393,0.565-0.567,0.687: masked
+15:02:14 lua: SAM 189522 (DSC02263.ARW) box 0.335,0.580-0.527,0.711: masked
+15:02:16 lua: SAM 189550 (DSC02270.ARW) point 0.900,0.900: masked
+15:02:16 lua: SAM 189554 (DSC02271.ARW) point 0.900,0.900: masked
+15:02:18 lua: SAM 189557 (DSC02272.ARW) point 0.900,0.900: masked
+15:02:19 lua: SAM 189594 (DSC02281.ARW) point 0.900,0.900: masked
+15:02:20 lua: SAM 189598 (DSC02282.ARW) box 0.174,0.504-0.617,0.602: masked
+15:02:21 lua: SAM 189602 (DSC02283.ARW) box 0.168,0.507-0.641,0.606: masked
+15:02:22 lua: SAM 189610 (DSC02285.ARW) box 0.184,0.521-0.683,0.610: masked
+15:02:23 lua: SAM 189658 (DSC02297.ARW) box 0.233,0.496-0.619,0.586: masked
+15:02:24 lua: SAM 189667 (DSC02299.ARW) box 0.220,0.523-0.699,0.621: masked
+15:02:25 lua: SAM 189671 (DSC02300.ARW) box 0.213,0.530-0.663,0.628: masked
+15:02:26 lua: SAM 189675 (DSC02301.ARW) box 0.114,0.525-0.621,0.621: masked
+15:02:27 lua: SAM 189715 (DSC02311.ARW) box 0.231,0.510-0.670,0.601: masked
+15:02:28 lua: SAM 189719 (DSC02312.ARW) box 0.250,0.513-0.691,0.603: masked
+15:02:29 lua: SAM 189804 (DSC02333.ARW) box 0.265,0.497-0.658,0.574: masked
+15:02:30 lua: SAM 189811 (DSC02335.ARW) box 0.250,0.476-0.574,0.550: masked
+15:02:31 lua: SAM 189815 (DSC02336.ARW) box 0.035,0.121-0.119,0.185: masked
+15:02:32 lua: SAM 189836 (DSC02341.ARW) point 0.300,0.900: masked
+15:02:33 lua: SAM 189840 (DSC02342.ARW) box 0.202,0.509-0.651,0.602: masked
+15:02:34 lua: SAM 189843 (DSC02343.ARW) box 0.183,0.510-0.655,0.602: masked
+15:02:35 lua: SAM 189847 (DSC02344.ARW) box 0.170,0.496-0.663,0.598: masked
+15:02:36 lua: SAM 189896 (DSC02356.ARW) point 0.300,0.900: masked
+15:02:38 lua: SAM 189900 (DSC02357.ARW) point 0.500,0.900: masked
+15:02:39 lua: SAM 189904 (DSC02358.ARW) box 0.399,0.489-0.823,0.586: masked
+15:02:40 lua: SAM 189916 (DSC02361.ARW) box 0.322,0.508-0.835,0.607: masked
+15:02:41 lua: SAM 189945 (DSC02368.ARW) box 0.319,0.515-0.693,0.645: masked
+15:02:42 lua: SAM 189961 (DSC02372.ARW) box 0.320,0.494-0.682,0.617: masked
+15:02:43 lua: SAM 189965 (DSC02373.ARW) box 0.331,0.490-0.689,0.616: masked
+15:02:44 lua: SAM 189981 (DSC02377.ARW) box 0.350,0.492-0.630,0.638: masked
+15:02:45 lua: SAM 189992 (DSC02380.ARW) box 0.292,0.521-0.581,0.662: masked
+15:02:46 lua: SAM 189996 (DSC02381.ARW) box 0.264,0.527-0.589,0.674: masked
+15:02:47 lua: SAM 190004 (DSC02383.ARW) box 0.269,0.542-0.604,0.676: masked
+15:02:48 lua: SAM 190045 (DSC02393.ARW) box 0.348,0.468-0.622,0.607: masked
+15:02:49 lua: SAM 190049 (DSC02394.ARW) box 0.349,0.462-0.639,0.605: masked
+15:02:50 lua: SAM 190052 (DSC02395.ARW) box 0.339,0.465-0.669,0.606: masked
+15:02:51 lua: SAM 190060 (DSC02397.ARW) box 0.337,0.497-0.677,0.638: masked
+15:02:52 lua: SAM 190121 (DSC02412.ARW) box 0.415,0.468-0.699,0.609: masked
+15:02:53 lua: SAM 190128 (DSC02414.ARW) box 0.404,0.478-0.740,0.615: masked
+15:02:54 lua: SAM 190136 (DSC02416.ARW) box 0.419,0.454-0.729,0.589: masked
+15:02:55 lua: SAM 190148 (DSC02419.ARW) box 0.382,0.457-0.721,0.583: masked
+15:02:56 lua: SAM 190172 (DSC02425.ARW) box 0.292,0.555-0.668,0.681: masked
+15:02:57 lua: SAM 190176 (DSC02426.ARW) point 0.500,0.700: masked
+15:02:58 lua: SAM 190181 (DSC02427.ARW) point 0.500,0.700: masked
+15:02:59 lua: SAM 190193 (DSC02430.ARW) box 0.345,0.523-0.620,0.665: masked
+15:03:00 lua: SAM 190197 (DSC02431.ARW) box 0.346,0.534-0.624,0.665: masked
+15:03:01 lua: SAM 190204 (DSC02433.ARW) box 0.341,0.523-0.655,0.667: masked
+15:03:02 lua: SAM 190208 (DSC02434.ARW) box 0.338,0.545-0.674,0.680: masked
+15:03:03 lua: SAM 190248 (DSC02444.ARW) box 0.442,0.461-0.590,0.573: masked
+15:03:04 lua: SAM 190252 (DSC02445.ARW) box 0.413,0.468-0.608,0.581: masked
+15:03:05 lua: SAM 190259 (DSC02447.ARW) box 0.399,0.469-0.630,0.591: masked
+15:03:06 lua: SAM 190283 (DSC02453.ARW) box 0.415,0.492-0.615,0.615: masked
+15:03:07 lua: SAM 190345 (DSC02468.ARW) box 0.337,0.459-0.682,0.581: masked
+15:03:09 lua: SAM 190349 (DSC02469.ARW) box 0.338,0.462-0.681,0.584: masked
+15:03:10 lua: SAM 190353 (DSC02470.ARW) box 0.347,0.459-0.681,0.582: masked
+15:03:11 lua: SAM 190357 (DSC02471.ARW) box 0.376,0.421-0.661,0.544: masked
+15:03:12 lua: SAM 190361 (DSC02472.ARW) box 0.460,0.477-0.629,0.586: masked
+15:03:13 lua: SAM 190365 (DSC02473.ARW) box 0.440,0.474-0.633,0.585: masked
+15:03:13 lua: SAM 190378 (DSC02476.ARW) box 0.383,0.475-0.642,0.608: masked
+15:03:14 lua: SAM 190462 (DSC02497.ARW) box 0.392,0.478-0.676,0.582: masked
+15:03:15 lua: SAM 190465 (DSC02498.ARW) box 0.409,0.475-0.675,0.575: masked
+15:03:16 lua: SAM 190469 (DSC02499.ARW) box 0.409,0.460-0.662,0.564: masked
+15:03:18 lua: SAM 190473 (DSC02500.ARW) box 0.400,0.448-0.640,0.549: masked
+15:03:18 lua: SAM 190477 (DSC02501.ARW) box 0.402,0.459-0.625,0.556: masked
+15:03:20 lua: SAM 190516 (DSC02510.ARW) box 0.341,0.567-0.638,0.707: masked
+15:03:21 lua: SAM 190520 (DSC02511.ARW) box 0.302,0.572-0.623,0.708: masked
+15:03:22 lua: SAM 190527 (DSC02513.ARW) point 0.700,0.900: masked
+15:03:23 lua: SAM 190535 (DSC02515.ARW) box 0.262,0.577-0.639,0.718: masked
+15:03:24 lua: SAM 190567 (DSC02523.ARW) point 0.900,0.900: masked
+15:03:25 lua: SAM 190571 (DSC02524.ARW) point 0.500,0.500: masked
+15:03:26 lua: SAM 190575 (DSC02525.ARW) point 0.500,0.500: masked
+15:03:27 lua: SAM 190587 (DSC02528.ARW) point 0.700,0.900: masked
+15:03:28 lua: SAM 190611 (DSC02534.ARW) box 0.286,0.472-0.687,0.561: masked
+15:03:29 lua: SAM 190615 (DSC02535.ARW) box 0.280,0.474-0.706,0.566: masked
+15:03:30 lua: SAM 190619 (DSC02536.ARW) box 0.267,0.485-0.719,0.573: masked
+15:03:31 lua: SAM 190639 (DSC02541.ARW) point 0.900,0.900: masked
+15:03:32 lua: SAM 190643 (DSC02542.ARW) box 0.414,0.430-0.606,0.505: masked
+15:03:33 lua: SAM 190672 (DSC02549.ARW) box 0.124,0.499-0.605,0.598: masked
+15:03:34 lua: SAM 190728 (DSC02563.ARW) point 0.900,0.900: masked
+15:03:35 lua: SAM 190733 (DSC02564.ARW) point 0.900,0.900: masked
+15:03:36 lua: SAM 190742 (DSC02566.ARW) point 0.500,0.500: masked
+15:03:37 lua: SAM 190746 (DSC02567.ARW) point 0.500,0.500: masked
+15:03:38 lua: SAM 190750 (DSC02568.ARW) point 0.700,0.500: masked
+15:03:39 lua: SAM 190778 (DSC02575.ARW) point 0.500,0.500: masked
+15:03:40 lua: SAM 190782 (DSC02576.ARW) box 0.148,0.502-0.643,0.593: masked
+15:03:41 lua: SAM 190786 (DSC02577.ARW) box 0.149,0.507-0.652,0.595: masked
+15:03:42 lua: SAM 190806 (DSC02582.ARW) box 0.219,0.519-0.619,0.609: masked
+15:03:43 lua: SAM 190818 (DSC02585.ARW) point 0.100,0.900: masked
+15:03:44 lua: SAM 190822 (DSC02586.ARW) point 0.300,0.900: masked
+15:03:45 lua: SAM 190854 (DSC02594.ARW) box 0.223,0.464-0.652,0.559: masked
+15:03:47 lua: SAM 190858 (DSC02595.ARW) point 0.500,0.500: masked
+15:03:48 lua: SAM 190862 (DSC02596.ARW) point 0.500,0.500: masked
+15:03:49 lua: SAM 190866 (DSC02597.ARW) box 0.169,0.512-0.682,0.599: masked
+15:03:50 lua: SAM 190902 (DSC02606.ARW) box 0.209,0.521-0.679,0.615: masked
+15:03:51 lua: SAM 190907 (DSC02607.ARW) box 0.251,0.536-0.679,0.618: masked
+15:03:52 lua: SAM 190911 (DSC02608.ARW) box 0.238,0.544-0.698,0.628: masked
+15:03:53 lua: SAM 190914 (DSC02609.ARW) box 0.243,0.551-0.712,0.635: masked
+15:03:54 lua: SAM 190959 (DSC02620.ARW) point 0.500,0.500: masked
+15:03:55 lua: SAM 190964 (DSC02621.ARW) box 0.153,0.539-0.651,0.625: masked
+15:03:56 lua: SAM 190967 (DSC02622.ARW) box 0.143,0.540-0.682,0.628: masked
+15:03:57 lua: SAM 190971 (DSC02623.ARW) point 0.900,0.900: masked
+15:03:58 lua: SAM 191007 (DSC02632.ARW) point 0.300,0.900: masked
+15:03:59 lua: SAM 191011 (DSC02633.ARW) point 0.500,0.900: masked
+15:04:00 lua: SAM 191015 (DSC02634.ARW) point 0.500,0.500: masked
+15:04:01 lua: SAM 191030 (DSC02638.ARW) point 0.300,0.900: masked
+15:04:02 lua: SAM 191086 (DSC02652.ARW) box 0.208,0.476-0.573,0.556: masked
+15:04:03 lua: SAM 191090 (DSC02653.ARW) box 0.004,0.099-0.084,0.163: masked
+15:04:04 lua: SAM 191094 (DSC02654.ARW) box 0.031,0.110-0.117,0.173: masked
+15:04:05 lua: SAM 191102 (DSC02656.ARW) point 0.900,0.900: masked
+15:04:06 lua: SAM 191110 (DSC02658.ARW) point 0.100,0.900: masked
+15:04:07 lua: SAM 191114 (DSC02659.ARW) point 0.300,0.900: masked
+15:04:08 lua: SAM 191118 (DSC02660.ARW) point 0.100,0.900: masked
+15:04:09 lua: SAM 191166 (DSC02672.ARW) box 0.179,0.470-0.597,0.559: masked
+15:04:10 lua: SAM 191170 (DSC02673.ARW) box 0.173,0.475-0.640,0.564: masked
+15:04:11 lua: SAM 191174 (DSC02674.ARW) box 0.147,0.493-0.625,0.582: masked
+15:04:12 lua: SAM 191178 (DSC02675.ARW) box 0.129,0.503-0.608,0.587: masked
+15:04:13 lua: SAM 191266 (DSC02697.ARW) box 0.248,0.479-0.721,0.576: masked
+15:04:15 lua: SAM 191281 (DSC02701.ARW) box 0.225,0.501-0.757,0.593: masked
+15:04:16 lua: SAM 191286 (DSC02702.ARW) box 0.212,0.503-0.754,0.595: masked
+15:04:17 lua: SAM 191290 (DSC02703.ARW) box 0.176,0.511-0.730,0.600: masked
+15:04:18 lua: SAM 191294 (DSC02704.ARW) box 0.151,0.520-0.725,0.607: masked
+15:04:19 lua: SAM 191322 (DSC02711.ARW) box 0.151,0.522-0.589,0.611: masked
+15:04:20 lua: SAM 191326 (DSC02712.ARW) box 0.135,0.533-0.599,0.628: masked
+15:04:21 lua: SAM 191330 (DSC02713.ARW) point 0.500,0.500: masked
+15:04:22 lua: SAM 191334 (DSC02714.ARW) box 0.141,0.548-0.616,0.637: masked
+15:04:23 lua: SAM 191338 (DSC02715.ARW) box 0.148,0.566-0.642,0.652: masked
+15:04:24 lua: SAM 191403 (DSC02731.ARW) box 0.270,0.503-0.612,0.585: masked
+15:04:25 lua: SAM 191411 (DSC02733.ARW) point 0.100,0.900: masked
+15:04:26 lua: SAM 191414 (DSC02734.ARW) box 0.248,0.546-0.670,0.632: masked
+15:04:27 lua: SAM 191418 (DSC02735.ARW) box 0.357,0.552-0.703,0.635: masked
+15:04:28 lua: SAM 191468 (DSC02747.ARW) point 0.100,0.900: masked
+15:04:29 lua: SAM 191472 (DSC02748.ARW) box 0.270,0.507-0.699,0.595: masked
+15:04:30 lua: SAM 191476 (DSC02749.ARW) box 0.276,0.509-0.719,0.598: masked
+15:04:31 lua: SAM 191480 (DSC02750.ARW) point 0.500,0.900: masked
+15:04:32 lua: SAM 191484 (DSC02751.ARW) point 0.700,0.900: masked
+15:04:33 lua: SAM 191560 (DSC02770.ARW) box 0.241,0.512-0.649,0.604: masked
+15:04:35 lua: SAM 191573 (DSC02773.ARW) box 0.239,0.498-0.669,0.585: masked
+15:04:36 lua: SAM 191577 (DSC02774.ARW) box 0.102,0.521-0.602,0.609: masked
+15:04:37 lua: SAM 191607 (DSC02782.ARW) box 0.300,0.481-0.751,0.577: masked
+15:04:38 lua: SAM 191611 (DSC02783.ARW) point 0.500,0.700: masked
+15:04:39 lua: SAM 191615 (DSC02784.ARW) box 0.285,0.514-0.787,0.604: masked
+15:04:40 lua: SAM 191627 (DSC02787.ARW) box 0.249,0.503-0.799,0.586: masked
+15:04:41 lua: SAM 191651 (DSC02793.ARW) point 0.500,0.500: masked
+15:04:42 lua: SAM 191655 (DSC02794.ARW) box 0.312,0.474-0.659,0.605: masked
+15:04:43 lua: SAM 191659 (DSC02795.ARW) box 0.293,0.478-0.652,0.607: masked
+15:04:44 lua: SAM 191688 (DSC02802.ARW) box 0.424,0.498-0.662,0.628: masked
+15:04:45 lua: SAM 191692 (DSC02803.ARW) point 0.700,0.500: masked
+15:04:46 lua: SAM 191696 (DSC02804.ARW) box 0.400,0.511-0.671,0.642: masked
+15:04:47 lua: SAM 191741 (DSC02815.ARW) box 0.258,0.505-0.636,0.635: masked
+15:04:48 lua: SAM 191745 (DSC02816.ARW) box 0.250,0.504-0.629,0.623: masked
+15:04:49 lua: SAM 191782 (DSC02825.ARW) box 0.390,0.448-0.678,0.569: masked
+15:04:50 lua: SAM 191786 (DSC02826.ARW) box 0.391,0.451-0.654,0.566: masked
+15:04:51 lua: SAM 191790 (DSC02827.ARW) box 0.455,0.505-0.678,0.634: masked
+15:04:52 lua: SAM 191802 (DSC02830.ARW) box 0.486,0.549-0.767,0.683: masked
+15:04:53 lua: SAM 191815 (DSC02833.ARW) box 0.428,0.551-0.770,0.691: masked
+15:04:54 lua: SAM 191830 (DSC02837.ARW) point 0.900,0.900: masked
+15:04:55 lua: SAM 191834 (DSC02838.ARW) point 0.900,0.900: masked
+15:04:56 lua: SAM 191838 (DSC02839.ARW) point 0.900,0.900: masked
+15:04:59 lua: SAM 191842 (DSC02840.ARW) point 0.700,0.900: masked
+15:05:00 lua: SAM 191846 (DSC02841.ARW) point 0.900,0.900: masked
+15:05:01 lua: SAM 191859 (DSC02844.ARW) box 0.385,0.604-0.471,0.645: masked
+15:05:02 lua: SAM 191866 (DSC02846.ARW) point 0.900,0.900: masked
+15:05:03 lua: SAM 191870 (DSC02847.ARW) point 0.900,0.900: masked
+15:05:04 lua: SAM 191874 (DSC02848.ARW) box 0.463,0.541-0.530,0.590: masked
+15:05:05 lua: SAM 191882 (DSC02850.ARW) point 0.500,0.500: masked
+15:05:09 lua: SAM 191887 (DSC02851.ARW) point 0.500,0.500: masked
+15:05:10 lua: SAM 191891 (DSC02852.ARW) box 0.496,0.637-0.561,0.679: masked
+15:05:11 lua: SAM 191902 (DSC02855.ARW) point 0.900,0.900: masked
+15:05:12 lua: SAM 191907 (DSC02856.ARW) point 0.900,0.900: masked
+15:05:13 lua: SAM 191919 (DSC02859.ARW) point 0.900,0.900: masked
+15:05:14 lua: SAM 191923 (DSC02860.ARW) point 0.700,0.700: masked
+15:05:15 lua: SAM 191927 (DSC02861.ARW) point 0.700,0.700: masked
+15:05:16 lua: SAM 191935 (DSC02863.ARW) point 0.700,0.700: masked
+15:05:17 lua: SAM 191939 (DSC02864.ARW) point 0.900,0.900: masked
+15:05:18 lua: SAM 191942 (DSC02865.ARW) point 0.900,0.900: masked
+15:05:19 lua: SAM 191946 (DSC02866.ARW) point 0.900,0.900: masked
+15:05:20 lua: SAM 191958 (DSC02869.ARW) box 0.477,0.601-0.589,0.674: masked
+15:05:21 lua: SAM 191962 (DSC02870.ARW) box 0.459,0.606-0.579,0.680: masked
+15:05:22 lua: SAM 191966 (DSC02871.ARW) point 0.900,0.900: masked
+15:05:23 lua: SAM 192014 (DSC02883.ARW) box 0.386,0.340-0.418,0.386: masked
+15:05:24 lua: SAM 192018 (DSC02884.ARW) point 0.100,0.500: masked
+15:05:25 lua: SAM 192022 (DSC02885.ARW) point 0.100,0.500: masked
+15:05:26 lua: SAM 192026 (DSC02886.ARW) box 0.483,0.604-0.584,0.672: masked
+15:05:27 lua: SAM 192030 (DSC02887.ARW) box 0.473,0.623-0.582,0.695: masked
+15:05:28 lua: SAM 192033 (DSC02888.ARW) box 0.466,0.629-0.586,0.704: masked
+15:05:29 lua: SAM 192054 (DSC02893.ARW) point 0.900,0.500: masked
+15:05:30 lua: SAM 192058 (DSC02894.ARW) point 0.700,0.900: masked
+15:05:31 lua: SAM 192081 (DSC02900.ARW) point 0.300,0.900: masked
+15:05:32 lua: SAM 192117 (DSC02909.ARW) point 0.900,0.500: masked
+15:05:33 lua: SAM 192122 (DSC02910.ARW) point 0.100,0.500: masked
+15:05:34 lua: SAM 192126 (DSC02911.ARW) point 0.100,0.500: masked
+15:05:35 lua: SAM 192130 (DSC02912.ARW) box 0.496,0.666-0.574,0.720: masked
+15:05:36 lua: scoring: "C:\Users\Louis\Pictures\DarkTable\Settings\Plugins\darktable-assisted-culling\.venv\Scripts\python.exe" -u "C:\Users\Louis\Pictures\DarkTable\Settings\Plugins\darktable-assisted-culling\python\score_images.py" "C:\Users\Louis\AppData\Local\Temp/dt_assisted_culling_manifest.csv" "C:\Users\Louis\AppData\Local\Temp/dt_assisted_culling_results.csv" --progress "C:\Users\Louis\AppData\Local\Temp/dt_assisted_culling_progress.txt" --rank-mode "universal" --sharp-mode "sam_subject" --exp-mode "whole_frame" --keep-mode "dynamic_burst" --nk-mode "0" --tag-only-flags "" --prescores "C:\Users\Louis\AppData\Local\Temp/dt_assisted_culling_prescores.csv" --sam-model "mask-object-sam21-small" --cache "C:\Users\Louis\AppData\Local\darktable/assisted_culling/scores.sqlite" 2>> "C:\Users\Louis\AppData\Local\darktable/assisted_culling.log"
+15:05:39 py: scoring: 1589 frames in 143 bursts, 1098 from cache or stage A, 491 to decode, sharpness sam_subject
+15:05:39 py: burst 1: 9 of 9 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 183618, 183613, 183609
+15:05:39 py: burst 2: 5 of 5 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 183650, 183658
+15:05:39 py: burst 3: 9 of 9 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 183682, 183670, 183690
+15:05:39 py: burst 4: 6 of 6 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 183699, 183715
+15:05:39 py: burst 6: 12 of 12 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 183788, 183792, 183796
+15:05:39 py: burst 5: 15 of 15 frames scored, mode sam_subject, masked 4 of 4 shortlisted, keepers 183763, 183751, 183755, 183759
+15:05:40 py: burst 7: 13 of 13 frames scored, mode sam_subject, masked 4 of 4 shortlisted, keepers 183876, 183872, 183864, 183868
+15:05:40 py: burst 8: 6 of 6 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 183888, 183900
+15:05:40 py: burst 10: 9 of 9 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 183960, 183947, 183952
+15:05:40 py: burst 11: 23 of 23 frames scored, mode sam_subject, masked 5 of 5 shortlisted, keepers 184040, 184044, 184051, 184055, 184060
+15:05:40 py: burst 9: 7 of 7 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 183915, 183912
+15:05:40 py: burst 12: 7 of 7 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 184064, 184084
+15:05:40 py: burst 13: 12 of 12 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 184092, 184123, 184096
+15:05:40 py: burst 14: 4 of 4 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 184143
+15:05:40 py: burst 15: 11 of 11 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 184168, 184159, 184163
+15:05:40 py: burst 17: 6 of 6 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 184256, 184245
+15:05:40 py: burst 18: 10 of 10 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 184277, 184273, 184269
+15:05:40 py: burst 19: 10 of 10 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 184316, 184329, 184333
+15:05:40 py: burst 16: 9 of 9 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 184204, 184200, 184216
+15:05:40 py: burst 20: 5 of 5 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 184345, 184352
+15:05:40 py: burst 21: 7 of 7 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 184380, 184376
+15:05:40 py: burst 22: 11 of 11 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 184404, 184412, 184408
+15:05:40 py: burst 23: 17 of 17 frames scored, mode sam_subject, masked 4 of 4 shortlisted, keepers 184445, 184454, 184465, 184449
+15:05:40 py: burst 24: 7 of 7 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 184501, 184508
+15:05:40 py: burst 25: 25 of 25 frames scored, mode sam_subject, masked 5 of 5 shortlisted, keepers 184544, 184594, 184597, 184582, 184586
+15:05:40 py: burst 26: 15 of 15 frames scored, mode sam_subject, masked 4 of 4 shortlisted, keepers 184630, 184637, 184641, 184634
+15:05:40 py: burst 28: 9 of 9 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 184749, 184745, 184752
+15:05:40 py: burst 27: 10 of 10 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 184718, 184710, 184714
+15:05:40 py: burst 29: 7 of 7 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 184784, 184788
+15:05:41 py: burst 30: 9 of 9 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 184796, 184800, 184804
+15:05:41 py: burst 31: 7 of 7 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 184831, 184828
+15:05:41 py: burst 32: 8 of 8 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 184881, 184860
+15:05:41 py: burst 33: 20 of 20 frames scored, mode sam_subject, masked 5 of 5 shortlisted, keepers 184957, 184966, 184932, 184936, 184944
+15:05:41 py: burst 34: 16 of 16 frames scored, mode sam_subject, masked 4 of 4 shortlisted, keepers 185031, 185026, 185022, 185006
+15:05:41 py: burst 35: 15 of 15 frames scored, mode sam_subject, masked 4 of 4 shortlisted, keepers 185034, 185039, 185046, 185043
+15:05:41 py: burst 36: 2 of 2 frames scored, mode sam_subject, masked 2 of 2 shortlisted, keepers 185099
+15:05:41 py: burst 37: 9 of 9 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 185114, 185118, 185103
+15:05:41 py: burst 38: 7 of 7 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 185139, 185163
+15:05:41 py: burst 39: 6 of 6 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 185178, 185182
+15:05:41 py: burst 41: 14 of 14 frames scored, mode sam_subject, masked 4 of 4 shortlisted, keepers 185337, 185333, 185302, 185298
+15:05:41 py: burst 40: 26 of 26 frames scored, mode sam_subject, masked 5 of 5 shortlisted, keepers 185190, 185226, 185222, 185286, 185194
+15:05:41 py: burst 42: 11 of 11 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 185374, 185378, 185370
+15:05:41 py: burst 43: 10 of 10 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 185394, 185423, 185398
+15:05:41 py: burst 44: 7 of 7 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 185438, 185447
+15:05:41 py: burst 45: 4 of 4 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 185471
+15:05:41 py: burst 46: 6 of 6 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 185487, 185490
+15:05:41 py: burst 47: 10 of 10 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 185539, 185526, 185535
+15:05:41 py: burst 48: 8 of 8 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 185570, 185566
+15:05:41 py: burst 49: 12 of 12 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 185579, 185574, 185599
+15:05:41 py: burst 50: 10 of 10 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 185652, 185643, 185648
+15:05:41 py: burst 51: 7 of 7 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 185668, 185672
+15:05:41 py: burst 52: 8 of 8 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 185721, 185712
+15:05:41 py: burst 53: 9 of 9 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 185737, 185733, 185729
+15:05:41 py: burst 54: 6 of 6 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 185765, 185761
+15:05:41 py: burst 55: 5 of 5 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 185801, 185789
+15:05:41 py: burst 56: 6 of 6 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 185813, 185817
+15:05:41 py: burst 57: 5 of 5 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 185833, 185837
+15:05:42 py: burst 58: 12 of 12 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 185886, 185882, 185878
+15:05:42 py: burst 59: 10 of 10 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 185915, 185903, 185923
+15:05:42 py: burst 60: 20 of 20 frames scored, mode sam_subject, masked 5 of 5 shortlisted, keepers 185987, 185991, 185952, 186011, 186015
+15:05:42 py: burst 61: 4 of 4 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 186034
+15:05:42 py: burst 62: 5 of 5 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 186050, 186046
+15:05:42 py: burst 63: 8 of 8 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 186074, 186070
+15:05:42 py: burst 64: 14 of 14 frames scored, mode sam_subject, masked 4 of 4 shortlisted, keepers 186114, 186110, 186118, 186123
+15:05:42 py: burst 65: 27 of 27 frames scored, mode sam_subject, masked 5 of 5 shortlisted, keepers 186183, 186253, 186257, 186250, 186175
+15:05:42 py: burst 66: 12 of 12 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 186289, 186294, 186305
+15:05:42 py: burst 67: 10 of 10 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 186339, 186342, 186346
+15:05:42 py: burst 68: 10 of 10 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 186383, 186387, 186350
+15:05:42 py: burst 69: 15 of 15 frames scored, mode sam_subject, masked 4 of 4 shortlisted, keepers 186418, 186422, 186407, 186414
+15:05:42 py: burst 70: 7 of 7 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 186479, 186484
+15:05:42 py: burst 72: 8 of 8 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 186571, 186563
+15:05:42 py: burst 71: 11 of 11 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 186532, 186524, 186536
+15:05:42 py: burst 73: 9 of 9 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 186604, 186589, 186585
+15:05:42 py: burst 74: 9 of 9 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 186620, 186616, 186625
+15:05:42 py: burst 75: 14 of 14 frames scored, mode sam_subject, masked 4 of 4 shortlisted, keepers 186652, 186656, 186660, 186701
+15:05:42 py: burst 76: 8 of 8 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 186721, 186737
+15:05:42 py: burst 77: 14 of 14 frames scored, mode sam_subject, masked 4 of 4 shortlisted, keepers 186789, 186786, 186753, 186794
+15:05:42 py: burst 78: 2 of 2 frames scored, mode sam_subject, masked 2 of 2 shortlisted, keepers 186802
+15:05:42 py: burst 79: 7 of 7 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 186826, 186829
+15:05:43 py: burst 80: 7 of 7 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 186857, 186840
+15:05:43 py: burst 81: 9 of 9 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 186880, 186884, 186888
+15:05:43 py: burst 82: 5 of 5 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 186895, 186897
+15:05:43 py: burst 83: 7 of 7 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 186903, 186907
+15:05:43 py: burst 84: 17 of 17 frames scored, mode sam_subject, masked 4 of 4 shortlisted, keepers 186921, 186917, 186978, 186982
+15:05:43 py: burst 85: 14 of 14 frames scored, mode sam_subject, masked 4 of 4 shortlisted, keepers 189175, 189154, 189191, 189187
+15:05:43 py: burst 86: 13 of 13 frames scored, mode sam_subject, masked 4 of 4 shortlisted, keepers 189219, 189227, 189235, 189223
+15:05:43 py: burst 87: 14 of 14 frames scored, mode sam_subject, masked 4 of 4 shortlisted, keepers 189287, 189282, 189274, 189278
+15:05:43 py: burst 88: 21 of 21 frames scored, mode sam_subject, masked 5 of 5 shortlisted, keepers 189311, 189314, 189307, 189384, 189388
+15:05:43 py: burst 89: 18 of 18 frames scored, mode sam_subject, masked 4 of 4 shortlisted, keepers 189408, 189403, 189435, 189400
+15:05:43 py: burst 90: 10 of 10 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 189483, 189487, 189463
+15:05:43 py: burst 91: 6 of 6 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 189522, 189518
+15:05:43 py: burst 92: 9 of 9 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 189557, 189550, 189554
+15:05:43 py: burst 93: 17 of 17 frames scored, mode sam_subject, masked 4 of 4 shortlisted, keepers 189610, 189598, 189602, 189594
+15:05:43 py: burst 94: 13 of 13 frames scored, mode sam_subject, masked 4 of 4 shortlisted, keepers 189667, 189658, 189671, 189675
+15:05:43 py: burst 95: 34 of 34 frames scored, mode sam_subject, masked 5 of 5 shortlisted, keepers 189719, 189715, 189804, 189811, 189815
+15:05:43 py: burst 98: 9 of 9 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 189945, 189961, 189965
+15:05:43 py: burst 97: 14 of 14 frames scored, mode sam_subject, masked 4 of 4 shortlisted, keepers 189916, 189904, 189896, 189900
+15:05:43 py: burst 96: 14 of 14 frames scored, mode sam_subject, masked 4 of 4 shortlisted, keepers 189840, 189843, 189847, 189836
+15:05:43 py: burst 99: 16 of 16 frames scored, mode sam_subject, masked 4 of 4 shortlisted, keepers 190004, 189981, 189992, 189996
+15:05:43 py: burst 100: 18 of 18 frames scored, mode sam_subject, masked 4 of 4 shortlisted, keepers 190049, 190052, 190060, 190045
+15:05:43 py: burst 101: 13 of 13 frames scored, mode sam_subject, masked 4 of 4 shortlisted, keepers 190128, 190148, 190136, 190121
+15:05:43 py: burst 102: 9 of 9 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 190172, 190181, 190176
+15:05:43 py: burst 103: 14 of 14 frames scored, mode sam_subject, masked 4 of 4 shortlisted, keepers 190193, 190208, 190197, 190204
+15:05:44 py: burst 104: 9 of 9 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 190259, 190252, 190248
+15:05:44 py: burst 105: 19 of 19 frames scored, mode sam_subject, masked 5 of 5 shortlisted, keepers 190283, 190345, 190349, 190353, 190357
+15:05:44 py: burst 106: 11 of 11 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 190378, 190361, 190365
+15:05:44 py: burst 107: 19 of 19 frames scored, mode sam_subject, masked 5 of 5 shortlisted, keepers 190465, 190462, 190469, 190473, 190477
+15:05:44 py: burst 108: 15 of 15 frames scored, mode sam_subject, masked 4 of 4 shortlisted, keepers 190516, 190520, 190535, 190527
+15:05:44 py: burst 109: 13 of 13 frames scored, mode sam_subject, masked 4 of 4 shortlisted, keepers 190571, 190567, 190587, 190575
+15:05:44 py: burst 110: 10 of 10 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 190615, 190619, 190611
+15:05:44 py: burst 111: 11 of 11 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 190672, 190643, 190639
+15:05:44 py: burst 112: 22 of 22 frames scored, mode sam_subject, masked 5 of 5 shortlisted, keepers 190750, 190746, 190742, 190728, 190733
+15:05:44 py: burst 113: 7 of 7 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 190782, 190786
+15:05:44 py: burst 114: 7 of 7 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 190806, 190818
+15:05:44 py: burst 115: 14 of 14 frames scored, mode sam_subject, masked 4 of 4 shortlisted, keepers 190858, 190854, 190866, 190862
+15:05:44 py: burst 116: 15 of 15 frames scored, mode sam_subject, masked 4 of 4 shortlisted, keepers 190914, 190911, 190907, 190902
+15:05:45 py: burst 117: 15 of 15 frames scored, mode sam_subject, masked 4 of 4 shortlisted, keepers 190967, 190964, 190971, 190959
+15:05:45 py: burst 118: 15 of 15 frames scored, mode sam_subject, masked 4 of 4 shortlisted, keepers 191011, 191007, 191030, 191015
+15:05:45 py: burst 119: 9 of 9 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 191090, 191094, 191086
+15:05:45 py: burst 120: 13 of 13 frames scored, mode sam_subject, masked 4 of 4 shortlisted, keepers 191102, 191110, 191114, 191118
+15:05:45 py: burst 121: 16 of 16 frames scored, mode sam_subject, masked 4 of 4 shortlisted, keepers 191178, 191174, 191166, 191170
+15:05:45 py: burst 122: 25 of 25 frames scored, mode sam_subject, masked 5 of 5 shortlisted, keepers 191290, 191294, 191286, 191281, 191266
+15:05:45 py: burst 123: 20 of 20 frames scored, mode sam_subject, masked 5 of 5 shortlisted, keepers 191338, 191334, 191326, 191322, 191330
+15:05:45 py: burst 124: 15 of 15 frames scored, mode sam_subject, masked 4 of 4 shortlisted, keepers 191414, 191418, 191403, 191411
+15:05:45 py: burst 125: 20 of 20 frames scored, mode sam_subject, masked 5 of 5 shortlisted, keepers 191476, 191472, 191480, 191468, 191484
+15:05:45 py: burst 126: 11 of 11 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 191573, 191560, 191577
+15:05:45 py: burst 128: 9 of 9 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 191651, 191659, 191655
+15:05:45 py: burst 127: 18 of 18 frames scored, mode sam_subject, masked 4 of 4 shortlisted, keepers 191615, 191627, 191607, 191611
+15:05:45 py: burst 129: 11 of 11 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 191696, 191688, 191692
+15:05:45 py: burst 131: 8 of 8 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 191790, 191815
+15:05:45 py: burst 130: 14 of 14 frames scored, mode sam_subject, masked 4 of 4 shortlisted, keepers 191745, 191741, 191782, 191786
+15:05:45 py: burst 132: 5 of 5 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 191838, 191830
+15:05:45 py: burst 133: 5 of 5 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 191859, 191846
+15:05:45 py: burst 134: 4 of 4 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 191874
+15:05:45 py: burst 135: 6 of 6 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 191891, 191882
+15:05:45 py: burst 136: 5 of 5 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 191919, 191902
+15:05:45 py: burst 137: 4 of 4 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 191935
+15:05:45 py: burst 138: 5 of 5 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 191946, 191942
+15:05:45 py: burst 139: 6 of 6 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 191962, 191958
+15:05:45 py: burst 140: 11 of 11 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 192014, 192022, 192018
+15:05:45 py: burst 141: 6 of 6 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 192033, 192030
+15:05:45 py: burst 142: 9 of 9 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 192058, 192081, 192054
+15:05:45 py: burst 143: 16 of 16 frames scored, mode sam_subject, masked 4 of 4 shortlisted, keepers 192130, 192117, 192122, 192126
