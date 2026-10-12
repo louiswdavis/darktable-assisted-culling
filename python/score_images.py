@@ -35,7 +35,6 @@ HIGHLIGHT_CLIP = 250 / 255
 CLIP_PCT_FLAG = 0.02
 
 STAR_THRESHOLDS = [(95, 5), (85, 4), (75, 3), (60, 2), (45, 1), (0, 0)]
-EXPOSURE_PENALTY_RELATIVE = 30
 
 TIER_THRESHOLDS = [
     (1800, 5),
@@ -45,7 +44,21 @@ TIER_THRESHOLDS = [
     (70, 1),
     (0, 0),
 ]
-EXPOSURE_PENALTY_STARS = 1
+
+# Per-frame problem flags → (points off the relative-mode score, stars off in
+# tier mode). A frame pays for every flag it carries. Relative-mode keepers
+# start at 100, so 15 points is one star (STAR_THRESHOLDS) and 30 is three.
+# The results CSV lists a frame's flags in column 3; culling.lua maps each to a tag.
+FLAG_PENALTIES = {
+    "overexposed": (30, 1),
+    "underexposed": (30, 1),
+    "eyes_closed": (15, 1),
+}
+
+
+def frame_flags(exposure: str, eyes_closed: bool = False) -> tuple:
+    flags = () if exposure == "ok" else (exposure,)
+    return flags + ("eyes_closed",) if eyes_closed else flags
 
 SALIENCY_GRID = 5
 
@@ -135,10 +148,27 @@ def _cascade(filename: str):
     return _CASCADES[filename]
 
 
+BLINK_MIN_FACE_PX = 120  # below this the eye detector misses open eyes too often to call a blink
+EYE_SEARCH_TOP = 0.6     # eyes sit in the upper face; lower down, nostrils and mouth corners fool the detector
+
+
+def _detect_eyes(face_gray: np.ndarray):
+    """Open eyes in a face crop. Haar eye detectors are trained on open eyes,
+    so closed ones are mostly missed; the glasses-aware detector is tried
+    second so spectacles aren't mistaken for a blink."""
+    for name in ("haarcascade_eye.xml", "haarcascade_eye_tree_eyeglasses.xml"):
+        eyes = _cascade(name).detectMultiScale(face_gray, scaleFactor=1.1, minNeighbors=5)
+        if len(eyes) > 0:
+            return eyes
+    return ()
+
+
 def _face_eye_sharpness(gray: np.ndarray, denoised: np.ndarray):
-    """Laplacian variance over the largest detected face's eye region, falling
-    back to the whole face box if no eyes are found. Returns None if no face
-    is detected, so the caller can fall back to the frame-wide heuristic."""
+    """(score, eyes closed) for the largest detected face: Laplacian variance
+    over its eye region, or the whole face box if no eyes are found. Eyes
+    count as closed only when none are found in a face big enough to judge.
+    Returns None if no face is detected, so the caller can fall back to the
+    frame-wide heuristic."""
     faces = _cascade("haarcascade_frontalface_default.xml").detectMultiScale(
         gray, scaleFactor=1.1, minNeighbors=5,
         minSize=(gray.shape[1] // 10, gray.shape[0] // 10),
@@ -150,9 +180,7 @@ def _face_eye_sharpness(gray: np.ndarray, denoised: np.ndarray):
     if face_crop.size == 0:
         return None
 
-    eyes = _cascade("haarcascade_eye.xml").detectMultiScale(
-        gray[y:y + fh, x:x + fw], scaleFactor=1.1, minNeighbors=5,
-    )
+    eyes = _detect_eyes(gray[y:y + int(fh * EYE_SEARCH_TOP), x:x + fw])
     if len(eyes) > 0:
         ex0 = min(e[0] for e in eyes)
         ey0 = min(e[1] for e in eyes)
@@ -160,9 +188,17 @@ def _face_eye_sharpness(gray: np.ndarray, denoised: np.ndarray):
         ey1 = max(e[1] + e[3] for e in eyes)
         eye_crop = face_crop[ey0:ey1, ex0:ex1]
         if eye_crop.size > 0:
-            return float(cv2.Laplacian(eye_crop, cv2.CV_64F).var())
+            return float(cv2.Laplacian(eye_crop, cv2.CV_64F).var()), False
 
-    return float(cv2.Laplacian(face_crop, cv2.CV_64F).var())
+    return float(cv2.Laplacian(face_crop, cv2.CV_64F).var()), len(eyes) == 0 and fw >= BLINK_MIN_FACE_PX
+
+
+def face_detect_score(rgb: np.ndarray) -> tuple:
+    """(sharpness, eyes closed) for face_detect mode. A frame with no face
+    scores as subject_focus and is never flagged."""
+    gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
+    face = _face_eye_sharpness(gray, cv2.bilateralFilter(gray, 5, 50, 50))
+    return face if face is not None else (sharpness_score(rgb, "subject_focus"), False)
 
 
 MASK_ASPECT_TOLERANCE = 0.03
@@ -232,9 +268,9 @@ def sharpness_score(rgb: np.ndarray, mode: str, mask_path: str = "") -> float:
         lap = cv2.Laplacian(denoised, cv2.CV_64F)
         return float(np.percentile(np.abs(lap), 99))
     if mode == "face_detect":
-        face_score = _face_eye_sharpness(gray, denoised)
-        if face_score is not None:
-            return face_score
+        face = _face_eye_sharpness(gray, denoised)
+        if face is not None:
+            return face[0]
         # no face in frame: fall through to the center-weighted heuristic below
     if mode == "tiles_uniformity":
         return _uniformity_score(denoised)
@@ -361,15 +397,17 @@ def process_single_image(filepath: str, sharp_mode: str, exp_mode: str, cancel_p
         return filepath, None, None, "cancelled"
     try:
         rgb = load_image(filepath, fast_jpeg)
-        if sharp_mode == "sam_subject":
+        eyes_closed = False
+        if sharp_mode == "face_detect":
+            sharp, eyes_closed = face_detect_score(rgb)
+        elif sharp_mode == "sam_subject":
             # both scores, so the burst can settle on one scale once every frame is in
             gray = cv2.bilateralFilter(cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY), 5, 50, 50)
             masked = _masked_sharpness(gray, mask_path) if mask_path else None
             sharp = (masked, sharpness_score(rgb, "subject_focus"))
         else:
             sharp = sharpness_score(rgb, sharp_mode, mask_path)
-        exp = exposure_status(rgb, exp_mode)
-        return filepath, sharp, exp, None
+        return filepath, sharp, frame_flags(exposure_status(rgb, exp_mode), eyes_closed), None
     except Exception as e:
         return filepath, None, None, str(e)
 
@@ -447,7 +485,7 @@ def emit_saliency_points(manifest, args):
             write_progress(args.progress, done, total, 0, 0)
 
 
-def process_burst_logic(burst_id, burst_sharpness, burst_exposure, burst_size, args, results_path,
+def process_burst_logic(burst_id, burst_sharpness, burst_flags, burst_size, args, results_path,
                         eligible=None):
     if not burst_sharpness:
         return
@@ -469,11 +507,11 @@ def process_burst_logic(burst_id, burst_sharpness, burst_exposure, burst_size, a
     for img_id in sorted_members:
         is_keeper = img_id in keepers
         raw_score = burst_sharpness[img_id]
+        flags = burst_flags[img_id]
 
         if args.rank_mode == "relative":
             score = 100.0 if is_keeper else 0.0
-            if burst_exposure[img_id] != "ok":
-                score -= EXPOSURE_PENALTY_RELATIVE
+            score -= sum(FLAG_PENALTIES[f][0] for f in flags)
             for threshold, stars in STAR_THRESHOLDS:
                 if max(0, score) >= threshold:
                     break
@@ -485,8 +523,7 @@ def process_burst_logic(burst_id, burst_sharpness, burst_exposure, burst_size, a
                     break
             else:
                 stars = 0
-            if burst_exposure[img_id] != "ok":
-                stars = max(0, stars - EXPOSURE_PENALTY_STARS)
+            stars = max(0, stars - sum(FLAG_PENALTIES[f][1] for f in flags))
 
         if is_keeper:
             if args.keep_mode != "keep_all" and num_keepers > 1 and img_id not in top_40_keepers:
@@ -505,7 +542,7 @@ def process_burst_logic(burst_id, burst_sharpness, burst_exposure, burst_size, a
         burst_rows.append([
             img_id,
             round(raw_score, 1),
-            burst_exposure[img_id],
+            ";".join(flags),
             burst_id,
             int(is_keeper),
             stars,
@@ -560,7 +597,7 @@ def main(args):
 
     burst_completion = {b_id: 0 for b_id in burst_groups}
     burst_sharpness = {b_id: {} for b_id in burst_groups}
-    burst_exposure = {b_id: {} for b_id in burst_groups}
+    burst_flags = {b_id: {} for b_id in burst_groups}
 
     with open(args.results, "w", newline="", encoding="utf-8") as f:
         pass
@@ -577,10 +614,10 @@ def main(args):
         nonlocal completed_bursts
         completed_bursts += 1
         scores, eligible = resolve_burst_scores(burst_sharpness[burst_id], candidates_of.get(burst_id))
-        process_burst_logic(burst_id, scores, burst_exposure[burst_id], len(burst_groups[burst_id]),
+        process_burst_logic(burst_id, scores, burst_flags[burst_id], len(burst_groups[burst_id]),
                             args, args.results, eligible)
         del burst_sharpness[burst_id]
-        del burst_exposure[burst_id]
+        del burst_flags[burst_id]
         if completed_bursts % 25 == 0:
             gc.collect()
 
@@ -595,7 +632,7 @@ def main(args):
                 if shortlisted == "0" and image_id in prescored:
                     fallback, exp = prescored[image_id]
                     burst_sharpness[burst_id][image_id] = (None, fallback)
-                    burst_exposure[burst_id][image_id] = exp
+                    burst_flags[burst_id][image_id] = frame_flags(exp)
                     processed_count += 1
                     burst_completion[burst_id] += 1
                     continue
@@ -614,7 +651,7 @@ def main(args):
 
             burst_id, image_id, filepath = future_to_item[future]
             try:
-                _, sharp, exp, err = future.result()
+                _, sharp, flags, err = future.result()
             except concurrent.futures.CancelledError:
                 continue
             if err == "cancelled":
@@ -625,7 +662,7 @@ def main(args):
                 print(f"skip {image_id} ({filepath}): {err}", file=sys.stderr)
             else:
                 burst_sharpness[burst_id][image_id] = sharp
-                burst_exposure[burst_id][image_id] = exp
+                burst_flags[burst_id][image_id] = flags
 
             processed_count += 1
             burst_completion[burst_id] += 1
