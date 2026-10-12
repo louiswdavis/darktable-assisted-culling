@@ -5,10 +5,10 @@ A culling assistant for [darktable](https://www.darktable.org/). Select a batch 
 - group your selection into **bursts** by capture time
 - score every frame for **sharpness** and **exposure clipping**
 - pick the sharpest frame in each burst as the **keeper**
-- write the result back as a **star rating**, a **yellow** label for exposure problems, a **red** label for rejected duplicates, and darktable's native **image grouping** per burst, with the keeper leading the group
+- write the result back as a **star rating** plus **tags** under `Assisted Culling|…`: `Keeper` or `Rejected`, `Overexposed` / `Underexposed` for exposure problems, and `Culled` on everything it has processed
 
 Everything runs locally: a Lua plugin inside darktable and a small Python/OpenCV scorer it shells out to. No API keys, no cloud, no daemon.
-Nothing is deleted — it only rates, labels and groups; rejecting is still your call.
+Nothing is deleted, and your colour labels are never touched — it only rates and tags; rejecting is still your call.
 
 <!-- docs/lighttable.png: lighttable with the Assisted Culling panel and a scored burst -->
 
@@ -27,7 +27,7 @@ culling.lua writes manifest.csv (id, filepath, burst_id) and runs score_images.p
 score_images.py opens each file (raw or otherwise), computes a sharpness score and an exposure status, picks one keeper per burst, writes results.csv
         |
         v
-culling.lua reads results.csv and applies ratings / labels / groups
+culling.lua reads results.csv and applies ratings / tags
 ```
 
 Two small processes talking through a CSV file. The Lua side is split
@@ -40,8 +40,8 @@ grayscale copy — a standard, cheap focus proxy. Raw variance isn't
 comparable across cameras, lenses or ISOs, so frames are ranked against
 the rest of *this* batch and the percentile drives the star rating.
 Exposure is flagged when more than 2 % of pixels are crushed or blown.
-Within a burst the highest sharpness wins; the others get red and zero
-stars.
+Within a burst the highest sharpness wins; the others are tagged
+`Rejected` and rated per the non-keepers setting.
 
 **Why time-based grouping.** An earlier version grouped duplicates by
 perceptual image hashing. That technique is built to spot near-identical
@@ -118,14 +118,25 @@ click **Start Culling** in the **Assisted Culling** panel on the right. Progress
 shows in darktable's message area. When it's done:
 
 - **stars** rank each keeper against the rest of the batch
-- **yellow** = blown highlights or crushed shadows
-- **red** = lost to a sharper frame from the same burst (or dropped per the
-  non-keeper setting below)
-- burst-mates are grouped, with the keeper as the group's leader
+- **`Assisted Culling|Keeper`** = the best frame(s) of its burst
+- **`Assisted Culling|Rejected`** = lost to a sharper frame from the same
+  burst (rated per the non-keeper setting below)
+- **`Assisted Culling|Overexposed`** / **`Underexposed`** = blown
+  highlights or crushed shadows
+- **`Assisted Culling|Culled`** = processed by the plugin at least once
 
-Re-running is safe: groups are rebuilt from scratch each time. **Clear
-culling marks** removes the plugin's tags and red/yellow labels without
-touching star ratings.
+Filter on these in darktable's **collections** module (tag → Assisted
+Culling) to step through just the keepers, or just the rejects.
+
+Re-running is safe: every tag is re-synced to the new result, so a frame
+that was a keeper last pass and isn't now loses its `Keeper` tag. **Clear
+culling marks** removes all the plugin's tags without touching star
+ratings. Colour labels are never read or written, so any you apply by hand
+are yours.
+
+Passes made before this version used red/yellow colour labels. Those
+labels stay where they were; to remove them once, collect by the
+`Assisted Culling|Culled` tag, select all, and toggle the labels off.
 
 ### Panel options
 
@@ -155,7 +166,7 @@ touching star ratings.
   *keep all (focus stack)* for frames you'll merge rather than cull.
 - **non-keepers** — what happens to the frames that aren't kept: *leave
   alone*, *reject (-1)*, or a fixed star count from 0–5. They always get
-  the red label and the Rejected tag regardless of this setting.
+  the `Rejected` tag regardless of this setting.
 
 ## Tuning
 
@@ -201,7 +212,7 @@ python python/score_images.py manifest.csv results.csv
 The darktable half can be exercised **without the GUI** through
 `darktable-cli`, which initialises Lua and honours `--luacmd`.
 `tools/e2e_cli.lua` imports a folder, runs the plugin on it, and writes a
-TSV of the rating / labels / group leader darktable holds for each image
+TSV of the rating and `Assisted Culling` tags darktable holds for each image
 afterwards — the plugin's entire observable output:
 
 ```
@@ -240,10 +251,12 @@ Things that cost time to find out, recorded so they don't again:
   Lua down mid-run once its export finishes; without a GUI the plugin
   uses plain `os.execute` and holds the lock.
 - **`group_with` first removes the image from its current group**, and
-  removing a *leader* hands its group to another member. So on a re-run
-  over already-grouped images, attaching to a leader that still sits in an
-  old group scatters the burst; the plugin detaches each keeper into a
-  fresh group before attaching its burst-mates.
+  removing a *leader* hands its group to another member. The plugin no
+  longer stacks bursts with darktable's image grouping (bursts are a
+  scoring concept only, tracked by capture time), but if that's ever added
+  back: on a re-run over already-grouped images, attaching to a leader
+  that still sits in an old group scatters the burst, so detach each
+  keeper into a fresh group before attaching its burst-mates.
 - **Windows shell-outs go through a `.bat` file**, following
   `lib/dtutils/system.lua` in darktable's lua-scripts: cmd.exe mangles a
   command line with more than one quoted item.
@@ -268,8 +281,6 @@ Things that cost time to find out, recorded so they don't again:
 
 ## Limitations and ideas
 
-- The file paths handed to the scorer go through a comma-separated
-  manifest; a path containing a comma will be skipped.
 - *Face & eyes* only helps when OpenCV's Haar cascade actually finds a
   face in frame; everything else — including the *subject bias* sharpness
   mode — is still a classical heuristic (center-weighted patch variance),
