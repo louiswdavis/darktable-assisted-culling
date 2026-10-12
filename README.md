@@ -165,13 +165,17 @@ labels stay where they were; to remove them once, collect by the
     tarmac and fencing, say), hands that point to darktable's own SAM
     mask model as the prompt, and scores sharpness only inside the mask it
     returns. This is the mode that isn't fooled when autofocus lands on a
-    catch fence instead of the car. It's much slower than the others:
-    every image is decoded twice and run through the model, so use it on
-    smaller batches or a final pass over the keepers, not a whole weekend
-    at once. Needs darktable 5.6+ with a SAM or SAM 2 mask model enabled
+    catch fence instead of the car. To keep it practical on long bursts,
+    only a shortlist goes through the model: each burst's top frames by
+    the fast *subject bias* score (3, or more if the keepers setting can
+    keep more). Frames outside the shortlist can't become keepers. It's
+    still slower than the other modes, since every image is decoded twice
+    and SAM runs on a few frames per burst. Needs darktable 5.6+ with a SAM or SAM 2 mask model enabled
     and downloaded (preferences → AI); if it isn't, the run stops before
-    touching anything and says so. Images SAM can't segment fall back to
-    *subject bias*, and the plugin tells you how many did.
+    touching anything and says so. If SAM can't segment a shortlisted
+    frame, that whole burst falls back to *subject bias*, so its frames
+    are never compared on two different scales, and the plugin tells you
+    how many frames it masked.
 - **exposure** — *whole frame*, *subject only (ignore sky)* (drops the top
   20% of the frame before checking for clipping), *strict histogram*
   (tighter clipping thresholds), or *ignore exposure*.
@@ -313,16 +317,24 @@ Things that cost time to find out, recorded so they don't again:
   that with a click, and there's no "find the subject" task. And
   `darktable.ai` only runs inside darktable's Lua process, while scoring
   happens in the separate Python process. So this mode runs in three
-  stages instead of two: the scorer picks a salient point per image
-  (`score_images.py --emit-saliency-points`), the plugin runs SAM on it in
-  Lua and writes a mask PNG per image, and the scorer then reads each mask
-  path from a 4th manifest column. EXIF can't supply the prompt instead:
+  stages instead of two: the scorer shortlists each burst and picks a
+  salient point per shortlisted frame (`score_images.py
+  --emit-saliency-points --keep-mode …`), the plugin runs SAM on those in
+  Lua and writes a mask PNG each, and the scorer then reads the mask path
+  and shortlist flag from a 4th and 5th manifest column. EXIF can't
+  supply the prompt instead:
   darktable exposes focus *distance*, not the AF point's position.
 - The SAM preprocessing (1024 px input, normalisation, prompt format)
   mirrors darktable's own `src/common/ai/segmentation.c` defaults, because
   `darktable.ai` doesn't expose a model's attributes to Lua. A mask model
   with a non-default input size would segment poorly; every image then
   falls back to *subject bias*, and the plugin reports how many did.
+- SAM sees each image through darktable's pipeline (rotated, cropped,
+  lens-corrected); the scorer reads the original file, turned upright from
+  its EXIF orientation. A darkroom crop that changes the aspect ratio is
+  detected and that image falls back; a crop that keeps the ratio isn't,
+  so on cropped edits the mask can sit off the subject. Cull before you
+  crop.
 
 ## License
 
