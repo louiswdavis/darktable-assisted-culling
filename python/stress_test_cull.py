@@ -8,6 +8,7 @@ import sys
 import csv
 import time
 import tracemalloc
+from argparse import Namespace
 from pathlib import Path
 import numpy as np
 import cv2
@@ -58,15 +59,17 @@ def run_stress_test():
     start_time = time.time()
 
     try:
-        score_images.main(
-            manifest_path=manifest_path,
-            results_path=results_path,
-            progress_path=progress_path,
-            ranking_mode="universal",
+        score_images.main(Namespace(
+            manifest=manifest_path,
+            results=results_path,
+            progress=progress_path,
+            rank_mode="universal",
             sharp_mode="subject_focus",
             exp_mode="whole_frame",
-            keep_mode="dynamic_burst"
-        )
+            keep_mode="dynamic_burst",
+            nk_mode="leave",
+            fast_jpeg=False,
+        ))
     except Exception as e:
         print(f"[Stress Test] CRITICAL ERROR: {e}")
         import traceback
