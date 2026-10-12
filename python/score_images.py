@@ -348,21 +348,36 @@ def process_single_image(filepath: str, sharp_mode: str, exp_mode: str, cancel_p
         return filepath, None, None, str(e)
 
 
-def process_single_saliency(filepath: str, fast_jpeg: bool = False):
+def process_single_saliency(filepath: str, fast_jpeg: bool = False, exp_mode: str = "whole_frame"):
     try:
         rgb = load_image(filepath, fast_jpeg)
-        return filepath, saliency_point(rgb), sharpness_score(rgb, "subject_focus"), None
+        return (filepath, saliency_point(rgb), sharpness_score(rgb, "subject_focus"),
+                exposure_status(rgb, exp_mode), None)
     except Exception as e:
-        return filepath, None, None, str(e)
+        return filepath, None, None, None, str(e)
+
+
+def read_prescores(path: str) -> dict:
+    """id → (fallback sharpness, exposure status) from a stage-A prescore file."""
+    if not path or not os.path.exists(path):
+        return {}
+    with open(path, newline="", encoding="utf-8") as f:
+        return {row[0]: (float(row[1]), row[2]) for row in csv.reader(f) if len(row) == 3}
 
 
 def emit_saliency_points(manifest, args):
     """Writes id,x_frac,y_frac to args.results for each burst's shortlist: the
     frames worth running SAM on, picked by the center-weighted heuristic.
+    With args.prescores, also writes id,fallback_score,exposure for every frame
+    so the scoring pass needn't decode frames outside the shortlist again.
     Images that fail to decode are left out and so can't be keepers."""
     total = len(manifest)
-    with open(args.results, "w", newline="", encoding="utf-8"):
-        pass
+    prescores = getattr(args, "prescores", "")
+    exp_mode = getattr(args, "exp_mode", "whole_frame")
+    for path in (args.results, prescores):
+        if path:
+            with open(path, "w", newline="", encoding="utf-8"):
+                pass
     write_progress(args.progress, 0, total, 0, 0)
 
     burst_of = {row[0]: row[2] for row in manifest}
@@ -375,7 +390,7 @@ def emit_saliency_points(manifest, args):
     done = 0
     with concurrent.futures.ProcessPoolExecutor(max_workers=workers, initializer=_init_worker) as executor:
         future_to_id = {
-            executor.submit(process_single_saliency, row[1], args.fast_jpeg): row[0]
+            executor.submit(process_single_saliency, row[1], args.fast_jpeg, exp_mode): row[0]
             for row in manifest
         }
         for future in concurrent.futures.as_completed(future_to_id):
@@ -385,11 +400,14 @@ def emit_saliency_points(manifest, args):
                 sys.exit(130)
             image_id = future_to_id[future]
             burst = burst_of[image_id]
-            filepath, point, heuristic, err = future.result()
+            filepath, point, heuristic, exposure, err = future.result()
             if err:
                 print(f"skip saliency {image_id} ({filepath}): {err}", file=sys.stderr)
             else:
                 found[burst][image_id] = (point, heuristic)
+                if prescores:
+                    with open(prescores, "a", newline="", encoding="utf-8") as f:
+                        csv.writer(f).writerow([image_id, heuristic, exposure])
             remaining[burst] -= 1
             if remaining[burst] == 0 and found[burst]:
                 picks = shortlist({i: v[1] for i, v in found[burst].items()}, args.keep_mode)
@@ -487,7 +505,7 @@ def main(args):
     burst_groups = {}
     candidates_of = {}  # burst → shortlisted ids, only when the manifest carries a shortlist
     for image_id, filepath, burst_id, mask_path, shortlisted in manifest:
-        burst_groups.setdefault(burst_id, []).append((image_id, filepath, mask_path))
+        burst_groups.setdefault(burst_id, []).append((image_id, filepath, mask_path, shortlisted))
         if shortlisted:
             picks = candidates_of.setdefault(burst_id, set())
             if shortlisted == "1":
@@ -521,13 +539,38 @@ def main(args):
     cancel_path = (args.progress + ".cancel") if args.progress else ""
     workers = max(1, (os.cpu_count() or 2) - 1)
 
+    def finish_burst(burst_id):
+        nonlocal completed_bursts
+        completed_bursts += 1
+        scores, eligible = resolve_burst_scores(burst_sharpness[burst_id], candidates_of.get(burst_id))
+        process_burst_logic(burst_id, scores, burst_exposure[burst_id], len(burst_groups[burst_id]),
+                            args, args.results, eligible)
+        del burst_sharpness[burst_id]
+        del burst_exposure[burst_id]
+        if completed_bursts % 25 == 0:
+            gc.collect()
+
+    # sam_subject: frames outside the shortlist were already scored in the
+    # saliency pass, so they aren't decoded again.
+    prescored = read_prescores(getattr(args, "prescores", "")) if args.sharp_mode == "sam_subject" else {}
+
     with concurrent.futures.ProcessPoolExecutor(max_workers=workers, initializer=_init_worker) as executor:
         future_to_item = {}
         for burst_id, items in burst_groups.items():
-            for image_id, filepath, mask_path in items:
+            for image_id, filepath, mask_path, shortlisted in items:
+                if shortlisted == "0" and image_id in prescored:
+                    fallback, exp = prescored[image_id]
+                    burst_sharpness[burst_id][image_id] = (None, fallback)
+                    burst_exposure[burst_id][image_id] = exp
+                    processed_count += 1
+                    burst_completion[burst_id] += 1
+                    continue
                 fut = executor.submit(process_single_image, filepath, args.sharp_mode, args.exp_mode,
                                       cancel_path, args.fast_jpeg, mask_path)
                 future_to_item[fut] = (burst_id, image_id, filepath)
+        for burst_id in list(burst_sharpness):
+            if burst_completion[burst_id] == len(burst_groups[burst_id]):
+                finish_burst(burst_id)
 
         for future in concurrent.futures.as_completed(future_to_item):
             if cancel_requested(args.progress):
@@ -554,24 +597,7 @@ def main(args):
             burst_completion[burst_id] += 1
 
             if burst_completion[burst_id] == len(burst_groups[burst_id]):
-                completed_bursts += 1
-                scores, eligible = resolve_burst_scores(burst_sharpness[burst_id],
-                                                        candidates_of.get(burst_id))
-                process_burst_logic(
-                    burst_id,
-                    scores,
-                    burst_exposure[burst_id],
-                    len(burst_groups[burst_id]),
-                    args,
-                    args.results,
-                    eligible,
-                )
-                
-                del burst_sharpness[burst_id]
-                del burst_exposure[burst_id]
-
-                if completed_bursts % 25 == 0:
-                    gc.collect()
+                finish_burst(burst_id)
 
             now = time.monotonic()
             if now - last_progress >= 0.1 or processed_count == total_images:
@@ -593,6 +619,9 @@ if __name__ == "__main__":
                         help="Decode JPEGs at reduced scale (faster; scores shift slightly)")
     parser.add_argument("--emit-saliency-points", action="store_true",
                         help="Write id,x_frac,y_frac to the results path instead of scoring")
+    parser.add_argument("--prescores", default="",
+                        help="sam_subject: per-frame fallback scores written by the saliency pass "
+                             "and read by the scoring pass, so frames outside the shortlist decode once")
 
     args = parser.parse_args()
 

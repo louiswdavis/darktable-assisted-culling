@@ -104,6 +104,7 @@ local CANCEL_PATH = PROGRESS_PATH .. ".cancel"
 local DONE_PATH = TMP_DIR .. "/dt_assisted_culling_done.txt"
 local POINTS_PATH = TMP_DIR .. "/dt_assisted_culling_points.csv"
 local POINTS_DONE_PATH = POINTS_PATH .. ".done"
+local PRESCORE_PATH = TMP_DIR .. "/dt_assisted_culling_prescores.csv"
 
 local function mask_path_for(id)
     return TMP_DIR .. "/dt_assisted_culling_mask_" .. tostring(id) .. ".png"
@@ -126,8 +127,8 @@ if dt.gui then
         false)
     dt.preferences.register("assisted_culling", "fast_jpeg_decode", "bool",
         "Assisted Culling: fast JPEG decoding",
-        "decode JPEGs / RAW previews at reduced size: faster, but sharpness scores shift slightly (re-check star tiers)",
-        false)
+        "decode JPEGs / RAW previews at reduced size: several times faster; sharpness scores shift slightly, which matters little since keepers are ranked within each burst",
+        true)
     dt.preferences.register("assisted_culling", "burst_gap_seconds", "integer",
         "Assisted Culling: burst gap (seconds)",
         "photos taken closer together than this are grouped into one burst",
@@ -351,7 +352,7 @@ end
 
 local TAG_KEEPER = "Assisted Culling|Keeper"
 local TAG_REJECT = "Assisted Culling|Rejected"
-local TAG_CULLED = "Assisted Culling|Culled"
+local TAG_CULLED = "Assisted Culling|Culled" -- no longer written; still cleared from older passes
 local TAG_OVEREXPOSED = "Assisted Culling|Overexposed"
 local TAG_UNDEREXPOSED = "Assisted Culling|Underexposed"
 local ALL_TAGS = { TAG_KEEPER, TAG_REJECT, TAG_CULLED, TAG_OVEREXPOSED, TAG_UNDEREXPOSED }
@@ -442,7 +443,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         end
         local burst_of = M.cluster_by_time(time_items, gap)
 
-        local overlap, fast_jpeg = false, false
+        local overlap, fast_jpeg = false, true
         if dt.gui then
             overlap = dt.preferences.read("assisted_culling", "apply_while_scoring", "bool") and true or false
             fast_jpeg = dt.preferences.read("assisted_culling", "fast_jpeg_decode", "bool") and true or false
@@ -464,6 +465,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         pcall(os.remove, LOG_PATH)
         pcall(os.remove, POINTS_PATH)
         pcall(os.remove, POINTS_DONE_PATH)
+        pcall(os.remove, PRESCORE_PATH)
         if sam_model then
             -- masks from an earlier run over an overlapping selection must not be reused
             for _, img in ipairs(primaries) do pcall(os.remove, mask_path_for(img.id)) end
@@ -525,6 +527,8 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                 .. " " .. shell_quote(POINTS_PATH)
                 .. " --emit-saliency-points"
                 .. " --keep-mode " .. shell_quote(tostring(keep_mode))
+                .. " --exp-mode " .. shell_quote(tostring(exp_mode))
+                .. " --prescores " .. shell_quote(PRESCORE_PATH)
                 .. " --progress " .. shell_quote(PROGRESS_PATH)
                 .. (fast_jpeg and " --fast-jpeg" or "")
                 .. " 2> " .. shell_quote(LOG_PATH)
@@ -620,6 +624,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             .. " --keep-mode " .. shell_quote(tostring(keep_mode))
             .. " --nk-mode " .. shell_quote(tostring(nk_mode))
             .. (fast_jpeg and " --fast-jpeg" or "")
+            .. (sam_model and (" --prescores " .. shell_quote(PRESCORE_PATH)) or "")
             .. " 2> " .. shell_quote(LOG_PATH)
 
         if cancelled() then
@@ -636,12 +641,11 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         local stats = { keepers = 0, others = 0, flagged = 0 }
 
         -- ---- result application (shared by "while scoring" and the final drain) ----
-        local keeper_tag, reject_tag, culled_tag, over_tag, under_tag
+        local keeper_tag, reject_tag, over_tag, under_tag
         local function ensure_tags()
             if not keeper_tag then
                 keeper_tag = tags.create(TAG_KEEPER)
                 reject_tag = tags.create(TAG_REJECT)
-                culled_tag = tags.create(TAG_CULLED)
                 over_tag = tags.create(TAG_OVEREXPOSED)
                 under_tag = tags.create(TAG_UNDEREXPOSED)
             end
@@ -663,7 +667,9 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             writes = writes + sync_tag(img, have, reject_tag, TAG_REJECT, not is_keeper)
             writes = writes + sync_tag(img, have, over_tag, TAG_OVEREXPOSED, exposure == "overexposed")
             writes = writes + sync_tag(img, have, under_tag, TAG_UNDEREXPOSED, exposure == "underexposed")
-            writes = writes + sync_tag(img, have, culled_tag, TAG_CULLED, true)
+            if have[TAG_CULLED] then -- marker from older versions; Keeper/Rejected already say "processed"
+                tags.detach(tags.find(TAG_CULLED), img); writes = writes + 1
+            end
             return writes
         end
 
@@ -888,6 +894,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
     pcall(os.remove, RESULTS_PATH .. ".tmp")
     pcall(os.remove, POINTS_PATH)
     pcall(os.remove, POINTS_DONE_PATH)
+    pcall(os.remove, PRESCORE_PATH)
     for _, id in ipairs(sam_ids) do pcall(os.remove, mask_path_for(id)) end
     if not scorer_alive then
         pcall(os.remove, PROGRESS_PATH)
@@ -1057,7 +1064,7 @@ local function install_panel()
 
     sharp_combo = dt.new_widget("combobox") {
         label = _("sharpness"),
-        tooltip = _("How sharpness is measured. Face & eyes falls back to edge-to-edge uniformity when no face is found, so it adds nothing over that mode for bursts with no people in them. Subject tracking (SAM) segments the subject with darktable's AI mask model before scoring; it's slower than the rest (every image is decoded twice, and each burst's top few frames go through the model)."),
+        tooltip = _("How sharpness is measured. Face & eyes falls back to edge-to-edge uniformity when no face is found, so it adds nothing over that mode for bursts with no people in them. Subject tracking (SAM) segments the subject with darktable's AI mask model before scoring; it's slower than the rest, since each burst's top few frames go through the model."),
         _("center crop"), _("edge-to-edge uniformity"), _("absolute peak 1%"), _("face & eyes (OpenCV)"), _("subject bias (center-weighted)"), _("subject tracking (SAM)"),
         selected = dt.preferences.read("assisted_culling", "last_sharp_mode", "integer") or 1, 
         changed_callback = function(widget)

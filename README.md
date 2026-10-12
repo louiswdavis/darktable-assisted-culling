@@ -5,7 +5,7 @@ A culling assistant for [darktable](https://www.darktable.org/). Select a batch 
 - group your selection into **bursts** by capture time
 - score every frame for **sharpness** and **exposure clipping**
 - pick the sharpest frame in each burst as the **keeper**
-- write the result back as a **star rating** plus **tags** under `Assisted Culling|…`: `Keeper` or `Rejected`, `Overexposed` / `Underexposed` for exposure problems, and `Culled` on everything it has processed
+- write the result back as a **star rating** plus **tags** under `Assisted Culling|…`: `Keeper` or `Rejected`, and `Overexposed` / `Underexposed` for exposure problems
 
 Everything runs locally: a Lua plugin inside darktable and a small Python/OpenCV scorer it shells out to. No API keys, no cloud, no daemon.
 Nothing is deleted, and your colour labels are never touched — it only rates and tags; rejecting is still your call.
@@ -125,10 +125,10 @@ shows in darktable's message area. When it's done:
   burst (rated per the non-keeper setting below)
 - **`Assisted Culling|Overexposed`** / **`Underexposed`** = blown
   highlights or crushed shadows
-- **`Assisted Culling|Culled`** = processed by the plugin at least once
 
 Filter on these in darktable's **collections** module (tag → Assisted
-Culling) to step through just the keepers, or just the rejects.
+Culling) to step through just the keepers, or just the rejects; the
+parent `Assisted Culling` tag collects everything the plugin has scored.
 
 Re-running is safe: every tag is re-synced to the new result, so a frame
 that was a keeper last pass and isn't now loses its `Keeper` tag. **Clear
@@ -136,9 +136,11 @@ culling marks** removes all the plugin's tags without touching star
 ratings. Colour labels are never read or written, so any you apply by hand
 are yours.
 
-Passes made before this version used red/yellow colour labels. Those
-labels stay where they were; to remove them once, collect by the
-`Assisted Culling|Culled` tag, select all, and toggle the labels off.
+Passes made by older versions used red/yellow colour labels and a
+`Culled` tag. The tag comes off the next time an image is re-scored (or
+with **Clear culling marks**); the labels stay where they were. To remove
+them once, collect by the `Assisted Culling` tag, select all, and toggle
+the labels off.
 
 ### Panel options
 
@@ -169,8 +171,9 @@ labels stay where they were; to remove them once, collect by the
     only a shortlist goes through the model: each burst's top frames by
     the fast *subject bias* score (3, or more if the keepers setting can
     keep more). Frames outside the shortlist can't become keepers. It's
-    still slower than the other modes, since every image is decoded twice
-    and SAM runs on a few frames per burst. Needs darktable 5.6+ with a SAM or SAM 2 mask model enabled
+    still slower than the other modes: the shortlisted frames are decoded
+    a second time for masked scoring, and SAM runs on them through
+    darktable's pipeline. The rest are decoded once, as in every mode. Needs darktable 5.6+ with a SAM or SAM 2 mask model enabled
     and downloaded (preferences → AI); if it isn't, the run stops before
     touching anything and says so. If SAM can't segment a shortlisted
     frame, that whole burst falls back to *subject bias*, so its frames
