@@ -381,6 +381,8 @@ end
 local TAG_KEEPER = "Assisted Culling|Keeper"
 local TAG_REJECT = "Assisted Culling|Rejected"
 local TAG_CULLED = "Assisted Culling|Culled" -- no longer written; still cleared from older passes
+-- Set by the user; runs leave these images out entirely. Never written or cleared by the plugin.
+local TAG_LOCKED = "Assisted Culling|Locked"
 -- Problem flags the scorer lists in results column 3 (FLAG_PENALTIES in score_images.py),
 -- each synced to its own tag. `summary` labels the count in the done message.
 local FLAGS = {
@@ -451,8 +453,21 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
     keep_mode = keep_mode or "dynamic_burst"
     nk_mode = nk_mode or "leave"
 
+    local n_locked = 0
+    local lock_tag = images and tags.find(TAG_LOCKED)
+    if lock_tag and #lock_tag > 0 then
+        local locked = {}
+        for i = 1, #lock_tag do locked[tonumber(lock_tag[i].id)] = true end
+        local unlocked = {}
+        for _, img in ipairs(images) do
+            if locked[tonumber(img.id)] then n_locked = n_locked + 1 else unlocked[#unlocked + 1] = img end
+        end
+        images = unlocked
+    end
+
     if not images or #images == 0 then
-        dt.print(_("Assisted Culling: select some images first"))
+        dt.print(n_locked > 0 and _("Assisted Culling: every selected image is tagged Assisted Culling|Locked")
+            or _("Assisted Culling: select some images first"))
         is_running = false
         if action_button then action_button.label = _("Start Culling") end
         return
@@ -936,6 +951,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                 if n > 0 then msg = msg .. string.format(", %d %s", n, f.summary) end
             end
             if n_skipped > 0 then msg = msg .. string.format(", %d unreadable (skipped)", n_skipped) end
+            if n_locked > 0 then msg = msg .. string.format(", %d locked (left alone)", n_locked) end
             if failed_total > 0 then msg = msg .. string.format(", %d failed to update (see log)", failed_total) end
             dt.print(msg)
             if first_error then dt.print_error("Assisted Culling: first apply error: " .. first_error) end

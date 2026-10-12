@@ -117,9 +117,11 @@ Two safeguards keep deliberate shots from being punished:
 
 ### Re-running and clearing
 
-Re-running is safe: every tag is re-synced to the new result, so a frame that was a keeper last pass and isn't now loses its `Keeper` tag.
+Re-running is safe: every tag is re-synced to the new result, so a frame that was a keeper last pass and isn't now loses its `Keeper` tag. It does overwrite star ratings, including ones you set by hand.
 
-**Clear culling marks** removes all the plugin's tags from the selection without touching star ratings. Colour labels are never read or written, so any you apply by hand are yours.
+To protect a frame, tag it `Assisted Culling|Locked` yourself (create the tag in the **tagging** module). Runs then leave it out entirely: its stars and tags stay as they are, and it doesn't take a keeper slot in its burst, so another frame from that burst can be kept as well. The done message counts the locked frames it left alone.
+
+**Clear culling marks** removes all the plugin's tags from the selection without touching star ratings. It still clears `Keeper`/`Rejected`/flag tags on locked frames, but never removes `Locked` itself. Colour labels are never read or written, so any you apply by hand are yours.
 
 Older versions used red/yellow colour labels and a `Culled` tag. The tag comes off the next time an image is re-scored (or with **Clear culling marks**); the labels stay. To remove them once, collect by the `Assisted Culling` tag, select all, and toggle the labels off.
 
