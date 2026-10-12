@@ -58,6 +58,10 @@ check("parse_csv_line splits into 6 fields", #parsed, 6)
 check("parse_csv_line field 2 keeps spaces", parsed[2], "/home/user/photo 01.NEF")
 check("parse_csv_line rejects wrong field count", C.parse_csv_line("1,2,3", 6), nil)
 
+local flags = C.parse_flags("overexposed;eyes_closed")
+check("parse_flags reads every flag", tostring(flags.overexposed and flags.eyes_closed), "true")
+check("parse_flags: empty field is no flags", next(C.parse_flags("")), nil)
+
 print("")
 if failures == 0 then
     print("all tests passed")
