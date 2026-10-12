@@ -108,6 +108,18 @@ Each frame gets a star rating, which ranks it against the rest of the batch, plu
 | `Assisted Culling\|Underexposed` | Crushed shadows |
 | `Assisted Culling\|Eyes Closed` | *face & eyes* mode only: a face big enough to judge, with no open eyes found. Dark sunglasses trigger it too. |
 
+With the *diagnostic tags* preference on (the default), frames are also tagged with how they were judged, so you can spot-check the scorer:
+
+| Tag | Meaning |
+|-----|---------|
+| `Assisted Culling\|Subject\|Vehicle\|Car` (or `Motorcycle`, `Truck`) | *subject tracking (SAM)* with the [vehicle detector](#vehicle-detector): the vehicle SAM was pointed at |
+| `Assisted Culling\|Subject\|Vehicle\|Guessed` | The detector found no vehicle, so SAM was given the guessed subject point. Worth a look: the guess can land on a kerb or sponsor board. |
+| `Assisted Culling\|Scored\|Masked` | *subject tracking (SAM)*: the burst was ranked on SAM masks |
+| `Assisted Culling\|Scored\|Subject bias` | *subject tracking (SAM)*: a shortlisted frame got no mask, so the burst fell back to *subject bias* |
+| `Assisted Culling\|Technique\|Panning` / `…\|Shallow DoF` | The burst's EXIF switched its sharpness mode (see [shooting intent](#shooting-intent-from-exif)) |
+
+`Subject` is grouped by kind (`Vehicle` today), leaving room for other detectors later. Turning the preference off removes these tags on the next run.
+
 Filter on these in darktable's **collections** module (tag → Assisted Culling) to step through just the keepers, or just the rejects. The parent `Assisted Culling` tag collects everything the plugin has scored.
 
 ### Flags cost stars, never the keeper
@@ -222,6 +234,7 @@ All under **preferences → lua options**.
 | Assisted Culling: apply ratings while scoring | off | Applies results as they arrive instead of all at the end. Faster on big batches, but darktable's UI shares the CPU with the scorer; turn off if it lags. |
 | Assisted Culling: fast JPEG decoding | on | Decodes JPEGs and raw previews at reduced size. Several times faster; scores shift slightly, which matters little since keepers are ranked within each burst. |
 | Assisted Culling: burst gap (seconds) | 2 | Photos taken closer together than this are one burst. 2 s suits continuous-drive bursts; for deliberate re-takes on a phone, 5 s fits better. |
+| Assisted Culling: diagnostic tags | on | Tags how each frame was judged (`Subject`, `Technique`, `Scored`); see [What you get](#what-you-get). Each tag write reloads darktable's collection, so turn off to speed up applying results. |
 | Assisted Culling: *Tag* lowers stars | on, one per flag | Off = that flag is still tagged but never costs stars. See [Flags cost stars](#flags-cost-stars-never-the-keeper). |
 
 ## How it works
