@@ -295,7 +295,8 @@ end
 -- image area (padding cropped off). Errors if the model finds nothing there.
 local function sam_mask(encoder, decoder, img, prompt, out_path)
     local t = dt.ai.load_image(img, SAM_INPUT_SIZE, SAM_INPUT_SIZE)
-    local h, w = t.shape[3], t.shape[4]
+    local shape = t:shape()
+    local h, w = shape[3], shape[4]
     if h > SAM_INPUT_SIZE or w > SAM_INPUT_SIZE then
         error(string.format("load_image returned %dx%d, larger than %d", w, h, SAM_INPUT_SIZE), 0)
     end
@@ -339,7 +340,8 @@ local function sam_mask(encoder, decoder, img, prompt, out_path)
     inputs[#inputs + 1] = dt.ai.create_tensor({ 1 }) -- has_mask_input = 0
 
     local masks, iou = decoder:run(table.unpack(inputs))
-    local n_masks, dh, dw = masks.shape[2], masks.shape[3], masks.shape[4]
+    local mshape = masks:shape()
+    local n_masks, dh, dw = mshape[2], mshape[3], mshape[4]
     local best = 0
     for m = 1, n_masks - 1 do
         if iou:get({ 0, m }) > iou:get({ 0, best }) then best = m end
