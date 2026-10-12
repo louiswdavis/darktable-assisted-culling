@@ -62,6 +62,13 @@ function M.csv_line(fields)
     return table.concat(out, ",")
 end
 
+-- "overexposed;eyes_closed" → { overexposed = true, eyes_closed = true }; "" → {}.
+function M.parse_flags(s)
+    local set = {}
+    for name in s:gmatch("[^;]+") do set[name] = true end
+    return set
+end
+
 function M.parse_csv_line(line, n)
     local parts = {}
     for part in (line .. ","):gmatch("([^,]*),") do
@@ -353,9 +360,15 @@ end
 local TAG_KEEPER = "Assisted Culling|Keeper"
 local TAG_REJECT = "Assisted Culling|Rejected"
 local TAG_CULLED = "Assisted Culling|Culled" -- no longer written; still cleared from older passes
-local TAG_OVEREXPOSED = "Assisted Culling|Overexposed"
-local TAG_UNDEREXPOSED = "Assisted Culling|Underexposed"
-local ALL_TAGS = { TAG_KEEPER, TAG_REJECT, TAG_CULLED, TAG_OVEREXPOSED, TAG_UNDEREXPOSED }
+-- Problem flags the scorer lists in results column 3 (FLAG_PENALTIES in score_images.py),
+-- each synced to its own tag. `summary` labels the count in the done message.
+local FLAGS = {
+    { name = "overexposed", tag = "Assisted Culling|Overexposed", summary = "overexposed" },
+    { name = "underexposed", tag = "Assisted Culling|Underexposed", summary = "underexposed" },
+    { name = "eyes_closed", tag = "Assisted Culling|Eyes Closed", summary = "with eyes closed" },
+}
+local ALL_TAGS = { TAG_KEEPER, TAG_REJECT, TAG_CULLED }
+for _, f in ipairs(FLAGS) do ALL_TAGS[#ALL_TAGS + 1] = f.tag end
 
 local function fmt_eta(elapsed, done, total)
     if elapsed < 3 or done <= 0 or done >= total then return "" end
@@ -638,23 +651,24 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         local stage1_start = os.time()
 
         local applied_total, failed_total, first_error, n_skipped = 0, 0, nil, 0
-        local stats = { keepers = 0, others = 0, flagged = 0 }
+        local stats = { keepers = 0, others = 0, flagged = {} }
+        for _, f in ipairs(FLAGS) do stats.flagged[f.name] = 0 end
 
         -- ---- result application (shared by "while scoring" and the final drain) ----
-        local keeper_tag, reject_tag, over_tag, under_tag
+        local keeper_tag, reject_tag
+        local flag_tags = {}
         local function ensure_tags()
             if not keeper_tag then
                 keeper_tag = tags.create(TAG_KEEPER)
                 reject_tag = tags.create(TAG_REJECT)
-                over_tag = tags.create(TAG_OVEREXPOSED)
-                under_tag = tags.create(TAG_UNDEREXPOSED)
+                for i, f in ipairs(FLAGS) do flag_tags[i] = tags.create(f.tag) end
             end
         end
 
         -- Reads are cheap; writes reload the lighttable collection / rewrite XMP, so skip no-ops.
         -- Every mark is a tag, never a colour label, so a re-run or "clear" can undo exactly
         -- what earlier passes set without touching labels the user applied by hand.
-        local function apply_to_image(img, want_rating, is_keeper, exposure)
+        local function apply_to_image(img, want_rating, is_keeper, flags)
             ensure_tags()
             local writes = 0
             local have = tags_of(img)
@@ -665,8 +679,9 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
 
             writes = writes + sync_tag(img, have, keeper_tag, TAG_KEEPER, is_keeper)
             writes = writes + sync_tag(img, have, reject_tag, TAG_REJECT, not is_keeper)
-            writes = writes + sync_tag(img, have, over_tag, TAG_OVEREXPOSED, exposure == "overexposed")
-            writes = writes + sync_tag(img, have, under_tag, TAG_UNDEREXPOSED, exposure == "underexposed")
+            for i, f in ipairs(FLAGS) do
+                writes = writes + sync_tag(img, have, flag_tags[i], f.tag, flags[f.name] == true)
+            end
             if have[TAG_CULLED] then -- marker from older versions; Keeper/Rejected already say "processed"
                 tags.detach(tags.find(TAG_CULLED), img); writes = writes + 1
             end
@@ -685,15 +700,17 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             if not group then return 0 end
 
             local is_keeper = (tonumber(parts[5]) == 1)
-            local exposure = parts[3]
+            local flags = M.parse_flags(parts[3])
             if is_keeper then stats.keepers = stats.keepers + 1 else stats.others = stats.others + 1 end
-            if exposure ~= "ok" then stats.flagged = stats.flagged + 1 end
+            for name in pairs(flags) do
+                if stats.flagged[name] then stats.flagged[name] = stats.flagged[name] + 1 end
+            end
             local want_rating = nil
             if parts[6] ~= "leave" then want_rating = tonumber(parts[6]) or 0 end
 
             local writes = 0
             for _, img in ipairs(group) do
-                local ok_apply, res = pcall(apply_to_image, img, want_rating, is_keeper, exposure)
+                local ok_apply, res = pcall(apply_to_image, img, want_rating, is_keeper, flags)
                 if ok_apply then
                     applied_total = applied_total + 1
                     writes = writes + res
@@ -869,7 +886,10 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             notify_error(_("Assisted Culling: scorer produced no ratings. ") .. (tail ~= "" and tail or _("Check python path and score_images.py.")))
         else
             local msg = string.format("Assisted Culling done: %d keepers, %d not kept", stats.keepers, stats.others)
-            if stats.flagged > 0 then msg = msg .. string.format(", %d exposure-flagged", stats.flagged) end
+            for _, f in ipairs(FLAGS) do
+                local n = stats.flagged[f.name]
+                if n > 0 then msg = msg .. string.format(", %d %s", n, f.summary) end
+            end
             if n_skipped > 0 then msg = msg .. string.format(", %d unreadable (skipped)", n_skipped) end
             if failed_total > 0 then msg = msg .. string.format(", %d failed to update (see log)", failed_total) end
             dt.print(msg)
@@ -1064,7 +1084,7 @@ local function install_panel()
 
     sharp_combo = dt.new_widget("combobox") {
         label = _("sharpness"),
-        tooltip = _("How sharpness is measured. Edge-to-edge scores the softest areas of the frame (ignoring plain sky), so a soft corner costs a frame. Face & eyes falls back to subject bias when no face is found. Subject tracking (SAM) segments the subject with darktable's AI mask model before scoring; it's slower than the rest, since each burst's top few frames go through the model."),
+        tooltip = _("How sharpness is measured. Edge-to-edge scores the softest areas of the frame (ignoring plain sky), so a soft corner costs a frame. Face & eyes falls back to subject bias when no face is found, and tags a frame Eyes Closed (one star lower) when a clear face shows no open eyes. Subject tracking (SAM) segments the subject with darktable's AI mask model before scoring; it's slower than the rest, since each burst's top few frames go through the model."),
         _("center crop"), _("edge-to-edge uniformity"), _("absolute peak 1%"), _("face & eyes (OpenCV)"), _("subject bias (center-weighted)"), _("subject tracking (SAM)"),
         selected = dt.preferences.read("assisted_culling", "last_sharp_mode", "integer") or 1, 
         changed_callback = function(widget)
