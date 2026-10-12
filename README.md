@@ -304,6 +304,7 @@ EXIF can't supply the prompt instead: darktable exposes focus *distance*, not th
 Everything you'd change per shoot is a panel option or a preference. What's left is a named constant at the top of the file that uses it:
 
 - `culling.lua`: `BURST_GAP_SECONDS` (default 2) is the burst gap used when the preference isn't available, e.g. headless runs. On a 14-frame hand-held phone series (frames 4–50 s apart) 2 s grouped nothing, while 5 s clustered three pairs and picked the sharper frame each time.
+- `culling.lua`: `PROGRESS_ANALYSIS` (0.75) is the share of the progress bar for analysis; applying ratings fills the rest. In SAM mode, `PROGRESS_SUBJECTS` (0.15) and `PROGRESS_SAM` (0.45) mark where finding subjects and segmenting end.
 - `culling.lua`: `STAGE2_BATCH_WRITE_BUDGET` (60 tag writes) and `STAGE2_BATCH_LINES` (200 results) size each slice of the final apply step before it yields to the GUI. Lower them if darktable stutters while ratings apply.
 - `score_images.py`:
   - `SHADOW_CLIP`, `HIGHLIGHT_CLIP` and `CLIP_PCT_FLAG` control exposure flagging.

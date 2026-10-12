@@ -137,6 +137,11 @@ end
 -- Stage 2 pacing. Every darktable property write (rating, tag
 -- attach/detach) reloads the lighttable collection and/or rewrites the XMP
 -- sidecar, so we count writes and yield to the GUI after a small budget.
+-- Progress bar split: analysis (in SAM mode: finding subjects, then SAM, then
+-- scoring) fills it to PROGRESS_ANALYSIS, applying ratings fills the rest.
+local PROGRESS_ANALYSIS = 0.75
+local PROGRESS_SUBJECTS = 0.15   -- SAM mode: end of finding subjects
+local PROGRESS_SAM = 0.45        -- SAM mode: end of segmenting
 local STAGE2_WRITE_BUDGET = 12   -- writes per slice before yielding
 local STAGE2_SLEEP_MIN_MS = 20   -- minimum yield per slice
 local STAGE2_SLEEP_MAX_MS = 300  -- maximum yield per slice
@@ -710,7 +715,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                 if pf then pf:close() end
                 local cur, tot = p:match("(%d+),(%d+)")
                 if cur and culling_job and tonumber(tot) > 0 then
-                    culling_job.percent = 0.15 * tonumber(cur) / tonumber(tot)
+                    culling_job.percent = PROGRESS_SUBJECTS * tonumber(cur) / tonumber(tot)
                 end
                 dt.print_hinter(string.format("Assisted Culling: finding subjects %s / %s", cur or "0", tot or "?"))
                 dt.control.sleep(150)
@@ -776,7 +781,9 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                         first_sam_error = first_sam_error or tostring(mask_err)
                         log(string.format("SAM %s (%s) %s: failed: %s", pt.id, img.filename, where, tostring(mask_err)))
                     end
-                    if culling_job then culling_job.percent = 0.15 + 0.35 * i / #points end
+                    if culling_job then
+                        culling_job.percent = PROGRESS_SUBJECTS + (PROGRESS_SAM - PROGRESS_SUBJECTS) * i / #points
+                    end
                     dt.print_hinter(string.format("Assisted Culling: segmenting subjects %d / %d", i, #points))
                     dt.control.sleep(10) -- hand the Lua lock back so the cancel button and hinter respond
                 end
@@ -1036,7 +1043,8 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                     local total = tonumber(tot)
                     if num and total and total > 0 then
                         if culling_job then
-                            culling_job.percent = math.min(1.0, num / total)
+                            local from = sam_model and PROGRESS_SAM or 0
+                            culling_job.percent = from + (PROGRESS_ANALYSIS - from) * math.min(1.0, num / total)
                         end
                         local elapsed = os.time() - stage1_start
                         local rate = (elapsed >= 3 and num > 0) and string.format(" | %.1f img/s", num / elapsed) or ""
@@ -1101,7 +1109,10 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
 
                 local done = pending_idx - start_idx
                 local pct = done / remaining
-                if culling_job then culling_job.percent = math.min(1.0, (pending_idx - 1) / total_lines) end
+                if culling_job then
+                    culling_job.percent = PROGRESS_ANALYSIS
+                        + (1 - PROGRESS_ANALYSIS) * math.min(1.0, (pending_idx - 1) / total_lines)
+                end
                 dt.print_hinter(string.format(
                     "Assisted Culling: applying ratings %d / %d (%d%%)%s", pending_idx - 1, total_lines,
                     math.floor(((pending_idx - 1) / total_lines) * 100), fmt_eta(os.time() - started, done, remaining)))
