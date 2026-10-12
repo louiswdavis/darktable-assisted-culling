@@ -114,19 +114,55 @@ Start darktable, open **preferences → lua options**, and set:
 ## Use
 
 In lighttable, select a batch — a whole shoot or a single burst — and
-click **score selected** in the **Assisted Culling** panel on the right. Progress
+click **Start Culling** in the **Assisted Culling** panel on the right. Progress
 shows in darktable's message area. When it's done:
 
 - **stars** rank each keeper against the rest of the batch
 - **yellow** = blown highlights or crushed shadows
-- **red** = lost to a sharper frame from the same burst
+- **red** = lost to a sharper frame from the same burst (or dropped per the
+  non-keeper setting below)
 - burst-mates are grouped, with the keeper as the group's leader
 
-Re-running is safe: groups are rebuilt from scratch each time.
+Re-running is safe: groups are rebuilt from scratch each time. **Clear
+culling marks** removes the plugin's tags and red/yellow labels without
+touching star ratings.
+
+### Panel options
+
+- **preset** — landscape / portrait / sport / macro set the four options
+  below to sensible combinations in one click; **custom** is selected
+  automatically the moment you change any of them by hand.
+- **ranking mode** — *universal absolute* rates every frame against fixed
+  sharpness tiers; *relative batch percentile* gives keepers top stars and
+  everything else none, scored against the rest of its own burst.
+- **sharpness** — how each frame's focus is measured:
+  - *center crop* — Laplacian variance over the middle 50% of the frame.
+  - *edge-to-edge uniformity* — a 3×3 patch grid scored with equal weight,
+    for subjects that should be sharp corner to corner (landscapes, macro).
+  - *absolute peak 1%* — the sharpest 1% of edges in the whole frame.
+  - *face & eyes (OpenCV)* — detects the largest face via OpenCV's Haar
+    cascades and scores sharpness over the eyes if found, the whole face
+    box otherwise; falls back to *edge-to-edge uniformity* when no face is
+    detected.
+  - *subject bias (center-weighted)* — the same 3×3 grid as above, but the
+    center patches count more, on the assumption the subject is mid-frame.
+    This is a classical heuristic, not AI — see **Limitations and ideas**.
+- **exposure** — *whole frame*, *subject only (ignore sky)* (drops the top
+  20% of the frame before checking for clipping), *strict histogram*
+  (tighter clipping thresholds), or *ignore exposure*.
+- **keepers** — how many frames per burst survive: *single best only*,
+  *portrait (1 or 2)*, *dynamic (1 to 5, scaling with burst size)*, or
+  *keep all (focus stack)* for frames you'll merge rather than cull.
+- **non-keepers** — what happens to the frames that aren't kept: *leave
+  alone*, *reject (-1)*, or a fixed star count from 0–5. They always get
+  the red label and the Rejected tag regardless of this setting.
 
 ## Tuning
 
-Every threshold is a named constant at the top of the file that uses it:
+Ranking mode, sharpness mode, exposure mode, keeper count and non-keeper
+handling are all panel dropdowns (see **Panel options** above) — no file
+editing needed for those. What's left as a named constant at the top of
+the file that uses it:
 
 - `culling.lua` — `BURST_GAP_SECONDS` (default 2): how close in time two
   shots must be to count as one burst. 2 s suits continuous-drive bursts
@@ -234,12 +270,23 @@ Things that cost time to find out, recorded so they don't again:
 
 - The file paths handed to the scorer go through a comma-separated
   manifest; a path containing a comma will be skipped.
-- Sharpness is a whole-frame measure. A frame with a sharp background and
-  a soft subject can outscore the frame you'd actually keep; a subject- or
-  face-aware crop before scoring would fix that.
-- darktable 5.6+ ships a native `darktable.ai` Lua namespace for local
-  ONNX inference. Semantic tagging built on that, calling darktable's own
-  models from Lua with no external process, is the natural next piece.
+- *Face & eyes* only helps when OpenCV's Haar cascade actually finds a
+  face in frame; everything else — including the *subject bias* sharpness
+  mode — is still a classical heuristic (center-weighted patch variance),
+  not real subject detection. A frame with a sharp background and a soft
+  subject can still outscore the frame you'd actually keep when no face is
+  detected.
+- **`darktable.ai` is real and Lua-scriptable** (`load_model` / `ctx:run`
+  on arbitrary ONNX tensors, plus a model registry keyed by task —
+  `denoise`, `upscale`, `mask`), but it isn't an automatic subject
+  detector out of the box. The only shipped `mask`-task model is a
+  SAM-style encoder/decoder, and darktable's own use of it (the darkroom
+  object-mask tool) is interactive — it needs a click to prompt the mask,
+  and that tool itself isn't exposed to Lua. Getting real subject-aware
+  sharpness out of it means loading that same registered model from this
+  plugin's Lua side and feeding it an *automatic* prompt (e.g. a saliency
+  peak or frame-center point) instead of a GUI click — a genuinely new
+  piece of work, not a one-line integration.
 
 ## License
 
