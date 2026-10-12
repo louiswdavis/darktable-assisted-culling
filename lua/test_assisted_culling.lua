@@ -65,6 +65,24 @@ check("parse_prompt: four numbers are a box", box.x0 == 0.21 and box.y1 == 0.77,
 check("parse_prompt: half a corner is malformed", C.parse_prompt(C.parse_csv_line("1,0.2,0.4,0.6,", 5)), nil)
 check("parse_prompt: non-number is malformed", C.parse_prompt(C.parse_csv_line("1,x,0.4,,", 5)), nil)
 
+-- diag_tag_changes --------------------------------------------------------
+local have = {
+    ["Assisted Culling|Keeper"] = true,
+    ["Assisted Culling|Subject|Vehicle|Guessed"] = true,
+    ["Assisted Culling|Scored|Masked"] = true,
+    ["Holiday"] = true,
+}
+local attach, detach = C.diag_tag_changes(have, "Subject|Vehicle|Car;Scored|Masked")
+check("diag tags: attaches what's new", table.concat(attach, ","), "Assisted Culling|Subject|Vehicle|Car")
+check("diag tags: detaches stale ones, never Keeper or the user's own",
+    table.concat(detach, ","), "Assisted Culling|Subject|Vehicle|Guessed")
+attach, detach = C.diag_tag_changes(have, "")
+check("diag tags: empty column (or preference off) detaches every diagnostic tag",
+    table.concat(detach, ","), "Assisted Culling|Scored|Masked,Assisted Culling|Subject|Vehicle|Guessed")
+attach = C.diag_tag_changes({}, "Keeper;Subject|Animal|Bird")
+check("diag tags: only diagnostic folders can be written; new subject kinds need no code",
+    table.concat(attach, ","), "Assisted Culling|Subject|Animal|Bird")
+
 local flags = C.parse_flags("overexposed;eyes_closed")
 check("parse_flags reads every flag", tostring(flags.overexposed and flags.eyes_closed), "true")
 check("parse_flags: empty field is no flags", next(C.parse_flags("")), nil)
