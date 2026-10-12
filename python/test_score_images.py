@@ -114,11 +114,30 @@ def run_tests():
     from argparse import Namespace
     res_path = os.path.join(tmp, "res.csv")
     open(res_path, "w").close()
-    S.process_burst_logic("1", {"a": 9.0, "b": 1.0}, {"a": "ok", "b": "ok"}, 2,
+    S.process_burst_logic("1", {"a": 9.0, "b": 1.0}, {"a": (), "b": ()}, 2,
                           Namespace(keep_mode="single_best", rank_mode="universal", nk_mode="leave"),
                           res_path, eligible={"b"})
     keeper_rows = [line.split(",")[0] for line in open(res_path) if line.split(",")[4] == "1"]
     check("burst logic: ineligible frame can't keep even when it scores higher", keeper_rows, ["b"])
+
+    # flags: listed in column 3, each costs its stars, and they stack -------------
+    check("frame_flags: exposure ok and eyes open is no flags", S.frame_flags("ok"), ())
+    check("frame_flags: both problems", S.frame_flags("overexposed", True), ("overexposed", "eyes_closed"))
+
+    def keeper_row(flags, rank_mode):
+        open(res_path, "w").close()
+        S.process_burst_logic("1", {"a": 5000.0}, {"a": flags}, 1,
+                              Namespace(keep_mode="single_best", rank_mode=rank_mode, nk_mode="leave"),
+                              res_path)
+        row = open(res_path).read().strip().split(",")
+        return row[2], int(row[5])
+
+    for mode in ("universal", "relative"):
+        check(f"flags ({mode}): clean keeper gets 5 stars", keeper_row((), mode), ("", 5))
+        check(f"flags ({mode}): eyes closed is one star lower", keeper_row(("eyes_closed",), mode),
+              ("eyes_closed", 4))
+    check("flags (universal): exposure and eyes closed stack",
+          keeper_row(("underexposed", "eyes_closed"), "universal"), ("underexposed;eyes_closed", 3))
 
     # single decode in sam_subject: stage A prescores, stage C skips non-shortlisted --
     import csv as _csv
@@ -179,6 +198,8 @@ def run_tests():
 
     check("face mode without a face falls back to subject bias",
           S.sharpness_score(one_spot, "face_detect"), S.sharpness_score(one_spot, "subject_focus"))
+    check("face mode without a face never flags closed eyes",
+          S.face_detect_score(one_spot), (S.sharpness_score(one_spot, "subject_focus"), False))
 
 
     print("")
