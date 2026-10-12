@@ -61,13 +61,34 @@ def run_tests():
 
     # parse_manifest_row -----------------------------------------------------
     check("manifest: 4-column row keeps mask path",
-          S.parse_manifest_row(["1", "/a.jpg", "3", "/m.png"]), ("1", "/a.jpg", "3", "/m.png", "", ""))
+          S.parse_manifest_row(["1", "/a.jpg", "3", "/m.png"]), ("1", "/a.jpg", "3", "/m.png", "", "", 0.0, 0.0))
     check("manifest: 5-column row keeps shortlist flag",
-          S.parse_manifest_row(["1", "/a.jpg", "3", "", "0"]), ("1", "/a.jpg", "3", "", "0", ""))
+          S.parse_manifest_row(["1", "/a.jpg", "3", "", "0"]), ("1", "/a.jpg", "3", "", "0", "", 0.0, 0.0))
     check("manifest: 6-column row keeps edit time",
-          S.parse_manifest_row(["1", "/a.jpg", "3", "", "", "t"]), ("1", "/a.jpg", "3", "", "", "t"))
+          S.parse_manifest_row(["1", "/a.jpg", "3", "", "", "t"]), ("1", "/a.jpg", "3", "", "", "t", 0.0, 0.0))
     check("manifest: 3-column row gets empty mask path",
-          S.parse_manifest_row(["1", "/a.jpg", "3"]), ("1", "/a.jpg", "3", "", "", ""))
+          S.parse_manifest_row(["1", "/a.jpg", "3"]), ("1", "/a.jpg", "3", "", "", "", 0.0, 0.0))
+    check("manifest: 8-column row keeps shutter and aperture",
+          S.parse_manifest_row(["1", "/a.jpg", "3", "", "", "", "0.0080000004", "2.8"]),
+          ("1", "/a.jpg", "3", "", "", "", 0.0080000004, 2.8))
+
+    # EXIF intent rules --------------------------------------------------------
+    check("intent: 1/125 in subject bias is a pan",
+          S.burst_sharp_mode("subject_focus", [0.0079999998] * 3, [8.0] * 3), "subject_peak")
+    check("intent: 1/160 in subject bias isn't a pan",
+          S.burst_sharp_mode("subject_focus", [1 / 160] * 3, [8.0] * 3), "subject_focus")
+    check("intent: the burst's median shutter decides, not one stray frame",
+          S.burst_sharp_mode("subject_focus", [1 / 500, 1 / 500, 1 / 30], [8.0] * 3), "subject_focus")
+    check("intent: a slow shutter in uniformity mode is a tripod, not a pan",
+          S.burst_sharp_mode("tiles_uniformity", [2.0], [11.0]), "tiles_uniformity")
+    check("intent: f/4 in uniformity mode skips the edge-to-edge check",
+          S.burst_sharp_mode("tiles_uniformity", [1 / 250], [4.0000001]), "subject_focus")
+    check("intent: f/5.6 in uniformity mode keeps it",
+          S.burst_sharp_mode("tiles_uniformity", [1 / 250], [5.6]), "tiles_uniformity")
+    check("intent: unknown EXIF changes nothing",
+          S.burst_sharp_mode("subject_focus", [0.0, 0.0], [0.0, 0.0]), "subject_focus")
+    check("intent: other modes ignore EXIF",
+          S.burst_sharp_mode("face_detect", [1 / 30], [1.8]), "face_detect")
 
     # mask-aware sharpness ---------------------------------------------------
     tmp = tempfile.mkdtemp()
@@ -255,6 +276,18 @@ def run_tests():
     os.utime(frames[0], ns=(st.st_atime_ns, st.st_mtime_ns + 10**9))
     check("cache: a modified file is re-scored", plain_run(), {"0": fresh["0"], "1": "12345.0"})
 
+    def exif_manifest(name, exposure):
+        path = os.path.join(tmp, name)
+        with open(path, "w", newline="") as f:
+            _csv.writer(f).writerows([[str(i), p, str(i), "", "", "", exposure, "8"]
+                                      for i, p in enumerate(frames[:2])])
+        return path
+
+    check("cache: a fast shutter keeps the subject bias entry",
+          plain_run(manifest=exif_manifest("fast.csv", "0.002"))["1"], "12345.0")
+    check("cache: a pan is scored as subject_peak, not read from the subject bias entry",
+          plain_run(manifest=exif_manifest("pan.csv", "0.008"))["1"] != "12345.0", True)
+
     db = _sq.connect(cache_p)
     db.execute("UPDATE scores SET used = 0")
     db.commit()
@@ -317,6 +350,20 @@ def run_tests():
     # if the flat sky patches counted, both scores would collapse to ~0
     check("uniformity: flat sky doesn't flatten every score",
           sharp_score > 2 * S.sharpness_score(sky_soft, "tiles_uniformity"), True)
+
+    # pans with the same crisp subject: one failed to blur the background, one didn't
+    pan_missed = detail
+    pan_blurred = cv2.GaussianBlur(detail, (31, 31), 0)
+    pan_blurred[100:200, 100:200] = detail[100:200, 100:200]
+
+    def blur_shift(mode):
+        a, b = S.sharpness_score(pan_missed, mode), S.sharpness_score(pan_blurred, mode)
+        return abs(a - b) / a
+
+    # not exactly 0: with a crisp background, a crisp non-centre patch can win the max
+    check("subject_peak: background blur barely moves the score", blur_shift("subject_peak") < 0.05, True)
+    check("subject_peak: moves less than subject bias does",
+          blur_shift("subject_peak") * 5 < blur_shift("subject_focus"), True)
 
     check("face mode without a face falls back to subject bias",
           S.sharpness_score(one_spot, "face_detect"), S.sharpness_score(one_spot, "subject_focus"))

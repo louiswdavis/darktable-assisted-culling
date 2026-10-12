@@ -123,7 +123,10 @@ local THIS_DIR = (debug.getinfo(1, "S").source:sub(2):match("^(.*)[/\\]")) or ".
 local TMP_DIR = dt.configuration.tmp_dir
 local MANIFEST_PATH = TMP_DIR .. "/dt_assisted_culling_manifest.csv"
 local RESULTS_PATH = TMP_DIR .. "/dt_assisted_culling_results.csv"
-local LOG_PATH = TMP_DIR .. "/dt_assisted_culling_stderr.log"
+-- The run log: this plugin's lines plus the scorer's stderr. Kept in the
+-- config dir, which outlives tmp_dir; the run before it is kept as .prev.log.
+local LOG_PATH = dt.configuration.config_dir .. "/assisted_culling.log"
+local PREV_LOG_PATH = dt.configuration.config_dir .. "/assisted_culling.prev.log"
 local PROGRESS_PATH = TMP_DIR .. "/dt_assisted_culling_progress.txt"
 local CANCEL_PATH = PROGRESS_PATH .. ".cancel"
 local DONE_PATH = TMP_DIR .. "/dt_assisted_culling_done.txt"
@@ -361,16 +364,18 @@ local function sam_mask(encoder, decoder, img, prompt, out_path)
 end
 
 -- `edited` adds darktable's last-edit time: SAM masks come from the edited
--- export, so the scorer keys cached masked scores on it.
+-- export, so the scorer keys cached masked scores on it. Shutter (seconds)
+-- and aperture (f-number) always go last, for the scorer's EXIF intent rules.
 local function write_manifest(images, burst_of, mask_for_id, shortlisted, edited)
     local f = io.open(MANIFEST_PATH, "w")
     if not f then return false end
     for _, img in ipairs(images) do
         local path = img.path .. "/" .. img.filename
-        local fields = { img.id, path, burst_of[img.id] }
-        if mask_for_id or edited then fields[4] = mask_for_id and mask_for_id[img.id] or "" end
-        if shortlisted or edited then fields[5] = shortlisted and (shortlisted[img.id] and "1" or "0") or "" end
-        if edited then fields[6] = tostring(img.change_timestamp) end
+        local fields = { img.id, path, burst_of[img.id],
+            mask_for_id and mask_for_id[img.id] or "",
+            shortlisted and (shortlisted[img.id] and "1" or "0") or "",
+            edited and tostring(img.change_timestamp) or "",
+            img.exif_exposure or 0, img.exif_aperture or 0 }
         f:write(M.csv_line(fields), "\n")
     end
     f:close()
@@ -440,10 +445,34 @@ local function fmt_eta(elapsed, done, total)
     return string.format(" | ~%dm %02ds left", remaining // 60, remaining % 60)
 end
 
+-- Lines wait here while a scorer process appends its stderr to the same file:
+-- two processes appending at once can overwrite each other's lines on Windows.
+local log_buffer = {}
+
+local function log(msg)
+    log_buffer[#log_buffer + 1] = os.date("%H:%M:%S ") .. "lua: " .. msg
+end
+
+-- Only call while no scorer process is running.
+local function flush_log()
+    if #log_buffer == 0 then return end
+    local f = io.open(LOG_PATH, "a")
+    if not f then return end
+    f:write(table.concat(log_buffer, "\n"), "\n")
+    f:close()
+    log_buffer = {}
+end
+
+local function say(msg)
+    dt.print(msg)
+    log(msg)
+end
+
 -- dt.print_error only writes to darktable's log (-d lua); users never see it.
 local function notify_error(msg)
     dt.print(msg)
     dt.print_error(msg)
+    log(msg)
 end
 
 local function pretty(s)
@@ -492,6 +521,14 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         if action_button then action_button.label = _("Start Culling") end
         return
     end
+
+    flush_log() -- anything logged since the last run (e.g. a failed clear) belongs to its log
+    pcall(os.remove, PREV_LOG_PATH)
+    pcall(os.rename, LOG_PATH, PREV_LOG_PATH)
+    log(string.format("run started: darktable %s, %d images (%d locked left out)",
+        tostring(dt.configuration.version), #images, n_locked))
+    log(string.format("settings: rank %s, sharpness %s, exposure %s, keepers %s, non-keepers %s",
+        rank_mode, sharp_mode, exp_mode, keep_mode, nk_mode))
 
     local culling_job = nil
     local sam_ids = {}
@@ -552,7 +589,6 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         pcall(os.remove, PROGRESS_PATH)
         pcall(os.remove, CANCEL_PATH)
         pcall(os.remove, DONE_PATH)
-        pcall(os.remove, LOG_PATH)
         pcall(os.remove, POINTS_PATH)
         pcall(os.remove, POINTS_DONE_PATH)
         pcall(os.remove, PRESCORE_PATH)
@@ -570,16 +606,18 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             culling_job.percent = 0.0
         end
 
-        dt.print(string.format("Assisted Culling: scoring %d images in %d bursts (%s keepers, %s ranking, %ds burst gap)",
+        log(string.format("fast JPEG %s, apply while scoring %s, SAM model %s",
+            tostring(fast_jpeg), tostring(overlap), tostring(sam_model or "none")))
+        say(string.format("Assisted Culling: scoring %d images in %d bursts (%s keepers, %s ranking, %ds burst gap)",
             n_primary, n_bursts, pretty(keep_mode), pretty(rank_mode), gap))
         if n_dups > 0 then
-            dt.print(string.format("Assisted Culling: %d duplicate(s) share a file with another image; scored once and matched.", n_dups))
+            say(string.format("Assisted Culling: %d duplicate(s) share a file with another image; scored once and matched.", n_dups))
         end
         if n_untimed > 0 then
-            dt.print(string.format("Assisted Culling: %d image(s) have no capture time and are scored alone.", n_untimed))
+            say(string.format("Assisted Culling: %d image(s) have no capture time and are scored alone.", n_untimed))
         end
         if n_primary > 1000 then
-            dt.print(_("Assisted Culling: large selection, this can take a few minutes. You can cancel any time."))
+            say(_("Assisted Culling: large selection, this can take a few minutes. You can cancel any time."))
         end
         dt.print_hinter(_("Assisted Culling: starting analysis..."))
 
@@ -625,7 +663,9 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                 .. " --sam-model " .. shell_quote(sam_model)
                 .. " --progress " .. shell_quote(PROGRESS_PATH)
                 .. (fast_jpeg and " --fast-jpeg" or "")
-                .. " 2> " .. shell_quote(LOG_PATH)
+                .. " 2>> " .. shell_quote(LOG_PATH)
+            log("finding subjects: " .. points_cmd)
+            flush_log()
             run_async_command(points_cmd, POINTS_DONE_PATH)
             while not file_exists(POINTS_DONE_PATH) and not cancelled() do
                 local pf = io.open(PROGRESS_PATH, "r")
@@ -650,6 +690,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                 local dfh = io.open(POINTS_DONE_PATH, "r")
                 local code = dfh and tonumber((dfh:read("*a") or ""):match("%d+")) or nil
                 if dfh then dfh:close() end
+                log("finding subjects: scorer exit " .. tostring(code))
                 if code ~= 0 then
                     error("finding subjects failed (scorer exit " .. tostring(code) .. "): " .. read_log_tail(), 0)
                 end
@@ -676,6 +717,10 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                     pfh:close()
                 end
 
+                local n_short = 0
+                for _ in pairs(shortlisted) do n_short = n_short + 1 end
+                log(string.format("SAM: %d shortlisted, %d already cached, %d to segment",
+                    n_short, n_short - #points, #points))
                 local made, first_sam_error = 0, nil
                 for i, pt in ipairs(points) do
                     if cancelled() then break end
@@ -683,11 +728,16 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                     local out = mask_path_for(img.id)
                     sam_ids[#sam_ids + 1] = img.id
                     local ok_mask, mask_err = pcall(sam_mask, encoder, decoder, img, pt.prompt, out)
+                    local p = pt.prompt
+                    local where = p.x1 and string.format("box %.3f,%.3f-%.3f,%.3f", p.x0, p.y0, p.x1, p.y1)
+                        or string.format("point %.3f,%.3f", p.x0, p.y0)
                     if ok_mask then
                         mask_for_id[img.id] = out
                         made = made + 1
+                        log(string.format("SAM %s (%s) %s: masked", pt.id, img.filename, where))
                     else
                         first_sam_error = first_sam_error or tostring(mask_err)
+                        log(string.format("SAM %s (%s) %s: failed: %s", pt.id, img.filename, where, tostring(mask_err)))
                     end
                     if culling_job then culling_job.percent = 0.15 + 0.35 * i / #points end
                     dt.print_hinter(string.format("Assisted Culling: segmenting subjects %d / %d", i, #points))
@@ -698,7 +748,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                 if made < #points and not cancelled() then
                     local why = first_sam_error == "empty mask" and "no subject found"
                         or ("first error: " .. tostring(first_sam_error))
-                    dt.print(string.format("Assisted Culling: SAM masked %d of %d shortlisted frames (%s); those bursts use subject bias instead. Still running.",
+                    say(string.format("Assisted Culling: SAM masked %d of %d shortlisted frames (%s); those bursts use subject bias instead. Still running.",
                         made, #points, why))
                 end
             end
@@ -725,11 +775,14 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             .. (sam_model and (" --prescores " .. shell_quote(PRESCORE_PATH)
                 .. " --sam-model " .. shell_quote(sam_model)) or "")
             .. " --cache " .. shell_quote(CACHE_PATH)
-            .. " 2> " .. shell_quote(LOG_PATH)
+            .. " 2>> " .. shell_quote(LOG_PATH)
 
         if cancelled() then
             M.cancel_requested = true -- cancelled during the SAM stages: don't start scoring at all
+            log("cancelled before scoring")
         else
+            log("scoring: " .. cmd)
+            flush_log()
             run_async_command(cmd, DONE_PATH)
             main_started = true
         end
@@ -954,6 +1007,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                     df_done:close()
                     done_code = tonumber(raw_content:match("%d+"))
                 end
+                log("scoring: scorer exit " .. tostring(done_code))
                 break
             end
 
@@ -981,7 +1035,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             local start_idx = pending_idx - 1
             local remaining = total_lines - start_idx
             if remaining > 0 then
-                dt.print(string.format(overlap and "Assisted Culling: analysis done, applying the last %d..."
+                say(string.format(overlap and "Assisted Culling: analysis done, applying the last %d..."
                     or "Assisted Culling: applying ratings to %d...", remaining))
             end
             local started = os.time()
@@ -1020,10 +1074,10 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
 
         if M.cancel_requested then
             if applied_total > 0 then
-                dt.print(string.format("Assisted Culling cancelled. %d of %d images were already updated and keep their changes.",
+                say(string.format("Assisted Culling cancelled. %d of %d images were already updated and keep their changes.",
                     applied_total, #images))
             else
-                dt.print(_("Assisted Culling cancelled. No images were changed."))
+                say(_("Assisted Culling cancelled. No images were changed."))
             end
         elseif done_code ~= 0 then
             local tail = read_log_tail()
@@ -1049,8 +1103,11 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             if n_action_missed > 0 then
                 msg = msg .. string.format(", %d missed by darktable's rating action (rated one by one)", n_action_missed)
             end
-            dt.print(msg)
-            if first_error then dt.print_error("Assisted Culling: first apply error: " .. first_error) end
+            say(msg)
+            if first_error then
+                dt.print_error("Assisted Culling: first apply error: " .. first_error)
+                log("first apply error: " .. first_error)
+            end
         end
     end)
 
@@ -1082,6 +1139,8 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         pcall(os.remove, TMP_DIR .. "/dt_assisted_culling_run.bat")
         pcall(os.remove, TMP_DIR .. "/dt_assisted_culling_run.vbs")
     end
+    log("run finished")
+    flush_log()
 end
 
 -- Removes the plugin's tags. Ratings are NOT reverted.

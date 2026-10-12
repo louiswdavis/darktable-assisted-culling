@@ -355,7 +355,9 @@ def sharpness_score(rgb: np.ndarray, mode: str, mask_path: str = "") -> float:
         return _uniformity_score(denoised)
 
     # 3x3 patch grid weighted toward the center, assuming the subject sits
-    # mid-frame (subject_focus, and the fallback for face_detect / sam_subject).
+    # mid-frame (subject_focus and subject_peak, and the fallback for
+    # face_detect / sam_subject). subject_peak drops the median term, which is
+    # mostly background.
     h_step, w_step = h // 3, w // 3
     patch_weights = [[0.8, 1.0, 0.8], [1.0, 1.2, 1.0], [0.8, 1.0, 0.8]]
 
@@ -370,6 +372,8 @@ def sharpness_score(rgb: np.ndarray, mode: str, mask_path: str = "") -> float:
                 weighted_vars.append(var * patch_weights[r][c])
 
     if weighted_vars:
+        if mode == "subject_peak":
+            return float(np.max(weighted_vars))
         return float(np.max(weighted_vars) * 0.80 + np.median(patch_vars) * 0.20)
     return float(cv2.Laplacian(denoised, cv2.CV_64F).var())
 
@@ -393,6 +397,11 @@ def exposure_status(rgb: np.ndarray, mode: str) -> str:
         if np.mean(gray < SHADOW_CLIP) > CLIP_PCT_FLAG:
             return "underexposed"
     return "ok"
+
+
+def log(msg: str):
+    """One timestamped line on stderr, which the plugin appends to its run log."""
+    print(time.strftime("%H:%M:%S ") + "py: " + msg, file=sys.stderr, flush=True)
 
 
 def write_progress(progress_path: str, cur: int, tot: int, b_cur: int, b_tot: int):
@@ -463,13 +472,37 @@ def resolve_burst_scores(scores: dict, candidates=None) -> tuple:
 
 
 def parse_manifest_row(row) -> tuple:
-    """(id, filepath, burst_id, mask_path, shortlisted, edited). The last three
-    are "" when absent; shortlisted is "1"/"0" and edited is darktable's
-    change_timestamp, both only in sam_subject runs."""
-    return (row[0], row[1], row[2],
-            row[3] if len(row) > 3 else "",
-            row[4] if len(row) > 4 else "",
-            row[5] if len(row) > 5 else "")
+    """(id, filepath, burst_id, mask_path, shortlisted, edited, exposure, aperture).
+    mask_path, shortlisted and edited are "" when absent; shortlisted is "1"/"0"
+    and edited is darktable's change_timestamp, both only in sam_subject runs.
+    exposure (seconds) and aperture (f-number) come from darktable's EXIF, 0.0
+    when absent or unknown."""
+    row = list(row) + [""] * (8 - len(row))
+    return (row[0], row[1], row[2], row[3], row[4], row[5],
+            float(row[6] or 0), float(row[7] or 0))
+
+
+PANNING_SHUTTER = 1 / 125    # this slow or slower (s): a pan, background blur expected
+SHALLOW_DOF_APERTURE = 4.0   # this wide or wider (f-number): soft frame edges expected
+EXIF_SLACK = 1.01            # EXIF values arrive as float32, so 1/125 can land a hair either side
+
+
+def burst_sharp_mode(sharp_mode: str, exposures, apertures) -> str:
+    """The sharpness mode a burst is scored with once shooting intent is read
+    from its median shutter and aperture (0 = unknown, ignored), so every frame
+    in the burst shares one scale. A pan in subject_focus scores the subject
+    only (subject_peak); a wide aperture in tiles_uniformity skips the
+    edge-to-edge check (subject_focus). Panning leaves tiles_uniformity alone:
+    a slow shutter there is usually a tripod landscape, not a pan."""
+    exposures = [e for e in exposures if e > 0]
+    apertures = [a for a in apertures if a > 0]
+    if sharp_mode == "subject_focus" and exposures \
+            and float(np.median(exposures)) * EXIF_SLACK >= PANNING_SHUTTER:
+        return "subject_peak"
+    if sharp_mode == "tiles_uniformity" and apertures \
+            and float(np.median(apertures)) <= SHALLOW_DOF_APERTURE * EXIF_SLACK:
+        return "subject_focus"
+    return sharp_mode
 
 
 # Bump whenever a change to the scoring code changes any number stored in the cache.
@@ -645,12 +678,15 @@ def emit_saliency_points(manifest, args, cache):
         remaining[burst] -= 1
         if remaining[burst] == 0 and found[burst]:
             picks = shortlist({i: v[1] for i, v in found[burst].items()}, args.keep_mode)
+            notes = []
             with open(args.results, "a", newline="", encoding="utf-8") as f:
                 w = csv.writer(f)
                 for i in sorted(picks):
                     p = found[burst][i][0]
                     hit = cache.get(*masked_key(row_of[i][1], args, p, row_of[i][5])) is not None
                     w.writerow([i] + p + [""] * (4 - len(p)) + ["1" if hit else "0"])
+                    notes.append(f"{i} {'box' if len(p) == 4 else 'point'}{' cached' if hit else ''}")
+            log(f"burst {burst}: shortlist of {len(found[burst])} frames: {', '.join(notes)}")
             del found[burst]
         done += 1
         write_progress(args.progress, done, total, 0, 0)
@@ -662,6 +698,8 @@ def emit_saliency_points(manifest, args, cache):
             record(row[0], hit["prompt"], hit["heuristic"], hit["exposure"])
         else:
             to_decode.append(row)
+    log(f"finding subjects: {total} frames in {len(remaining)} bursts, {total - len(to_decode)} from cache, "
+        f"detector {detector or 'off'}")
 
     workers = max(1, (os.cpu_count() or 2) - 1)
     with concurrent.futures.ProcessPoolExecutor(max_workers=workers, initializer=_init_worker) as executor:
@@ -671,24 +709,26 @@ def emit_saliency_points(manifest, args, cache):
         }
         for future in concurrent.futures.as_completed(future_to_id):
             if cancel_requested(args.progress):
-                print("cancelled", file=sys.stderr)
+                log("cancelled")
                 executor.shutdown(wait=False, cancel_futures=True)
                 sys.exit(130)
             image_id = future_to_id[future]
             filepath, prompt, heuristic, exposure, err = future.result()
             if err:
-                print(f"skip saliency {image_id} ({filepath}): {err}", file=sys.stderr)
+                log(f"skip saliency {image_id} ({filepath}): {err}")
                 prompt = None
             else:
                 cache.put({"prompt": [float(v) for v in prompt], "heuristic": float(heuristic), "exposure": exposure},
                           *stage_a_key(filepath))
             record(image_id, prompt, heuristic, exposure)
+    log("finding subjects: done")
 
 
 def process_burst_logic(burst_id, burst_sharpness, burst_flags, burst_size, args, results_path,
-                        eligible=None):
+                        eligible=None) -> list:
+    """Appends the burst's result rows and returns its keepers, best first."""
     if not burst_sharpness:
-        return
+        return []
 
     allowed = keepers_allowed(args.keep_mode, burst_size)
     if eligible is None:
@@ -751,6 +791,7 @@ def process_burst_logic(burst_id, burst_sharpness, burst_flags, burst_size, args
 
     with open(results_path, "a", newline="", encoding="utf-8") as f:
         csv.writer(f).writerows(burst_rows)
+    return burst_keepers
 
 
 def main(args):
@@ -776,12 +817,17 @@ def score_manifest(manifest, args, cache):
     total_images = len(manifest)
     burst_groups = {}
     candidates_of = {}  # burst → shortlisted ids, only when the manifest carries a shortlist
-    for image_id, filepath, burst_id, mask_path, shortlisted, edited in manifest:
+    exif_of = {}  # burst → ([exposures], [apertures])
+    for image_id, filepath, burst_id, mask_path, shortlisted, edited, exposure, aperture in manifest:
         burst_groups.setdefault(burst_id, []).append((image_id, filepath, mask_path, shortlisted, edited))
+        exposures, apertures = exif_of.setdefault(burst_id, ([], []))
+        exposures.append(exposure)
+        apertures.append(aperture)
         if shortlisted:
             picks = candidates_of.setdefault(burst_id, set())
             if shortlisted == "1":
                 picks.add(image_id)
+    mode_of = {b: burst_sharp_mode(args.sharp_mode, *exif_of[b]) for b in burst_groups}
 
     total_bursts = len(burst_groups)
 
@@ -822,9 +868,21 @@ def score_manifest(manifest, args, cache):
     def finish_burst(burst_id):
         nonlocal completed_bursts
         completed_bursts += 1
-        scores, eligible = resolve_burst_scores(burst_sharpness[burst_id], candidates_of.get(burst_id))
-        process_burst_logic(burst_id, scores, burst_flags[burst_id], len(burst_groups[burst_id]),
-                            args, args.results, eligible)
+        raw = burst_sharpness[burst_id]
+        scores, eligible = resolve_burst_scores(raw, candidates_of.get(burst_id))
+        keepers = process_burst_logic(burst_id, scores, burst_flags[burst_id], len(burst_groups[burst_id]),
+                                      args, args.results, eligible)
+        note = f"burst {burst_id}: {len(raw)} of {len(burst_groups[burst_id])} frames scored, mode {mode_of[burst_id]}"
+        if mode_of[burst_id] != args.sharp_mode:
+            med = [float(np.median(known)) if (known := [v for v in vals if v > 0]) else 0.0
+                   for vals in exif_of[burst_id]]
+            note += f" from EXIF (median {med[0]:.4g} s, f/{med[1]:.3g}; 0 = unknown)"
+        if sam:
+            short = [k for k, v in raw.items() if isinstance(v, tuple) and k in candidates_of.get(burst_id, raw)]
+            masked = sum(raw[k][0] is not None for k in short)
+            note += f", masked {masked} of {len(short)} shortlisted" + ("" if short and masked == len(short)
+                                                                       else ", so subject bias")
+        log(f"{note}, keepers {', '.join(keepers) or 'none'}")
         del burst_sharpness[burst_id]
         del burst_flags[burst_id]
         if completed_bursts % 25 == 0:
@@ -836,12 +894,14 @@ def score_manifest(manifest, args, cache):
     sam = args.sharp_mode == "sam_subject"
     prescored = read_prescores(getattr(args, "prescores", "")) if sam else {}
 
-    def score_key(filepath):
-        return ("score", file_key(filepath), args.sharp_mode, args.exp_mode, args.fast_jpeg)
+    # keyed on the burst's effective mode, so the EXIF rules and their
+    # thresholds are part of the key without storing shutter or aperture
+    def score_key(filepath, burst_id):
+        return ("score", file_key(filepath), mode_of[burst_id], args.exp_mode, args.fast_jpeg)
 
-    def store(filepath, sharp, flags, image_id, mask_path, edited):
+    def store(filepath, sharp, flags, image_id, mask_path, edited, burst_id):
         if not sam:
-            cache.put({"sharp": float(sharp), "flags": list(flags)}, *score_key(filepath))
+            cache.put({"sharp": float(sharp), "flags": list(flags)}, *score_key(filepath, burst_id))
         elif mask_path and image_id in prescored:
             # None (mask unusable) is cached too: the same inputs give the same mask
             masked = None if sharp[0] is None else float(sharp[0])
@@ -857,7 +917,7 @@ def score_manifest(manifest, args, cache):
                     hit = cache.get(*masked_key(filepath, args, prompt, edited)) if shortlisted == "1" else None
                     known = ((hit["masked"] if hit else None, fallback), frame_flags(exp))
                 elif not sam:
-                    hit = cache.get(*score_key(filepath))
+                    hit = cache.get(*score_key(filepath, burst_id))
                     if hit:
                         known = (hit["sharp"], tuple(hit["flags"]))
                 if known:
@@ -865,16 +925,18 @@ def score_manifest(manifest, args, cache):
                     processed_count += 1
                     burst_completion[burst_id] += 1
                     continue
-                fut = executor.submit(process_single_image, filepath, args.sharp_mode, args.exp_mode,
+                fut = executor.submit(process_single_image, filepath, mode_of[burst_id], args.exp_mode,
                                       cancel_path, args.fast_jpeg, mask_path)
                 future_to_item[fut] = (burst_id, image_id, filepath, mask_path, edited)
+        log(f"scoring: {total_images} frames in {total_bursts} bursts, {processed_count} from cache or stage A, "
+            f"{len(future_to_item)} to decode, sharpness {args.sharp_mode}")
         for burst_id in list(burst_sharpness):
             if burst_completion[burst_id] == len(burst_groups[burst_id]):
                 finish_burst(burst_id)
 
         for future in concurrent.futures.as_completed(future_to_item):
             if cancel_requested(args.progress):
-                print("cancelled", file=sys.stderr)
+                log("cancelled")
                 executor.shutdown(wait=False, cancel_futures=True)
                 sys.exit(130)
 
@@ -888,9 +950,9 @@ def score_manifest(manifest, args, cache):
                 sys.exit(130)
 
             if err:
-                print(f"skip {image_id} ({filepath}): {err}", file=sys.stderr)
+                log(f"skip {image_id} ({filepath}): {err}")
             else:
-                store(filepath, sharp, flags, image_id, mask_path, edited)
+                store(filepath, sharp, flags, image_id, mask_path, edited, burst_id)
                 burst_sharpness[burst_id][image_id] = sharp
                 burst_flags[burst_id][image_id] = flags
 
@@ -907,6 +969,8 @@ def score_manifest(manifest, args, cache):
 
 
 if __name__ == "__main__":
+    # redirected stderr on Windows is cp1252: a filename outside it must not crash a log line
+    sys.stderr.reconfigure(errors="backslashreplace")
     parser = argparse.ArgumentParser(description="Assisted Culling Scorer")
     parser.add_argument("manifest", help="Path to manifest CSV")
     parser.add_argument("results", help="Path to results output CSV")
