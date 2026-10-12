@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
 score_images.py — burst-by-burst sharpness/exposure scorer for the darktable Assisted Culling plugin.
+
+With --emit-saliency-points the second positional argument is the output path
+for id,x_frac,y_frac subject points (the SAM prompt pre-pass), not results.
 """
 
 import argparse
@@ -44,6 +47,8 @@ TIER_THRESHOLDS = [
 ]
 EXPOSURE_PENALTY_STARS = 1
 
+SALIENCY_GRID = 5
+
 
 def _open_rgb(source, fast_jpeg: bool) -> np.ndarray:
     img = Image.open(source)
@@ -78,6 +83,36 @@ def load_image(filepath: str, fast_jpeg: bool = False) -> np.ndarray:
     if scale < 1:
         rgb = cv2.resize(rgb, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
     return rgb
+
+
+def saliency_point(rgb: np.ndarray, grid: int = SALIENCY_GRID) -> tuple:
+    """(x_frac, y_frac) centre of the tile that stands out most, by edge energy
+    plus colour distance from the frame's mean colour. Returns (0.5, 0.5) for a
+    featureless frame."""
+    gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
+    lab = cv2.cvtColor(rgb, cv2.COLOR_RGB2LAB).astype(np.float32)
+    frame_mean = lab.reshape(-1, 3).mean(axis=0)
+    h, w = gray.shape
+    th, tw = h // grid, w // grid
+
+    edge = np.zeros((grid, grid))
+    colour = np.zeros((grid, grid))
+    for r in range(grid):
+        for c in range(grid):
+            ys, xs = slice(r * th, (r + 1) * th), slice(c * tw, (c + 1) * tw)
+            edge[r, c] = cv2.Laplacian(gray[ys, xs], cv2.CV_64F).var()
+            colour[r, c] = np.linalg.norm(lab[ys, xs].reshape(-1, 3).mean(axis=0) - frame_mean)
+
+    score = np.zeros((grid, grid))
+    for part in (edge, colour):
+        peak = part.max()
+        if peak > 0:
+            score += 0.5 * part / peak
+    if score.max() <= 0:
+        return (0.5, 0.5)
+
+    r, c = np.unravel_index(int(np.argmax(score)), score.shape)
+    return ((c + 0.5) / grid, (r + 0.5) / grid)
 
 
 _CASCADES: dict = {}
@@ -119,10 +154,29 @@ def _face_eye_sharpness(gray: np.ndarray, denoised: np.ndarray):
     return float(cv2.Laplacian(face_crop, cv2.CV_64F).var())
 
 
-def sharpness_score(rgb: np.ndarray, mode: str) -> float:
+def _masked_sharpness(denoised: np.ndarray, mask_path: str):
+    """Laplacian variance inside a SAM mask PNG, or None if the mask is missing,
+    unreadable or empty, so the caller can fall back to the heuristic."""
+    mask = cv2.imread(mask_path, cv2.IMREAD_GRAYSCALE) if os.path.exists(mask_path) else None
+    if mask is None:
+        return None
+    h, w = denoised.shape
+    inside = cv2.resize(mask, (w, h), interpolation=cv2.INTER_NEAREST) > 127
+    if not inside.any():
+        return None
+    return float(cv2.Laplacian(denoised, cv2.CV_64F)[inside].var())
+
+
+def sharpness_score(rgb: np.ndarray, mode: str, mask_path: str = "") -> float:
     gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
     denoised = cv2.bilateralFilter(gray, 5, 50, 50)
     h, w = denoised.shape
+
+    if mode == "sam_subject" and mask_path:
+        masked = _masked_sharpness(denoised, mask_path)
+        if masked is not None:
+            return masked
+        # no usable mask for this image: fall through to the center-weighted heuristic
 
     if mode == "center":
         crop = denoised[int(h * 0.25):int(h * 0.75), int(w * 0.25):int(w * 0.75)]
@@ -136,11 +190,12 @@ def sharpness_score(rgb: np.ndarray, mode: str) -> float:
             return face_score
         # no face in frame: fall through to the frame-wide heuristic below
 
-    # 3x3 patch grid. subject_focus weights the center patches higher (assumes
-    # the subject sits mid-frame); tiles_uniformity, and face_detect when no
-    # face was found, weight every patch equally.
+    # 3x3 patch grid. subject_focus (and sam_subject without a usable mask)
+    # weights the center patches higher, assuming the subject sits mid-frame;
+    # tiles_uniformity, and face_detect when no face was found, weight every
+    # patch equally.
     h_step, w_step = h // 3, w // 3
-    if mode == "subject_focus":
+    if mode in ("subject_focus", "sam_subject"):
         patch_weights = [[0.8, 1.0, 0.8], [1.0, 1.2, 1.0], [0.8, 1.0, 0.8]]
     else:
         patch_weights = [[1.0, 1.0, 1.0] for _ in range(3)]
@@ -207,16 +262,59 @@ def _init_worker():
         pass
 
 
-def process_single_image(filepath: str, sharp_mode: str, exp_mode: str, cancel_path: str = "", fast_jpeg: bool = False):
+def parse_manifest_row(row) -> tuple:
+    """(id, filepath, burst_id, mask_path); mask_path is "" for 3-column rows."""
+    return (row[0], row[1], row[2], row[3] if len(row) > 3 else "")
+
+
+def process_single_image(filepath: str, sharp_mode: str, exp_mode: str, cancel_path: str = "",
+                         fast_jpeg: bool = False, mask_path: str = ""):
     if cancel_path and os.path.exists(cancel_path):
         return filepath, None, None, "cancelled"
     try:
         rgb = load_image(filepath, fast_jpeg)
-        sharp = sharpness_score(rgb, sharp_mode)
+        sharp = sharpness_score(rgb, sharp_mode, mask_path)
         exp = exposure_status(rgb, exp_mode)
         return filepath, sharp, exp, None
     except Exception as e:
         return filepath, None, None, str(e)
+
+
+def process_single_saliency(filepath: str, fast_jpeg: bool = False):
+    try:
+        return filepath, saliency_point(load_image(filepath, fast_jpeg)), None
+    except Exception as e:
+        return filepath, None, str(e)
+
+
+def emit_saliency_points(manifest, args):
+    """Writes id,x_frac,y_frac per image to args.results. Images that fail to
+    decode are left out; the Lua side then scores them without a mask."""
+    total = len(manifest)
+    with open(args.results, "w", newline="", encoding="utf-8"):
+        pass
+    write_progress(args.progress, 0, total, 0, 0)
+    workers = max(1, (os.cpu_count() or 2) - 1)
+    done = 0
+    with concurrent.futures.ProcessPoolExecutor(max_workers=workers, initializer=_init_worker) as executor:
+        future_to_id = {
+            executor.submit(process_single_saliency, row[1], args.fast_jpeg): row[0]
+            for row in manifest
+        }
+        for future in concurrent.futures.as_completed(future_to_id):
+            if cancel_requested(args.progress):
+                print("cancelled", file=sys.stderr)
+                executor.shutdown(wait=False, cancel_futures=True)
+                sys.exit(130)
+            image_id = future_to_id[future]
+            filepath, point, err = future.result()
+            if err:
+                print(f"skip saliency {image_id} ({filepath}): {err}", file=sys.stderr)
+            else:
+                with open(args.results, "a", newline="", encoding="utf-8") as f:
+                    csv.writer(f).writerow([image_id, round(point[0], 4), round(point[1], 4)])
+            done += 1
+            write_progress(args.progress, done, total, 0, 0)
 
 
 def process_burst_logic(burst_id, burst_sharpness, burst_exposure, burst_size, args, results_path):
@@ -292,20 +390,24 @@ def process_burst_logic(burst_id, burst_sharpness, burst_exposure, burst_size, a
 
 def main(args):
     with open(args.manifest, newline="", encoding="utf-8") as f:
-        manifest = [(row[0], row[1], row[2]) for row in csv.reader(f) if row]
+        manifest = [parse_manifest_row(row) for row in csv.reader(f) if row]
 
     total_images = len(manifest)
     if total_images == 0:
         write_progress(args.progress, 0, 0, 0, 0)
         return
 
+    if getattr(args, "emit_saliency_points", False):
+        emit_saliency_points(manifest, args)
+        return
+
     burst_groups = {}
-    for image_id, filepath, burst_id in manifest:
-        burst_groups.setdefault(burst_id, []).append((image_id, filepath))
+    for image_id, filepath, burst_id, mask_path in manifest:
+        burst_groups.setdefault(burst_id, []).append((image_id, filepath, mask_path))
 
     total_bursts = len(burst_groups)
 
-    if any(Path(fp).suffix.lower() in RAW_EXTENSIONS for _, fp, _ in manifest):
+    if any(Path(row[1]).suffix.lower() in RAW_EXTENSIONS for row in manifest):
         try:
             import rawpy  # noqa: F401
         except ImportError:
@@ -334,8 +436,9 @@ def main(args):
     with concurrent.futures.ProcessPoolExecutor(max_workers=workers, initializer=_init_worker) as executor:
         future_to_item = {}
         for burst_id, items in burst_groups.items():
-            for image_id, filepath in items:
-                fut = executor.submit(process_single_image, filepath, args.sharp_mode, args.exp_mode, cancel_path, args.fast_jpeg)
+            for image_id, filepath, mask_path in items:
+                fut = executor.submit(process_single_image, filepath, args.sharp_mode, args.exp_mode,
+                                      cancel_path, args.fast_jpeg, mask_path)
                 future_to_item[fut] = (burst_id, image_id, filepath)
 
         for future in concurrent.futures.as_completed(future_to_item):
@@ -397,6 +500,8 @@ if __name__ == "__main__":
     parser.add_argument("--nk-mode", default="leave", help="Handling for non-keepers")
     parser.add_argument("--fast-jpeg", action="store_true",
                         help="Decode JPEGs at reduced scale (faster; scores shift slightly)")
+    parser.add_argument("--emit-saliency-points", action="store_true",
+                        help="Write id,x_frac,y_frac to the results path instead of scoring")
 
     args = parser.parse_args()
 
