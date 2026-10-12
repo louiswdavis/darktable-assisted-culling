@@ -279,14 +279,25 @@ Things that cost time to find out, recorded so they don't again:
 - **`darktable.ai` is real and Lua-scriptable** (`load_model` / `ctx:run`
   on arbitrary ONNX tensors, plus a model registry keyed by task —
   `denoise`, `upscale`, `mask`), but it isn't an automatic subject
-  detector out of the box. The only shipped `mask`-task model is a
-  SAM-style encoder/decoder, and darktable's own use of it (the darkroom
-  object-mask tool) is interactive — it needs a click to prompt the mask,
-  and that tool itself isn't exposed to Lua. Getting real subject-aware
-  sharpness out of it means loading that same registered model from this
-  plugin's Lua side and feeding it an *automatic* prompt (e.g. a saliency
-  peak or frame-center point) instead of a GUI click — a genuinely new
-  piece of work, not a one-line integration.
+  detector out of the box, and it's a parked idea rather than a planned
+  feature. The only shipped `mask`-task model is a SAM-style
+  encoder/decoder; it needs a point or box prompt, and darktable's own use
+  of it (the darkroom object-mask tool) supplies that via a GUI click —
+  that tool isn't exposed to Lua, and there's no "find the subject"
+  task to call instead. Worse, `darktable.ai` only runs inside
+  darktable's Lua process; the actual scoring happens in the separate
+  `score_images.py` process, so using it would mean generating a bbox in
+  Lua and threading it into the manifest for the scorer to crop against —
+  on top of solving the prompt problem. A face bbox from the *face & eyes*
+  mode above is the one prompt source that would actually be reliable,
+  but that detection runs in Python, so wiring it to a Lua-side SAM call
+  means a three-stage pipeline instead of today's two processes, for a
+  model that's slower per image and depends on the user having downloaded
+  it through darktable's AI model manager. For the dominant case (a
+  person in frame) *face & eyes* already covers this more cheaply. If
+  broader subject coverage (pets, sport, product shots) is ever needed, a
+  classical saliency-point heuristic — no new ML dependency, no new
+  process boundary — is the right next small step, not SAM.
 
 ## License
 
