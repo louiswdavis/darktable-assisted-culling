@@ -3,14 +3,16 @@
 score_images.py — burst-by-burst sharpness/exposure scorer for the darktable Assisted Culling plugin.
 
 With --emit-saliency-points the second positional argument is the output path
-for id,x_frac,y_frac subject points (the SAM prompt pre-pass), not results.
+for id,x0,y0,x1,y1,cached SAM prompts (the SAM pre-pass), not results.
 """
 
 import argparse
 import csv
 import gc
 import io
+import json
 import os
+import sqlite3
 import sys
 import time
 import concurrent.futures
@@ -461,11 +463,99 @@ def resolve_burst_scores(scores: dict, candidates=None) -> tuple:
 
 
 def parse_manifest_row(row) -> tuple:
-    """(id, filepath, burst_id, mask_path, shortlisted). The last two are ""
-    when absent; shortlisted is "1"/"0" only in sam_subject runs."""
+    """(id, filepath, burst_id, mask_path, shortlisted, edited). The last three
+    are "" when absent; shortlisted is "1"/"0" and edited is darktable's
+    change_timestamp, both only in sam_subject runs."""
     return (row[0], row[1], row[2],
             row[3] if len(row) > 3 else "",
-            row[4] if len(row) > 4 else "")
+            row[4] if len(row) > 4 else "",
+            row[5] if len(row) > 5 else "")
+
+
+# Bump whenever a change to the scoring code changes any number stored in the cache.
+SCORE_CACHE_VERSION = 1
+SCORE_CACHE_MAX_AGE_DAYS = 90
+SCORE_CACHE_COMMIT_EVERY = 50
+
+
+def file_key(filepath: str):
+    """[path, mtime_ns, size], or None if the file can't be stat'ed (it then
+    isn't cached, and the decode reports the real error)."""
+    try:
+        st = os.stat(filepath)
+    except OSError:
+        return None
+    return [os.path.abspath(filepath), st.st_mtime_ns, st.st_size]
+
+
+class ScoreCache:
+    """Per-frame scores in SQLite, keyed by everything that changes the number:
+    the file's identity, the settings that feed the score, and
+    SCORE_CACHE_VERSION. Settings that only use the scores (ranking, keepers,
+    non-keepers, tag-only flags) stay out of the key. An empty path disables
+    it: every get misses and put does nothing. Only the main process uses it."""
+
+    def __init__(self, path: str):
+        self.db, self.path, self.used, self.pending = None, path, [], 0
+        if not path:
+            return
+        os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+        try:
+            self.db = sqlite3.connect(path, timeout=30)
+            self.db.execute("CREATE TABLE IF NOT EXISTS scores "
+                            "(key TEXT PRIMARY KEY, value TEXT NOT NULL, used REAL NOT NULL)")
+            self.db.execute("DELETE FROM scores WHERE used < ?",
+                            (time.time() - SCORE_CACHE_MAX_AGE_DAYS * 86400,))
+            self.db.commit()
+        except sqlite3.DatabaseError as e:
+            raise RuntimeError(f"score cache {path} is unreadable ({e}); delete it to start a fresh one") from e
+
+    @staticmethod
+    def _key(parts) -> str:
+        return json.dumps(list(parts) + [SCORE_CACHE_VERSION], separators=(",", ":"))
+
+    def get(self, *parts):
+        if not self.db or any(p is None for p in parts):
+            return None
+        k = self._key(parts)
+        row = self.db.execute("SELECT value FROM scores WHERE key = ?", (k,)).fetchone()
+        if row is None:
+            return None
+        self.used.append(k)
+        return json.loads(row[0])
+
+    def put(self, value, *parts):
+        if not self.db or any(p is None for p in parts):
+            return
+        self.db.execute("INSERT OR REPLACE INTO scores (key, value, used) VALUES (?, ?, ?)",
+                        (self._key(parts), json.dumps(value), time.time()))
+        self.pending += 1
+        if self.pending >= SCORE_CACHE_COMMIT_EVERY:
+            self.db.commit()
+            self.pending = 0
+
+    def close(self):
+        if not self.db:
+            return
+        now = time.time()
+        self.db.executemany("UPDATE scores SET used = ? WHERE key = ?", [(now, k) for k in self.used])
+        self.db.commit()
+        self.db.close()
+        self.db = None
+
+
+def detector_key(detector: str):
+    """The detector model's identity for stage-A keys; "" when there's none."""
+    if not detector:
+        return ""
+    return file_key(detector)
+
+
+def masked_key(filepath: str, args, prompt, edited: str):
+    """Key parts for a frame's SAM-masked score. The mask comes from darktable's
+    export of the edited image, so the edit time is part of it."""
+    return ("masked", file_key(filepath), args.fast_jpeg, getattr(args, "sam_model", ""),
+            [round(v, 4) for v in prompt], edited)
 
 
 def process_single_image(filepath: str, sharp_mode: str, exp_mode: str, cancel_path: str = "",
@@ -503,44 +593,81 @@ def process_single_saliency(filepath: str, fast_jpeg: bool = False, exp_mode: st
 
 
 def read_prescores(path: str) -> dict:
-    """id → (fallback sharpness, exposure status) from a stage-A prescore file."""
+    """id → (fallback sharpness, exposure status, prompt) from a stage-A prescore file."""
     if not path or not os.path.exists(path):
         return {}
     with open(path, newline="", encoding="utf-8") as f:
-        return {row[0]: (float(row[1]), row[2]) for row in csv.reader(f) if len(row) == 3}
+        return {row[0]: (float(row[1]), row[2], [float(v) for v in row[3:] if v])
+                for row in csv.reader(f) if len(row) == 7}
 
 
-def emit_saliency_points(manifest, args):
-    """Writes id,x0,y0,x1,y1 frame fractions to args.results for each burst's
+def emit_saliency_points(manifest, args, cache):
+    """Writes id,x0,y0,x1,y1,cached rows to args.results for each burst's
     shortlist: the frames worth running SAM on, picked by the center-weighted
     heuristic. A box prompt fills all four; a point prompt leaves x1,y1 empty.
-    With args.prescores, also writes id,fallback_score,exposure for every frame
-    so the scoring pass needn't decode frames outside the shortlist again.
-    Images that fail to decode are left out and so can't be keepers."""
+    cached is "1" when the frame's masked score is already in the cache, so
+    darktable needn't run SAM on it.
+    With args.prescores, also writes id,fallback_score,exposure,x0,y0,x1,y1 for
+    every frame so the scoring pass needn't decode frames outside the shortlist
+    again. Images that fail to decode are left out and so can't be keepers."""
     total = len(manifest)
     prescores = getattr(args, "prescores", "")
     exp_mode = getattr(args, "exp_mode", "whole_frame")
     detector = getattr(args, "detector", "")
     if detector:
         _detector(detector)  # a missing or unreadable model fails the run, not each frame
+    det_key = detector_key(detector)
     for path in (args.results, prescores):
         if path:
             with open(path, "w", newline="", encoding="utf-8"):
                 pass
     write_progress(args.progress, 0, total, 0, 0)
 
-    burst_of = {row[0]: row[2] for row in manifest}
+    row_of = {row[0]: row for row in manifest}
     remaining = {}
     for row in manifest:
         remaining[row[2]] = remaining.get(row[2], 0) + 1
-    found = {b: {} for b in remaining}  # burst → id → (point, heuristic score)
+    found = {b: {} for b in remaining}  # burst → id → (prompt, heuristic score)
+    done = 0
+
+    def stage_a_key(filepath):
+        return ("stage_a", file_key(filepath), exp_mode, args.fast_jpeg, det_key)
+
+    def record(image_id, prompt, heuristic, exposure):
+        nonlocal done
+        image_id, filepath, burst = row_of[image_id][:3]
+        if prompt is not None:
+            prompt = [round(v, 4) for v in prompt]
+            found[burst][image_id] = (prompt, heuristic)
+            if prescores:
+                with open(prescores, "a", newline="", encoding="utf-8") as f:
+                    csv.writer(f).writerow([image_id, heuristic, exposure] + prompt + [""] * (4 - len(prompt)))
+        remaining[burst] -= 1
+        if remaining[burst] == 0 and found[burst]:
+            picks = shortlist({i: v[1] for i, v in found[burst].items()}, args.keep_mode)
+            with open(args.results, "a", newline="", encoding="utf-8") as f:
+                w = csv.writer(f)
+                for i in sorted(picks):
+                    p = found[burst][i][0]
+                    hit = cache.get(*masked_key(row_of[i][1], args, p, row_of[i][5])) is not None
+                    w.writerow([i] + p + [""] * (4 - len(p)) + ["1" if hit else "0"])
+            del found[burst]
+        done += 1
+        write_progress(args.progress, done, total, 0, 0)
+
+    to_decode = []
+    for row in manifest:
+        hit = cache.get(*stage_a_key(row[1]))
+        if hit:
+            record(row[0], hit["prompt"], hit["heuristic"], hit["exposure"])
+        else:
+            to_decode.append(row)
 
     workers = max(1, (os.cpu_count() or 2) - 1)
-    done = 0
     with concurrent.futures.ProcessPoolExecutor(max_workers=workers, initializer=_init_worker) as executor:
         future_to_id = {
             executor.submit(process_single_saliency, row[1], args.fast_jpeg, exp_mode, detector): row[0]
-            for row in manifest
+            for row in to_decode
         }
         for future in concurrent.futures.as_completed(future_to_id):
             if cancel_requested(args.progress):
@@ -548,26 +675,14 @@ def emit_saliency_points(manifest, args):
                 executor.shutdown(wait=False, cancel_futures=True)
                 sys.exit(130)
             image_id = future_to_id[future]
-            burst = burst_of[image_id]
-            filepath, point, heuristic, exposure, err = future.result()
+            filepath, prompt, heuristic, exposure, err = future.result()
             if err:
                 print(f"skip saliency {image_id} ({filepath}): {err}", file=sys.stderr)
+                prompt = None
             else:
-                found[burst][image_id] = (point, heuristic)
-                if prescores:
-                    with open(prescores, "a", newline="", encoding="utf-8") as f:
-                        csv.writer(f).writerow([image_id, heuristic, exposure])
-            remaining[burst] -= 1
-            if remaining[burst] == 0 and found[burst]:
-                picks = shortlist({i: v[1] for i, v in found[burst].items()}, args.keep_mode)
-                with open(args.results, "a", newline="", encoding="utf-8") as f:
-                    w = csv.writer(f)
-                    for i in sorted(picks):
-                        prompt = [round(v, 4) for v in found[burst][i][0]]
-                        w.writerow([i] + prompt + [""] * (4 - len(prompt)))
-                del found[burst]
-            done += 1
-            write_progress(args.progress, done, total, 0, 0)
+                cache.put({"prompt": [float(v) for v in prompt], "heuristic": float(heuristic), "exposure": exposure},
+                          *stage_a_key(filepath))
+            record(image_id, prompt, heuristic, exposure)
 
 
 def process_burst_logic(burst_id, burst_sharpness, burst_flags, burst_size, args, results_path,
@@ -647,14 +762,22 @@ def main(args):
         write_progress(args.progress, 0, 0, 0, 0)
         return
 
-    if getattr(args, "emit_saliency_points", False):
-        emit_saliency_points(manifest, args)
-        return
+    cache = ScoreCache(getattr(args, "cache", ""))
+    try:
+        if getattr(args, "emit_saliency_points", False):
+            emit_saliency_points(manifest, args, cache)
+        else:
+            score_manifest(manifest, args, cache)
+    finally:
+        cache.close()
 
+
+def score_manifest(manifest, args, cache):
+    total_images = len(manifest)
     burst_groups = {}
     candidates_of = {}  # burst → shortlisted ids, only when the manifest carries a shortlist
-    for image_id, filepath, burst_id, mask_path, shortlisted in manifest:
-        burst_groups.setdefault(burst_id, []).append((image_id, filepath, mask_path, shortlisted))
+    for image_id, filepath, burst_id, mask_path, shortlisted, edited in manifest:
+        burst_groups.setdefault(burst_id, []).append((image_id, filepath, mask_path, shortlisted, edited))
         if shortlisted:
             picks = candidates_of.setdefault(burst_id, set())
             if shortlisted == "1":
@@ -707,24 +830,44 @@ def main(args):
         if completed_bursts % 25 == 0:
             gc.collect()
 
-    # sam_subject: frames outside the shortlist were already scored in the
-    # saliency pass, so they aren't decoded again.
-    prescored = read_prescores(getattr(args, "prescores", "")) if args.sharp_mode == "sam_subject" else {}
+    # sam_subject: every frame was already scored in the saliency pass, so only
+    # frames with a fresh SAM mask are decoded again. The rest use that
+    # fallback score, plus the cached masked score when there is one.
+    sam = args.sharp_mode == "sam_subject"
+    prescored = read_prescores(getattr(args, "prescores", "")) if sam else {}
+
+    def score_key(filepath):
+        return ("score", file_key(filepath), args.sharp_mode, args.exp_mode, args.fast_jpeg)
+
+    def store(filepath, sharp, flags, image_id, mask_path, edited):
+        if not sam:
+            cache.put({"sharp": float(sharp), "flags": list(flags)}, *score_key(filepath))
+        elif mask_path and image_id in prescored:
+            # None (mask unusable) is cached too: the same inputs give the same mask
+            masked = None if sharp[0] is None else float(sharp[0])
+            cache.put({"masked": masked}, *masked_key(filepath, args, prescored[image_id][2], edited))
 
     with concurrent.futures.ProcessPoolExecutor(max_workers=workers, initializer=_init_worker) as executor:
         future_to_item = {}
         for burst_id, items in burst_groups.items():
-            for image_id, filepath, mask_path, shortlisted in items:
-                if shortlisted == "0" and image_id in prescored:
-                    fallback, exp = prescored[image_id]
-                    burst_sharpness[burst_id][image_id] = (None, fallback)
-                    burst_flags[burst_id][image_id] = frame_flags(exp)
+            for image_id, filepath, mask_path, shortlisted, edited in items:
+                known = None
+                if sam and not mask_path and image_id in prescored:
+                    fallback, exp, prompt = prescored[image_id]
+                    hit = cache.get(*masked_key(filepath, args, prompt, edited)) if shortlisted == "1" else None
+                    known = ((hit["masked"] if hit else None, fallback), frame_flags(exp))
+                elif not sam:
+                    hit = cache.get(*score_key(filepath))
+                    if hit:
+                        known = (hit["sharp"], tuple(hit["flags"]))
+                if known:
+                    burst_sharpness[burst_id][image_id], burst_flags[burst_id][image_id] = known
                     processed_count += 1
                     burst_completion[burst_id] += 1
                     continue
                 fut = executor.submit(process_single_image, filepath, args.sharp_mode, args.exp_mode,
                                       cancel_path, args.fast_jpeg, mask_path)
-                future_to_item[fut] = (burst_id, image_id, filepath)
+                future_to_item[fut] = (burst_id, image_id, filepath, mask_path, edited)
         for burst_id in list(burst_sharpness):
             if burst_completion[burst_id] == len(burst_groups[burst_id]):
                 finish_burst(burst_id)
@@ -735,7 +878,7 @@ def main(args):
                 executor.shutdown(wait=False, cancel_futures=True)
                 sys.exit(130)
 
-            burst_id, image_id, filepath = future_to_item[future]
+            burst_id, image_id, filepath, mask_path, edited = future_to_item[future]
             try:
                 _, sharp, flags, err = future.result()
             except concurrent.futures.CancelledError:
@@ -747,6 +890,7 @@ def main(args):
             if err:
                 print(f"skip {image_id} ({filepath}): {err}", file=sys.stderr)
             else:
+                store(filepath, sharp, flags, image_id, mask_path, edited)
                 burst_sharpness[burst_id][image_id] = sharp
                 burst_flags[burst_id][image_id] = flags
 
@@ -775,13 +919,17 @@ if __name__ == "__main__":
     parser.add_argument("--fast-jpeg", action="store_true",
                         help="Decode JPEGs at reduced scale (faster; scores shift slightly)")
     parser.add_argument("--emit-saliency-points", action="store_true",
-                        help="Write id,x0,y0,x1,y1 SAM prompts to the results path instead of scoring")
+                        help="Write id,x0,y0,x1,y1,cached SAM prompts to the results path instead of scoring")
     parser.add_argument("--detector", default="",
                         help="With --emit-saliency-points: YOLOX .onnx whose most prominent vehicle box "
                              "prompts SAM; frames without one fall back to the saliency point")
     parser.add_argument("--prescores", default="",
                         help="sam_subject: per-frame fallback scores written by the saliency pass "
                              "and read by the scoring pass, so frames outside the shortlist decode once")
+    parser.add_argument("--cache", default="",
+                        help="SQLite file of per-frame scores reused across runs (created if missing)")
+    parser.add_argument("--sam-model", default="",
+                        help="sam_subject: id of darktable's SAM model, part of the masked-score cache key")
     parser.add_argument("--tag-only-flags", default="", type=lambda s: frozenset(filter(None, s.split(","))),
                         help="Comma-separated flags that are still listed but never cost stars")
 
