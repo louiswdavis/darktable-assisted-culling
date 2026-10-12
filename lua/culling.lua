@@ -314,13 +314,14 @@ local function sam_mask(encoder, decoder, img, x_frac, y_frac, out_path)
     out:save(out_path)
 end
 
-local function write_manifest(images, burst_of, mask_for_id)
+local function write_manifest(images, burst_of, mask_for_id, shortlisted)
     local f = io.open(MANIFEST_PATH, "w")
     if not f then return false end
     for _, img in ipairs(images) do
         local path = img.path .. "/" .. img.filename
         local fields = { img.id, path, burst_of[img.id] }
         if mask_for_id then fields[4] = mask_for_id[img.id] or "" end
+        if shortlisted then fields[5] = shortlisted[img.id] and "1" or "0" end
         f:write(M.csv_line(fields), "\n")
     end
     f:close()
@@ -403,6 +404,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
 
     local culling_job = nil
     local sam_ids = {}
+    local main_started = false
 
     local success, run_err = pcall(function()
         local sam_model
@@ -500,11 +502,29 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         end
 
         if sam_model then
-            -- Stage A: the scorer picks one salient point per image to prompt SAM with.
+            -- Load first: a model that's registered but not downloaded should fail
+            -- before the minutes stage A can take on a big batch.
+            local function load_part(file, provider)
+                local ok_l, ctx = pcall(dt.ai.load_model, sam_model, provider, file)
+                if ok_l and ctx then return ctx end
+                return nil, tostring(ctx or "load_model returned nothing")
+            end
+            local encoder, enc_err = load_part("encoder.onnx", nil)
+            local decoder, dec_err = load_part("decoder.onnx", "cpu")
+            if not (encoder and decoder) then
+                if encoder then encoder:close() end
+                if decoder then decoder:close() end
+                error("couldn't load the SAM mask model '" .. sam_model
+                    .. "' (is it downloaded? preferences → AI): " .. (enc_err or dec_err), 0)
+            end
+
+            -- Stage A: the scorer shortlists each burst's best frames by the fast heuristic
+            -- and picks one salient point per shortlisted frame to prompt SAM with.
             local points_cmd = shell_quote(py_bin) .. " -u " .. shell_quote(sc_script)
                 .. " " .. shell_quote(MANIFEST_PATH)
                 .. " " .. shell_quote(POINTS_PATH)
                 .. " --emit-saliency-points"
+                .. " --keep-mode " .. shell_quote(tostring(keep_mode))
                 .. " --progress " .. shell_quote(PROGRESS_PATH)
                 .. (fast_jpeg and " --fast-jpeg" or "")
                 .. " 2> " .. shell_quote(LOG_PATH)
@@ -520,7 +540,15 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                 dt.print_hinter(string.format("Assisted Culling: finding subjects %s / %s", cur or "0", tot or "?"))
                 dt.control.sleep(150)
             end
-            if not cancelled() then
+            if cancelled() then
+                -- let the stage-A process see the cancel and exit, so it can't write into a later run
+                local cf = io.open(CANCEL_PATH, "w")
+                if cf then cf:write("1"); cf:close() end
+                for _ = 1, 50 do
+                    if file_exists(POINTS_DONE_PATH) then break end
+                    dt.control.sleep(100)
+                end
+            else
                 local dfh = io.open(POINTS_DONE_PATH, "r")
                 local code = dfh and tonumber((dfh:read("*a") or ""):match("%d+")) or nil
                 if dfh then dfh:close() end
@@ -529,17 +557,9 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                 end
             end
 
-            -- Stage B: SAM masks, one model load for the whole batch.
-            local mask_for_id = {}
+            -- Stage B: SAM masks for the shortlist, one model load for the whole batch.
+            local mask_for_id, shortlisted = {}, {}
             if not cancelled() then
-                local ok_enc, encoder = pcall(dt.ai.load_model, sam_model, nil, "encoder.onnx")
-                local ok_dec, decoder = pcall(dt.ai.load_model, sam_model, "cpu", "decoder.onnx")
-                if not (ok_enc and ok_dec) then
-                    if ok_enc then encoder:close() end
-                    if ok_dec then decoder:close() end
-                    error("couldn't load the SAM mask model '" .. sam_model
-                        .. "' (is it downloaded? preferences → AI): " .. tostring(ok_enc and decoder or encoder), 0)
-                end
 
                 local by_id = {}
                 for _, img in ipairs(primaries) do by_id[tostring(img.id)] = img end
@@ -548,7 +568,10 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                 if pfh then
                     for line in pfh:lines() do
                         local parts = M.parse_csv_line(line, 3)
-                        if parts and by_id[parts[1]] then points[#points + 1] = parts end
+                        if parts and by_id[parts[1]] then
+                            points[#points + 1] = parts
+                            shortlisted[by_id[parts[1]].id] = true
+                        end
                     end
                     pfh:close()
                 end
@@ -569,18 +592,19 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                     end
                     if culling_job then culling_job.percent = 0.15 + 0.35 * i / #points end
                     dt.print_hinter(string.format("Assisted Culling: segmenting subjects %d / %d", i, #points))
+                    dt.control.sleep(10) -- hand the Lua lock back so the cancel button and hinter respond
                 end
-                encoder:close()
-                decoder:close()
 
-                if made < n_primary and not cancelled() then
-                    dt.print(string.format("Assisted Culling: SAM masked %d of %d images; the rest use the center-weighted fallback.",
-                        made, n_primary))
+                if made < #points and not cancelled() then
+                    dt.print(string.format("Assisted Culling: SAM masked %d of %d shortlisted frames; bursts with an unmasked shortlisted frame use the center-weighted fallback.",
+                        made, #points))
                     if first_sam_error then dt.print_error("Assisted Culling: first SAM error: " .. first_sam_error) end
                 end
             end
+            encoder:close()
+            decoder:close()
 
-            if not write_manifest(primaries, burst_of, mask_for_id) then
+            if not write_manifest(primaries, burst_of, mask_for_id, shortlisted) then
                 error("Could not write manifest")
             end
             pcall(os.remove, PROGRESS_PATH)
@@ -598,7 +622,12 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             .. (fast_jpeg and " --fast-jpeg" or "")
             .. " 2> " .. shell_quote(LOG_PATH)
 
-        run_async_command(cmd, DONE_PATH)
+        if cancelled() then
+            M.cancel_requested = true -- cancelled during the SAM stages: don't start scoring at all
+        else
+            run_async_command(cmd, DONE_PATH)
+            main_started = true
+        end
 
         local done_code = nil
         local stage1_start = os.time()
@@ -762,7 +791,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         end
 
         -- After a cancel, give the scorer a moment to exit so it can't overlap the next run.
-        if M.cancel_requested then
+        if M.cancel_requested and main_started then
             for i = 1, 50 do
                 if file_exists(DONE_PATH) then break end
                 dt.control.sleep(100)
@@ -853,7 +882,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
     end
 
     -- Keep the cancel flag if the scorer is still alive, so it can still see it.
-    local scorer_alive = M.cancel_requested and not file_exists(DONE_PATH)
+    local scorer_alive = M.cancel_requested and main_started and not file_exists(DONE_PATH)
     pcall(os.remove, MANIFEST_PATH)
     pcall(os.remove, RESULTS_PATH)
     pcall(os.remove, RESULTS_PATH .. ".tmp")
@@ -1028,7 +1057,7 @@ local function install_panel()
 
     sharp_combo = dt.new_widget("combobox") {
         label = _("sharpness"),
-        tooltip = _("How sharpness is measured. Face & eyes falls back to edge-to-edge uniformity when no face is found, so it adds nothing over that mode for bursts with no people in them. Subject tracking (SAM) segments the subject with darktable's AI mask model before scoring; it's much slower than the rest (every image is decoded twice and run through the model), so use it on smaller batches or a final pass."),
+        tooltip = _("How sharpness is measured. Face & eyes falls back to edge-to-edge uniformity when no face is found, so it adds nothing over that mode for bursts with no people in them. Subject tracking (SAM) segments the subject with darktable's AI mask model before scoring; it's slower than the rest (every image is decoded twice, and each burst's top few frames go through the model)."),
         _("center crop"), _("edge-to-edge uniformity"), _("absolute peak 1%"), _("face & eyes (OpenCV)"), _("subject bias (center-weighted)"), _("subject tracking (SAM)"),
         selected = dt.preferences.read("assisted_culling", "last_sharp_mode", "integer") or 1, 
         changed_callback = function(widget)
