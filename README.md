@@ -90,7 +90,7 @@ The other preferences are optional; see [Preferences](#preferences).
 Only needed for the *subject tracking (SAM)* sharpness mode. Every other mode works without them.
 
 1. **SAM mask model** (needs darktable 5.6+). In darktable, open **preferences → AI**, then enable and download a SAM or SAM 2 mask model. darktable stores and manages it, and the plugin uses whichever mask model is enabled there. SegNext mask models aren't supported; if one is enabled, the run stops and says so.
-2. **Vehicle detector** (optional, for motorsport). Download [`object_detection_yolox_2022nov.onnx`](https://github.com/opencv/opencv_zoo/raw/main/models/object_detection_yolox/object_detection_yolox_2022nov.onnx) (36 MB, Apache-2.0) to any folder you like, then set **Assisted Culling: object detector model (YOLOX .onnx)** in preferences → lua options to that file. See [Vehicle detector](#vehicle-detector) for what it does.
+2. **Vehicle detector** (optional, for motorsport). Download [`object_detection_yolox_2022nov.onnx`](https://github.com/opencv/opencv_zoo/raw/main/models/object_detection_yolox/object_detection_yolox_2022nov.onnx) (36 MB, Apache-2.0), ideally into a `models` folder in the repo, then set **Assisted Culling: object detector model (YOLOX .onnx)** in preferences → lua options to that file. See [Vehicle detector](#vehicle-detector) for what it does.
 
 ## Using it
 
@@ -172,12 +172,15 @@ Needs darktable 5.6+ with a SAM or SAM 2 mask model enabled and downloaded (pref
 
 Guessing the subject point works on a bright livery but can pick a sponsor board or kerb instead. For motorsport, give SAM a box around the car:
 
-1. Download [`object_detection_yolox_2022nov.onnx`](https://github.com/opencv/opencv_zoo/raw/main/models/object_detection_yolox/object_detection_yolox_2022nov.onnx) (36 MB, Apache-2.0, from OpenCV's model zoo) and keep it anywhere you like. From a terminal (Windows 10+ ships `curl`):
+1. Download [`object_detection_yolox_2022nov.onnx`](https://github.com/opencv/opencv_zoo/raw/main/models/object_detection_yolox/object_detection_yolox_2022nov.onnx) (36 MB, Apache-2.0, from OpenCV's model zoo). A `models` folder in the repo is the easiest place: it sits next to the venv, `.gitignore` already skips `*.onnx`, and `git pull` leaves it alone. From the repo root (Windows 10+ ships `curl`):
 
    ```
-   curl -L -o object_detection_yolox_2022nov.onnx https://github.com/opencv/opencv_zoo/raw/main/models/object_detection_yolox/object_detection_yolox_2022nov.onnx
+   mkdir models
+   curl -L -o models/object_detection_yolox_2022nov.onnx https://github.com/opencv/opencv_zoo/raw/main/models/object_detection_yolox/object_detection_yolox_2022nov.onnx
    ```
-2. Set **Assisted Culling: object detector model** in preferences → Lua options to that file.
+
+   Re-cloning the repo deletes it. If you do that often, keep it next to the score cache instead (`assisted_culling` in darktable's config directory).
+2. Set **Assisted Culling: object detector model** in preferences → Lua options to the file's full path, e.g. `C:\Users\you\darktable-assisted-culling\models\object_detection_yolox_2022nov.onnx`.
 
 On each shortlisted frame, YOLOX finds cars, motorcycles and trucks (race cars are often labelled as trucks). The most prominent one, scored by confidence × size, becomes SAM's prompt, so a car filling a third of the frame beats a small one in the background. A frame with no vehicle (a crowd shot, a pit board) uses the point guess as before.
 
