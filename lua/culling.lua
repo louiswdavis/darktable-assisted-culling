@@ -102,6 +102,12 @@ local LOG_PATH = TMP_DIR .. "/dt_assisted_culling_stderr.log"
 local PROGRESS_PATH = TMP_DIR .. "/dt_assisted_culling_progress.txt"
 local CANCEL_PATH = PROGRESS_PATH .. ".cancel"
 local DONE_PATH = TMP_DIR .. "/dt_assisted_culling_done.txt"
+local POINTS_PATH = TMP_DIR .. "/dt_assisted_culling_points.csv"
+local POINTS_DONE_PATH = POINTS_PATH .. ".done"
+
+local function mask_path_for(id)
+    return TMP_DIR .. "/dt_assisted_culling_mask_" .. tostring(id) .. ".png"
+end
 
 if dt.gui then
     dt.preferences.register("assisted_culling", "python_bin", "file",
@@ -211,12 +217,111 @@ local function run_async_command(cmd, done_path)
     end
 end
 
-local function write_manifest(images, burst_of)
+-- SAM / SAM 2 conventions, mirroring darktable's src/common/ai/segmentation.c.
+-- darktable.ai exposes no model attributes to Lua, so these are the defaults
+-- that file falls back to when a model doesn't override them.
+local SAM_INPUT_SIZE = 1024
+local SAM_PREV_MASK_DIM = 256
+local SAM_MASK_MAX_DIM = 256 -- masks are read back pixel by pixel; cap the cost
+local SAM_MEAN = { 123.675, 116.28, 103.53 }
+local SAM_STD = { 58.395, 57.12, 57.375 }
+
+-- Returns the enabled mask model's id, or nil and a reason the user can act on.
+local function sam_model_id()
+    if not dt.ai then
+        return nil, "this darktable has no darktable.ai (needs 5.6 or newer)"
+    end
+    local id = dt.ai.model_for_task("mask")
+    if not id then
+        return nil, "no AI mask model is enabled; turn one on in preferences → AI"
+    end
+    local ok_list, models = pcall(dt.ai.models)
+    for _, m in ipairs(ok_list and models or {}) do
+        if m.id == id then
+            local about = ((m.id or "") .. " " .. (m.name or "") .. " " .. (m.description or "")):lower()
+            if about:find("segnext", 1, true) then
+                return nil, "the enabled mask model is SegNext; subject tracking needs a SAM or SAM 2 mask model"
+            end
+        end
+    end
+    return id
+end
+
+-- Segments the subject under (x_frac, y_frac) and saves a 0/1 PNG mask of the
+-- image area (padding cropped off). Errors if the model finds nothing there.
+local function sam_mask(encoder, decoder, img, x_frac, y_frac, out_path)
+    local t = dt.ai.load_image(img, SAM_INPUT_SIZE, SAM_INPUT_SIZE)
+    local h, w = t.shape[3], t.shape[4]
+    if h > SAM_INPUT_SIZE or w > SAM_INPUT_SIZE then
+        error(string.format("load_image returned %dx%d, larger than %d", w, h, SAM_INPUT_SIZE), 0)
+    end
+    t:linear_to_srgb()
+    local scales, offsets = {}, {}
+    for c = 1, 3 do
+        scales[c] = 255 / SAM_STD[c]
+        offsets[c] = -SAM_MEAN[c] / SAM_STD[c]
+    end
+    t:scale_add_planes(scales, offsets)
+    local padded = dt.ai.create_tensor({ 1, 3, SAM_INPUT_SIZE, SAM_INPUT_SIZE })
+    padded:paste(t, 0, 0)
+
+    local feats = { encoder:run(padded) }
+    local inputs
+    if #feats == 1 then
+        inputs = { feats[1] }
+    elseif #feats == 3 then
+        -- SAM 2 encoders emit high_res_feats_0, high_res_feats_1, image_embeddings;
+        -- the decoder wants image_embed first.
+        inputs = { feats[3], feats[1], feats[2] }
+    else
+        error("unexpected SAM encoder output count " .. #feats, 0)
+    end
+
+    -- one foreground point plus the (0,0) label -1 padding point SAM's ONNX export expects
+    local coords = dt.ai.create_tensor({ 1, 2, 2 })
+    coords:set({ 0, 0, 0 }, x_frac * w)
+    coords:set({ 0, 0, 1 }, y_frac * h)
+    local labels = dt.ai.create_tensor({ 1, 2 })
+    labels:set({ 0, 0 }, 1)
+    labels:set({ 0, 1 }, -1)
+    inputs[#inputs + 1] = coords
+    inputs[#inputs + 1] = labels
+    inputs[#inputs + 1] = dt.ai.create_tensor({ 1, 1, SAM_PREV_MASK_DIM, SAM_PREV_MASK_DIM })
+    inputs[#inputs + 1] = dt.ai.create_tensor({ 1 }) -- has_mask_input = 0
+
+    local masks, iou = decoder:run(table.unpack(inputs))
+    local n_masks, dh, dw = masks.shape[2], masks.shape[3], masks.shape[4]
+    local best = 0
+    for m = 1, n_masks - 1 do
+        if iou:get({ 0, m }) > iou:get({ 0, best }) then best = m end
+    end
+
+    local vh = math.max(1, math.floor(h * dh / SAM_INPUT_SIZE + 0.5))
+    local vw = math.max(1, math.floor(w * dw / SAM_INPUT_SIZE + 0.5))
+    local step = math.max(1, math.ceil(math.max(vh, vw) / SAM_MASK_MAX_DIM))
+    local oh, ow = math.ceil(vh / step), math.ceil(vw / step)
+    local out = dt.ai.create_tensor({ 1, 1, oh, ow })
+    local found = false
+    for y = 0, oh - 1 do
+        for x = 0, ow - 1 do
+            if masks:get({ 0, best, y * step, x * step }) > 0 then -- SAM emits logits
+                out:set({ 0, 0, y, x }, 1)
+                found = true
+            end
+        end
+    end
+    if not found then error("empty mask", 0) end
+    out:save(out_path)
+end
+
+local function write_manifest(images, burst_of, mask_for_id)
     local f = io.open(MANIFEST_PATH, "w")
     if not f then return false end
     for _, img in ipairs(images) do
         local path = img.path .. "/" .. img.filename
-        f:write(M.csv_line({ img.id, path, burst_of[img.id] }), "\n")
+        local fields = { img.id, path, burst_of[img.id] }
+        if mask_for_id then fields[4] = mask_for_id[img.id] or "" end
+        f:write(M.csv_line(fields), "\n")
     end
     f:close()
     return true
@@ -297,8 +402,16 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
     end
 
     local culling_job = nil
+    local sam_ids = {}
 
     local success, run_err = pcall(function()
+        local sam_model
+        if sharp_mode == "sam_subject" then
+            local why
+            sam_model, why = sam_model_id()
+            if not sam_model then error("subject tracking (SAM) can't run: " .. why, 0) end
+        end
+
         -- Duplicates (same file) are scored once; the result is applied to all of them.
         local primaries, group_of, seen = {}, {}, {}
         for _, img in ipairs(images) do
@@ -347,6 +460,12 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         pcall(os.remove, CANCEL_PATH)
         pcall(os.remove, DONE_PATH)
         pcall(os.remove, LOG_PATH)
+        pcall(os.remove, POINTS_PATH)
+        pcall(os.remove, POINTS_DONE_PATH)
+        if sam_model then
+            -- masks from an earlier run over an overlapping selection must not be reused
+            for _, img in ipairs(primaries) do pcall(os.remove, mask_path_for(img.id)) end
+        end
 
         if not write_manifest(primaries, burst_of) then
             error("Could not write manifest")
@@ -375,6 +494,97 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             error("score_images.py not found at: " .. sc_script)
         end
         local py_bin = python_bin(sc_script)
+
+        local function cancelled()
+            return M.cancel_requested or (culling_job and not culling_job.valid) or file_exists(CANCEL_PATH)
+        end
+
+        if sam_model then
+            -- Stage A: the scorer picks one salient point per image to prompt SAM with.
+            local points_cmd = shell_quote(py_bin) .. " -u " .. shell_quote(sc_script)
+                .. " " .. shell_quote(MANIFEST_PATH)
+                .. " " .. shell_quote(POINTS_PATH)
+                .. " --emit-saliency-points"
+                .. " --progress " .. shell_quote(PROGRESS_PATH)
+                .. (fast_jpeg and " --fast-jpeg" or "")
+                .. " 2> " .. shell_quote(LOG_PATH)
+            run_async_command(points_cmd, POINTS_DONE_PATH)
+            while not file_exists(POINTS_DONE_PATH) and not cancelled() do
+                local pf = io.open(PROGRESS_PATH, "r")
+                local p = pf and pf:read("*a") or ""
+                if pf then pf:close() end
+                local cur, tot = p:match("(%d+),(%d+)")
+                if cur and culling_job and tonumber(tot) > 0 then
+                    culling_job.percent = 0.15 * tonumber(cur) / tonumber(tot)
+                end
+                dt.print_hinter(string.format("Assisted Culling: finding subjects %s / %s", cur or "0", tot or "?"))
+                dt.control.sleep(150)
+            end
+            if not cancelled() then
+                local dfh = io.open(POINTS_DONE_PATH, "r")
+                local code = dfh and tonumber((dfh:read("*a") or ""):match("%d+")) or nil
+                if dfh then dfh:close() end
+                if code ~= 0 then
+                    error("finding subjects failed (scorer exit " .. tostring(code) .. "): " .. read_log_tail(), 0)
+                end
+            end
+
+            -- Stage B: SAM masks, one model load for the whole batch.
+            local mask_for_id = {}
+            if not cancelled() then
+                local ok_enc, encoder = pcall(dt.ai.load_model, sam_model, nil, "encoder.onnx")
+                local ok_dec, decoder = pcall(dt.ai.load_model, sam_model, "cpu", "decoder.onnx")
+                if not (ok_enc and ok_dec) then
+                    if ok_enc then encoder:close() end
+                    if ok_dec then decoder:close() end
+                    error("couldn't load the SAM mask model '" .. sam_model
+                        .. "' (is it downloaded? preferences → AI): " .. tostring(ok_enc and decoder or encoder), 0)
+                end
+
+                local by_id = {}
+                for _, img in ipairs(primaries) do by_id[tostring(img.id)] = img end
+                local points = {}
+                local pfh = io.open(POINTS_PATH, "r")
+                if pfh then
+                    for line in pfh:lines() do
+                        local parts = M.parse_csv_line(line, 3)
+                        if parts and by_id[parts[1]] then points[#points + 1] = parts end
+                    end
+                    pfh:close()
+                end
+
+                local made, first_sam_error = 0, nil
+                for i, pt in ipairs(points) do
+                    if cancelled() then break end
+                    local img = by_id[pt[1]]
+                    local out = mask_path_for(img.id)
+                    sam_ids[#sam_ids + 1] = img.id
+                    local ok_mask, mask_err = pcall(sam_mask, encoder, decoder, img,
+                        tonumber(pt[2]), tonumber(pt[3]), out)
+                    if ok_mask then
+                        mask_for_id[img.id] = out
+                        made = made + 1
+                    else
+                        first_sam_error = first_sam_error or tostring(mask_err)
+                    end
+                    if culling_job then culling_job.percent = 0.15 + 0.35 * i / #points end
+                    dt.print_hinter(string.format("Assisted Culling: segmenting subjects %d / %d", i, #points))
+                end
+                encoder:close()
+                decoder:close()
+
+                if made < n_primary and not cancelled() then
+                    dt.print(string.format("Assisted Culling: SAM masked %d of %d images; the rest use the center-weighted fallback.",
+                        made, n_primary))
+                    if first_sam_error then dt.print_error("Assisted Culling: first SAM error: " .. first_sam_error) end
+                end
+            end
+
+            if not write_manifest(primaries, burst_of, mask_for_id) then
+                error("Could not write manifest")
+            end
+            pcall(os.remove, PROGRESS_PATH)
+        end
 
         local cmd = shell_quote(py_bin) .. " -u " .. shell_quote(sc_script)
             .. " " .. shell_quote(MANIFEST_PATH)
@@ -647,6 +857,9 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
     pcall(os.remove, MANIFEST_PATH)
     pcall(os.remove, RESULTS_PATH)
     pcall(os.remove, RESULTS_PATH .. ".tmp")
+    pcall(os.remove, POINTS_PATH)
+    pcall(os.remove, POINTS_DONE_PATH)
+    for _, id in ipairs(sam_ids) do pcall(os.remove, mask_path_for(id)) end
     if not scorer_alive then
         pcall(os.remove, PROGRESS_PATH)
         pcall(os.remove, CANCEL_PATH)
