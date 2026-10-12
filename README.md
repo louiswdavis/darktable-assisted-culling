@@ -5,7 +5,7 @@ A culling assistant for [darktable](https://www.darktable.org/). Select a batch 
 - group your selection into **bursts** by capture time
 - score every frame for **sharpness** and **exposure clipping**
 - pick the sharpest frame in each burst as the **keeper**
-- write the result back as a **star rating** plus **tags** under `Assisted Culling|…`: `Keeper` or `Rejected`, and `Overexposed` / `Underexposed` for exposure problems
+- write the result back as a **star rating** plus **tags** under `Assisted Culling|…`: `Keeper` or `Rejected`, and `Overexposed` / `Underexposed` for exposure problems, `Eyes Closed` for blinks
 
 Everything runs locally: a Lua plugin inside darktable and a small Python/OpenCV scorer it shells out to. No API keys, no cloud, no daemon.
 Nothing is deleted, and your colour labels are never touched — it only rates and tags; rejecting is still your call.
@@ -126,6 +126,9 @@ shows in darktable's message area. When it's done:
   burst (rated per the non-keeper setting below)
 - **`Assisted Culling|Overexposed`** / **`Underexposed`** = blown
   highlights or crushed shadows
+- **`Assisted Culling|Eyes Closed`** = *face & eyes* mode only: a face big
+  enough to judge, with no open eyes found (one star lower). Dark sunglasses
+  trigger it too.
 
 Filter on these in darktable's **collections** module (tag → Assisted
 Culling) to step through just the keepers, or just the rejects; the
@@ -165,6 +168,9 @@ the labels off.
   - *face & eyes (OpenCV)* — detects the largest face via OpenCV's Haar
     cascades and scores sharpness over the eyes if found, the whole face
     box otherwise; falls back to *subject bias* when no face is detected.
+    Eyes are searched in the upper face, retrying with the glasses-aware
+    cascade; a face at least 120 px wide with no eyes found is tagged
+    *Eyes Closed*.
     Needs OpenCV 4.x: OpenCV 5 removed the Haar detector, and the scorer
     stops with an install hint if it finds 5.
   - *subject bias (center-weighted)* — a 3×3 grid scored on its sharpest
