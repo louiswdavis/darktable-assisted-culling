@@ -80,28 +80,71 @@ def load_image(filepath: str, fast_jpeg: bool = False) -> np.ndarray:
     return rgb
 
 
+_CASCADES: dict = {}
+
+
+def _cascade(filename: str):
+    if filename not in _CASCADES:
+        _CASCADES[filename] = cv2.CascadeClassifier(cv2.data.haarcascades + filename)
+    return _CASCADES[filename]
+
+
+def _face_eye_sharpness(gray: np.ndarray, denoised: np.ndarray):
+    """Laplacian variance over the largest detected face's eye region, falling
+    back to the whole face box if no eyes are found. Returns None if no face
+    is detected, so the caller can fall back to the frame-wide heuristic."""
+    faces = _cascade("haarcascade_frontalface_default.xml").detectMultiScale(
+        gray, scaleFactor=1.1, minNeighbors=5,
+        minSize=(gray.shape[1] // 10, gray.shape[0] // 10),
+    )
+    if len(faces) == 0:
+        return None
+    x, y, fw, fh = max(faces, key=lambda f: f[2] * f[3])  # largest face = main subject
+    face_crop = denoised[y:y + fh, x:x + fw]
+    if face_crop.size == 0:
+        return None
+
+    eyes = _cascade("haarcascade_eye.xml").detectMultiScale(
+        gray[y:y + fh, x:x + fw], scaleFactor=1.1, minNeighbors=5,
+    )
+    if len(eyes) > 0:
+        ex0 = min(e[0] for e in eyes)
+        ey0 = min(e[1] for e in eyes)
+        ex1 = max(e[0] + e[2] for e in eyes)
+        ey1 = max(e[1] + e[3] for e in eyes)
+        eye_crop = face_crop[ey0:ey1, ex0:ex1]
+        if eye_crop.size > 0:
+            return float(cv2.Laplacian(eye_crop, cv2.CV_64F).var())
+
+    return float(cv2.Laplacian(face_crop, cv2.CV_64F).var())
+
+
 def sharpness_score(rgb: np.ndarray, mode: str) -> float:
     gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
     denoised = cv2.bilateralFilter(gray, 5, 50, 50)
+    h, w = denoised.shape
 
     if mode == "center":
-        h, w = gray.shape
         crop = denoised[int(h * 0.25):int(h * 0.75), int(w * 0.25):int(w * 0.75)]
-        lap = cv2.Laplacian(crop, cv2.CV_64F)
-        return float(lap.var())
+        return float(cv2.Laplacian(crop, cv2.CV_64F).var())
     if mode == "peak":
         lap = cv2.Laplacian(denoised, cv2.CV_64F)
         return float(np.percentile(np.abs(lap), 99))
+    if mode == "face_detect":
+        face_score = _face_eye_sharpness(gray, denoised)
+        if face_score is not None:
+            return face_score
+        # no face in frame: fall through to the frame-wide heuristic below
 
-    # Refined 3x3 patch scoring with center bias to ignore background false positives
-    h, w = denoised.shape
+    # 3x3 patch grid. subject_focus weights the center patches higher (assumes
+    # the subject sits mid-frame); tiles_uniformity, and face_detect when no
+    # face was found, weight every patch equally.
     h_step, w_step = h // 3, w // 3
-    patch_weights = [
-        [0.8, 1.0, 0.8],
-        [1.0, 1.2, 1.0],
-        [0.8, 1.0, 0.8]
-    ]
-    
+    if mode == "subject_focus":
+        patch_weights = [[0.8, 1.0, 0.8], [1.0, 1.2, 1.0], [0.8, 1.0, 0.8]]
+    else:
+        patch_weights = [[1.0, 1.0, 1.0] for _ in range(3)]
+
     weighted_vars = []
     patch_vars = []
     for r in range(3):
@@ -121,6 +164,10 @@ def exposure_status(rgb: np.ndarray, mode: str) -> str:
     if mode == "none":
         return "ok"
     gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY).astype(np.float32) / 255.0
+    if mode == "subject_only":
+        # Drop the top fifth of the frame: skies/backgrounds blow out often
+        # and shouldn't flag a frame whose subject is correctly exposed.
+        gray = gray[int(gray.shape[0] * 0.2):, :]
     if mode == "strict":
         if np.mean(gray > (HIGHLIGHT_CLIP - 0.05)) > (CLIP_PCT_FLAG / 2):
             return "overexposed"
