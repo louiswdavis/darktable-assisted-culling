@@ -164,8 +164,11 @@ Older versions used red/yellow colour labels and a `Culled` tag. The tag comes o
 
 ### Ranking mode
 
-- *universal absolute*: every frame is rated against fixed sharpness tiers.
-- *relative batch percentile*: keepers get top stars and everything else none, scored against the rest of its own burst.
+In every mode, keepers are picked within their own burst and non-keepers follow the *non-keepers* setting. The mode only decides a keeper's stars.
+
+- *universal absolute*: keepers are rated against fixed sharpness tiers, so the same frame gets the same stars in any shoot.
+- *binary (keepers top)*: every keeper starts at 5 stars and only flags lower it (eyes closed −1, over/underexposed −3).
+- *relative to selection*: tiers scale to the selection you're culling, so its sharpest frames get 5 stars even on a soft lens or in low light. The 5-star mark is the 95th percentile of the frames that could keep, so one freak frame can't flatten everyone else. Each sharpness scale is judged on its own: bursts that switched mode from EXIF, and SAM bursts with and without masks, don't share a 5-star mark. Ratings only appear once every burst is scored, even with *apply ratings while scoring* on.
 
 ### Sharpness
 
@@ -308,8 +311,9 @@ Everything you'd change per shoot is a panel option or a preference. What's left
 - `culling.lua`: `STAGE2_BATCH_WRITE_BUDGET` (60 tag writes) and `STAGE2_BATCH_LINES` (200 results) size each slice of the final apply step before it yields to the GUI. Lower them if darktable stutters while ratings apply.
 - `score_images.py`:
   - `SHADOW_CLIP`, `HIGHLIGHT_CLIP` and `CLIP_PCT_FLAG` control exposure flagging.
-  - `STAR_THRESHOLDS` (relative mode) and `TIER_THRESHOLDS` (universal mode) turn sharpness into stars.
-  - `FLAG_PENALTIES` sets what each flag costs: points off the relative score (15 points is one star) and stars off in universal mode.
+  - `TIER_THRESHOLDS` (universal mode) and `STAR_THRESHOLDS` (binary and relative mode, as a percentage) turn sharpness into stars.
+  - `RELATIVE_REFERENCE_PERCENTILE` sets which frame marks 5 stars in relative mode.
+  - `FLAG_PENALTIES` sets what each flag costs: points off the binary score (15 points is one star) and stars off in universal and relative mode.
   - `BLINK_MIN_FACE_PX` is the smallest face width judged for closed eyes.
   - `DETECTOR_MIN_SCORE` is the confidence a vehicle detection needs.
   - `PANNING_SHUTTER` (1/125 s) and `SHALLOW_DOF_APERTURE` (f/4) are the [shooting intent](#shooting-intent-from-exif) cutoffs.
