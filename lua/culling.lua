@@ -157,8 +157,9 @@ if dt.gui then
         2, 1, 60)
     dt.preferences.register("assisted_culling", "last_genre", "integer", "Last Genre", "", 1, 1, 5)
     dt.preferences.register("assisted_culling", "last_rank_mode", "integer", "Last Rank Mode", "", 1, 1, 2)
-    dt.preferences.register("assisted_culling", "last_sharp_mode", "integer", "Last Sharpness Mode", "", 1, 1, 6)
-    dt.preferences.register("assisted_culling", "last_exp_mode", "integer", "Last Exposure Mode", "", 1, 1, 4)
+    -- defaults match the landscape preset (preset_configs[1]), which last_genre defaults to
+    dt.preferences.register("assisted_culling", "last_sharp_mode", "integer", "Last Sharpness Mode", "", 2, 1, 6)
+    dt.preferences.register("assisted_culling", "last_exp_mode", "integer", "Last Exposure Mode", "", 3, 1, 4)
     dt.preferences.register("assisted_culling", "last_keep_mode", "integer", "Last Keeper Mode", "", 1, 1, 4)
     dt.preferences.register("assisted_culling", "last_nk_mode", "integer", "Last Non-Keeper Mode", "", 1, 1, 8)
 end
@@ -1204,18 +1205,19 @@ local function install_panel()
         reset_callback = function()
             if is_updating then return end
             is_updating = true
+            local conf = preset_configs[1]
             genre_combo.selected = 1
-            rank_combo.selected = 1
-            sharp_combo.selected = 1
-            exp_combo.selected = 1
-            keep_combo.selected = 1
+            rank_combo.selected = conf[1]
+            sharp_combo.selected = conf[2]
+            exp_combo.selected = conf[3]
+            keep_combo.selected = conf[4]
             non_keeper_combo.selected = 1
-            
+
             dt.preferences.write("assisted_culling", "last_genre", "integer", 1)
-            dt.preferences.write("assisted_culling", "last_rank_mode", "integer", 1)
-            dt.preferences.write("assisted_culling", "last_sharp_mode", "integer", 1)
-            dt.preferences.write("assisted_culling", "last_exp_mode", "integer", 1)
-            dt.preferences.write("assisted_culling", "last_keep_mode", "integer", 1)
+            dt.preferences.write("assisted_culling", "last_rank_mode", "integer", conf[1])
+            dt.preferences.write("assisted_culling", "last_sharp_mode", "integer", conf[2])
+            dt.preferences.write("assisted_culling", "last_exp_mode", "integer", conf[3])
+            dt.preferences.write("assisted_culling", "last_keep_mode", "integer", conf[4])
             dt.preferences.write("assisted_culling", "last_nk_mode", "integer", 1)
             is_updating = false
         end,
