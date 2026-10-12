@@ -54,7 +54,9 @@ far more reliable.
 
 ## Requirements
 
-- darktable 5.4 or newer, built with Lua (the official builds are)
+- darktable 5.4 or newer, built with Lua (the official builds are);
+  the *subject tracking (SAM)* sharpness mode additionally needs 5.6+ with
+  an AI mask model downloaded
 - Python 3.10+ with `opencv-python-headless`, `numpy`, `Pillow`, `rawpy`
 
 `rawpy` needs `libraw`; the Windows and macOS wheels bundle it. On Linux
@@ -158,6 +160,18 @@ labels stay where they were; to remove them once, collect by the
   - *subject bias (center-weighted)* — the same 3×3 grid as above, but the
     center patches count more, on the assumption the subject is mid-frame.
     This is a classical heuristic, not AI — see **Limitations and ideas**.
+  - *subject tracking (SAM)* — finds the frame's most distinctive region
+    (edge detail plus colour contrast; a bright car livery against grey
+    tarmac and fencing, say), hands that point to darktable's own SAM
+    mask model as the prompt, and scores sharpness only inside the mask it
+    returns. This is the mode that isn't fooled when autofocus lands on a
+    catch fence instead of the car. It's much slower than the others:
+    every image is decoded twice and run through the model, so use it on
+    smaller batches or a final pass over the keepers, not a whole weekend
+    at once. Needs darktable 5.6+ with a SAM or SAM 2 mask model enabled
+    and downloaded (preferences → AI); if it isn't, the run stops before
+    touching anything and says so. Images SAM can't segment fall back to
+    *subject bias*, and the plugin tells you how many did.
 - **exposure** — *whole frame*, *subject only (ignore sky)* (drops the top
   20% of the frame before checking for clipping), *strict histogram*
   (tighter clipping thresholds), or *ignore exposure*.
@@ -200,6 +214,13 @@ No `lua` binary handy? `pip install lupa` in the venv, then:
 
 ```
 .venv/Scripts/python -c "import lupa.lua54 as l; L=l.LuaRuntime(); L.execute('package.path=\"./lua/?.lua;\"..package.path; dofile(\"lua/test_culling.lua\")')"
+```
+
+The scorer's pure functions (saliency point, mask-aware sharpness,
+manifest parsing) have their own tests on synthetic images:
+
+```
+.venv/bin/python python/test_score_images.py
 ```
 
 The scorer runs standalone against any folder of images, no darktable
@@ -281,34 +302,27 @@ Things that cost time to find out, recorded so they don't again:
 
 ## Limitations and ideas
 
-- *Face & eyes* only helps when OpenCV's Haar cascade actually finds a
-  face in frame; everything else — including the *subject bias* sharpness
-  mode — is still a classical heuristic (center-weighted patch variance),
-  not real subject detection. A frame with a sharp background and a soft
-  subject can still outscore the frame you'd actually keep when no face is
-  detected.
-- **`darktable.ai` is real and Lua-scriptable** (`load_model` / `ctx:run`
-  on arbitrary ONNX tensors, plus a model registry keyed by task —
-  `denoise`, `upscale`, `mask`), but it isn't an automatic subject
-  detector out of the box, and it's a parked idea rather than a planned
-  feature. The only shipped `mask`-task model is a SAM-style
-  encoder/decoder; it needs a point or box prompt, and darktable's own use
-  of it (the darkroom object-mask tool) supplies that via a GUI click —
-  that tool isn't exposed to Lua, and there's no "find the subject"
-  task to call instead. Worse, `darktable.ai` only runs inside
-  darktable's Lua process; the actual scoring happens in the separate
-  `score_images.py` process, so using it would mean generating a bbox in
-  Lua and threading it into the manifest for the scorer to crop against —
-  on top of solving the prompt problem. A face bbox from the *face & eyes*
-  mode above is the one prompt source that would actually be reliable,
-  but that detection runs in Python, so wiring it to a Lua-side SAM call
-  means a three-stage pipeline instead of today's two processes, for a
-  model that's slower per image and depends on the user having downloaded
-  it through darktable's AI model manager. For the dominant case (a
-  person in frame) *face & eyes* already covers this more cheaply. If
-  broader subject coverage (pets, sport, product shots) is ever needed, a
-  classical saliency-point heuristic — no new ML dependency, no new
-  process boundary — is the right next small step, not SAM.
+- Apart from *subject tracking (SAM)* and *face & eyes* (when a face is
+  found), every sharpness mode is a classical whole-frame or patch-grid
+  heuristic. A frame with a sharp background and a soft subject can
+  outscore the frame you'd actually keep.
+- **How the SAM mode fits together.** `darktable.ai` is a generic ONNX
+  runtime for Lua (`load_model` / `ctx:run`, plus a model registry keyed
+  by task — `denoise`, `upscale`, `mask`). The `mask` model is SAM, which
+  needs a point prompt; darktable's darkroom object-mask tool supplies
+  that with a click, and there's no "find the subject" task. And
+  `darktable.ai` only runs inside darktable's Lua process, while scoring
+  happens in the separate Python process. So this mode runs in three
+  stages instead of two: the scorer picks a salient point per image
+  (`score_images.py --emit-saliency-points`), the plugin runs SAM on it in
+  Lua and writes a mask PNG per image, and the scorer then reads each mask
+  path from a 4th manifest column. EXIF can't supply the prompt instead:
+  darktable exposes focus *distance*, not the AF point's position.
+- The SAM preprocessing (1024 px input, normalisation, prompt format)
+  mirrors darktable's own `src/common/ai/segmentation.c` defaults, because
+  `darktable.ai` doesn't expose a model's attributes to Lua. A mask model
+  with a non-default input size would segment poorly; every image then
+  falls back to *subject bias*, and the plugin reports how many did.
 
 ## License
 
