@@ -834,7 +834,13 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             main_started = true
         end
 
-        local done_code = nil
+        local done_code, scorer_exited = nil, false
+        -- Once the scorer has exited its stderr can't interleave, so lines hit disk
+        -- right away and survive a darktable crash mid-apply.
+        local function trace(msg)
+            log(msg)
+            if scorer_exited then flush_log() end
+        end
         local stage1_start = os.time()
 
         local applied_total, failed_total, first_error, n_skipped = 0, 0, nil, 0
@@ -978,6 +984,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                 if in_lighttable then
                     local member = {}
                     for _, img in ipairs(imgs) do member[img.id] = true end
+                    trace(string.format("ratings: selecting %d images for %d stars", #imgs, rating))
                     dt.gui.selection(imgs)
                     local targets, exact = dt.gui.action_images, true
                     if #targets ~= #imgs then exact = false end
@@ -985,10 +992,13 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                         if not member[t.id] then exact = false; break end
                     end
                     if exact then
+                        trace("ratings: rating action")
                         local ok_a, err_a = pcall(dt.gui.action, "views/thumbtable/rating",
                             RATING_ELEMENTS[rating], rating == -1 and "activate" or "select", 1.0)
                         if not ok_a then first_error = first_error or tostring(err_a) end
                         used_action = ok_a
+                    else
+                        trace(string.format("ratings: act-on is %d images, not the batch; rating one by one", #targets))
                     end
                 end
                 for _, img in ipairs(imgs) do
@@ -1003,7 +1013,10 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                     end
                 end
             end
-            if saved then dt.gui.selection(saved) end
+            if saved then
+                trace(string.format("ratings: restoring selection of %d", #saved))
+                dt.gui.selection(saved)
+            end
         end
 
         -- One paced slice: stop after the write budget, then yield to the GUI in
@@ -1070,7 +1083,8 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                     df_done:close()
                     done_code = tonumber(raw_content:match("%d+"))
                 end
-                log("scoring: scorer exit " .. tostring(done_code))
+                scorer_exited = true
+                trace("scoring: scorer exit " .. tostring(done_code))
                 break
             end
 
@@ -1111,6 +1125,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                     break
                 end
 
+                trace(string.format("applying: results %d of %d", pending_idx, total_lines))
                 apply_slice()
 
                 local done = pending_idx - start_idx
