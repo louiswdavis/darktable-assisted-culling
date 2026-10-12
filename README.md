@@ -81,6 +81,13 @@ Start darktable, open **preferences → lua options**, and set:
 
 The other preferences are optional; see [Preferences](#preferences).
 
+### 4. Optional: AI models
+
+Only needed for the *subject tracking (SAM)* sharpness mode. Every other mode works without them.
+
+1. **SAM mask model** (needs darktable 5.6+). In darktable, open **preferences → AI**, then enable and download a SAM or SAM 2 mask model. darktable stores and manages it, and the plugin uses whichever mask model is enabled there. SegNext mask models aren't supported; if one is enabled, the run stops and says so.
+2. **Vehicle detector** (optional, for motorsport). Download [`object_detection_yolox_2022nov.onnx`](https://github.com/opencv/opencv_zoo/tree/main/models/object_detection_yolox) (36 MB, Apache-2.0) to any folder you like, then set **Assisted Culling: object detector model (YOLOX .onnx)** in preferences → lua options to that file. See [Vehicle detector](#vehicle-detector) for what it does.
+
 ## Using it
 
 In lighttable, select a batch (a whole shoot or a single burst) and click **Start Culling** in the **Assisted Culling** panel on the right. Progress shows in darktable's message area; click the button again to cancel.
@@ -120,7 +127,16 @@ Older versions used red/yellow colour labels and a `Culled` tag. The tag comes o
 
 ### Preset
 
-*landscape*, *portrait*, *sport* and *macro* set the options below to sensible combinations in one click. *custom* is selected automatically the moment you change any of them by hand.
+*landscape*, *portrait*, *sport* and *macro* set four of the options below in one click. *custom* is selected automatically the moment you change any of them by hand. Presets never change *non-keepers*.
+
+| Preset | Ranking mode | Sharpness | Exposure | Keepers |
+|--------|--------------|-----------|----------|---------|
+| landscape | universal absolute | edge-to-edge uniformity | strict histogram | single best only |
+| portrait | universal absolute | face & eyes (OpenCV) | subject only (ignore sky) | portrait (1 or 2) |
+| sport | universal absolute | subject bias (center-weighted) | whole frame | dynamic (1 to 5) |
+| macro | universal absolute | absolute peak 1% | whole frame | keep all (focus stack) |
+
+*sport* uses *subject bias* because it works everywhere. If you've set up SAM, switch sharpness to *subject tracking (SAM)* for motorsport.
 
 ### Ranking mode
 
