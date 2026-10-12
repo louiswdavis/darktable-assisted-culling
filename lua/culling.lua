@@ -123,6 +123,8 @@ local DONE_PATH = TMP_DIR .. "/dt_assisted_culling_done.txt"
 local POINTS_PATH = TMP_DIR .. "/dt_assisted_culling_points.csv"
 local POINTS_DONE_PATH = POINTS_PATH .. ".done"
 local PRESCORE_PATH = TMP_DIR .. "/dt_assisted_culling_prescores.csv"
+-- Per-frame scores reused across runs; tmp_dir is wiped, the config dir isn't.
+local CACHE_PATH = dt.configuration.config_dir .. "/assisted_culling/scores.sqlite"
 
 local function mask_path_for(id)
     return TMP_DIR .. "/dt_assisted_culling_mask_" .. tostring(id) .. ".png"
@@ -343,14 +345,17 @@ local function sam_mask(encoder, decoder, img, prompt, out_path)
     out:save(out_path)
 end
 
-local function write_manifest(images, burst_of, mask_for_id, shortlisted)
+-- `edited` adds darktable's last-edit time: SAM masks come from the edited
+-- export, so the scorer keys cached masked scores on it.
+local function write_manifest(images, burst_of, mask_for_id, shortlisted, edited)
     local f = io.open(MANIFEST_PATH, "w")
     if not f then return false end
     for _, img in ipairs(images) do
         local path = img.path .. "/" .. img.filename
         local fields = { img.id, path, burst_of[img.id] }
-        if mask_for_id then fields[4] = mask_for_id[img.id] or "" end
-        if shortlisted then fields[5] = shortlisted[img.id] and "1" or "0" end
+        if mask_for_id or edited then fields[4] = mask_for_id and mask_for_id[img.id] or "" end
+        if shortlisted or edited then fields[5] = shortlisted and (shortlisted[img.id] and "1" or "0") or "" end
+        if edited then fields[6] = tostring(img.change_timestamp) end
         f:write(M.csv_line(fields), "\n")
     end
     f:close()
@@ -541,7 +546,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             for _, img in ipairs(primaries) do pcall(os.remove, mask_path_for(img.id)) end
         end
 
-        if not write_manifest(primaries, burst_of) then
+        if not write_manifest(primaries, burst_of, nil, nil, sam_model ~= nil) then
             error("Could not write manifest")
         end
 
@@ -601,6 +606,8 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                 .. " --keep-mode " .. shell_quote(tostring(keep_mode))
                 .. " --exp-mode " .. shell_quote(tostring(exp_mode))
                 .. " --prescores " .. shell_quote(PRESCORE_PATH)
+                .. " --cache " .. shell_quote(CACHE_PATH)
+                .. " --sam-model " .. shell_quote(sam_model)
                 .. " --progress " .. shell_quote(PROGRESS_PATH)
                 .. (fast_jpeg and " --fast-jpeg" or "")
                 .. " 2> " .. shell_quote(LOG_PATH)
@@ -643,10 +650,11 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                 local pfh = io.open(POINTS_PATH, "r")
                 if pfh then
                     for line in pfh:lines() do
-                        local parts = M.parse_csv_line(line, 5)
+                        local parts = M.parse_csv_line(line, 6)
                         local prompt = parts and M.parse_prompt(parts)
                         if prompt and by_id[parts[1]] then
-                            points[#points + 1] = { id = parts[1], prompt = prompt }
+                            -- cached = "1": the scorer already has this frame's masked score
+                            if parts[6] ~= "1" then points[#points + 1] = { id = parts[1], prompt = prompt } end
                             shortlisted[by_id[parts[1]].id] = true
                         end
                     end
@@ -680,7 +688,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             encoder:close()
             decoder:close()
 
-            if not write_manifest(primaries, burst_of, mask_for_id, shortlisted) then
+            if not write_manifest(primaries, burst_of, mask_for_id, shortlisted, true) then
                 error("Could not write manifest")
             end
             pcall(os.remove, PROGRESS_PATH)
@@ -697,7 +705,9 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             .. " --nk-mode " .. shell_quote(tostring(nk_mode))
             .. " --tag-only-flags " .. shell_quote(tag_only_flags())
             .. (fast_jpeg and " --fast-jpeg" or "")
-            .. (sam_model and (" --prescores " .. shell_quote(PRESCORE_PATH)) or "")
+            .. (sam_model and (" --prescores " .. shell_quote(PRESCORE_PATH)
+                .. " --sam-model " .. shell_quote(sam_model)) or "")
+            .. " --cache " .. shell_quote(CACHE_PATH)
             .. " 2> " .. shell_quote(LOG_PATH)
 
         if cancelled() then

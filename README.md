@@ -39,9 +39,13 @@ Everything runs locally: a Lua plugin inside darktable and a small Python/OpenCV
 git clone https://github.com/louiswdavis/darktable-assisted-culling
 cd darktable-assisted-culling
 
+# Windows
 python -m venv .venv
-.venv/Scripts/pip install -r python/requirements.txt     # Windows
-.venv/bin/pip install -r python/requirements.txt         # Linux / macOS
+.venv/Scripts/pip install -r python/requirements.txt
+
+# Linux / macOS (no plain `python` on macOS)
+python3 -m venv .venv
+.venv/bin/pip install -r python/requirements.txt
 ```
 
 ### 2. darktable side
@@ -236,9 +240,27 @@ An earlier version grouped frames by perceptual image hashing. That technique is
 
 `darktable.ai` is a generic ONNX runtime for Lua (`load_model` / `ctx:run`, plus a model registry keyed by task: `denoise`, `upscale`, `mask`). The `mask` model is SAM, which needs a prompt; darktable's darkroom object-mask tool supplies one with a click, and there's no "find the subject" task. And `darktable.ai` only runs inside darktable's Lua process, while scoring happens in the separate Python process. So this mode runs in three stages instead of two:
 
-1. **Shortlist and prompt** (Python). `score_images.py --emit-saliency-points --keep-mode … [--detector yolox.onnx]` shortlists each burst and writes one prompt per shortlisted frame as `id,x0,y0,x1,y1` in frame fractions. A vehicle box fills all four; a salient point leaves `x1,y1` empty.
-2. **Mask** (Lua). The plugin runs SAM on each prompt and writes a mask PNG. A box goes to SAM as two corner points labelled 2 and 3, the encoding darktable's `dt_seg_point_t` documents.
-3. **Score** (Python). The scorer reads the mask path and shortlist flag from a 4th and 5th manifest column.
+1. **Shortlist and prompt** (Python). `score_images.py --emit-saliency-points --keep-mode … [--detector yolox.onnx]` shortlists each burst and writes one prompt per shortlisted frame as `id,x0,y0,x1,y1,cached` in frame fractions. A vehicle box fills all four; a salient point leaves `x1,y1` empty. `cached` is `1` when that frame's masked score is already in the score cache.
+2. **Mask** (Lua). The plugin runs SAM on each prompt that isn't cached and writes a mask PNG. A box goes to SAM as two corner points labelled 2 and 3, the encoding darktable's `dt_seg_point_t` documents.
+3. **Score** (Python). The scorer reads the mask path, shortlist flag and darktable edit time from the 4th, 5th and 6th manifest columns.
+
+### Score cache
+
+Decoding and scoring is the slow part of a run, so per-frame scores are saved in `assisted_culling/scores.sqlite` inside darktable's config directory (e.g. `~/.config/darktable` on Linux and macOS). Re-running the same shoot with only a different ranking mode, keeper count, non-keeper option, burst gap or "… lowers stars" preference then skips decoding and re-applies in seconds.
+
+A cached score is only reused when everything that produced it is the same:
+
+| Changes the score (new entry) | Only uses the score (reused) |
+|-------------------------------|------------------------------|
+| the file itself (path, modified time, size) | ranking mode |
+| sharpness mode | keepers, non-keepers |
+| exposure mode | burst gap |
+| fast JPEG decode | the per-flag "… lowers stars" preferences |
+| SAM mode: the mask model, the vehicle detector file, the prompt, and your last darktable edit of the frame | |
+
+In SAM mode, raising the keeper count or changing the burst gap can put new frames on a burst's shortlist; only those get a SAM pass. An edit in darktable (crop, rotate, lens correction) changes what SAM sees, so it re-runs SAM for that frame next time.
+
+Entries not used for 90 days are deleted at the start of a run. To start over, delete the file.
 
 EXIF can't supply the prompt instead: darktable exposes focus *distance*, not the AF point's position.
 
@@ -253,6 +275,8 @@ Everything you'd change per shoot is a panel option or a preference. What's left
   - `FLAG_PENALTIES` sets what each flag costs: points off the relative score (15 points is one star) and stars off in universal mode.
   - `BLINK_MIN_FACE_PX` is the smallest face width judged for closed eyes.
   - `DETECTOR_MIN_SCORE` is the confidence a vehicle detection needs.
+  - `SCORE_CACHE_MAX_AGE_DAYS` (default 90) is how long an unused cache entry is kept.
+  - `SCORE_CACHE_VERSION`: bump it after changing any of the constants above that feed a score (clip levels, `MAX_DIM`, `BLINK_MIN_FACE_PX`, `DETECTOR_MIN_SCORE`, …) or the scoring code, so old cached scores aren't reused. Star and penalty tables don't need a bump.
 
 These are sensible starting points, not tuned defaults. Run a real shoot through it, see what gets flagged, and adjust.
 
@@ -260,6 +284,8 @@ These are sensible starting points, not tuned defaults. Run a real shoot through
 
 - **The panel isn't there.** Start darktable with `-d lua` and look for `LUA ERROR` in the log. On Windows the log is `Documents\Darktable\darktable-log.txt`.
 - **"no results" or "scorer produced no ratings".** The scorer failed. Its stderr is in `dt_assisted_culling_stderr.log` in darktable's temp directory. The usual cause is the interpreter preference pointing at a Python without the requirements installed.
+- **"score cache … is unreadable".** The cache file is damaged. Delete `assisted_culling/scores.sqlite` in darktable's config directory; the next run rebuilds it.
+- **Scores look stale after changing a constant in `score_images.py`.** Bump `SCORE_CACHE_VERSION` (see Tuning), or delete the cache file.
 - **darktable itself crashes on startup on Windows 11** (`0xC0000005`). darktable's Windows binaries are unsigned, and Smart App Control blocks unsigned DLLs that haven't built up reputation; it blocked `libdarkroom.dll` from 5.6.1 on a test machine. Check the `Microsoft-Windows-CodeIntegrity/Operational` event log for event 3077. Don't turn Smart App Control off (it's a one-way switch). An older release passes: `winget install --id darktable.darktable --version 5.4.1` ran with no blocks, and this plugin needs nothing newer.
 
 ## Limitations
@@ -272,6 +298,8 @@ These are sensible starting points, not tuned defaults. Run a real shoot through
 ## Development
 
 ### Tests
+
+Run these from the repo root (the `darktable-assisted-culling` folder).
 
 The pure-logic half of the plugin runs under any Lua 5.4:
 
