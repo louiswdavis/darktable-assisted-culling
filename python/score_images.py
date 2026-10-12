@@ -148,6 +148,74 @@ def saliency_point(rgb: np.ndarray, grid: int = SALIENCY_GRID) -> tuple:
     return ((c + 0.5) / grid, (r + 0.5) / grid)
 
 
+# YOLOX as exported by opencv_zoo (object_detection_yolox_2022nov.onnx): RGB 0–255
+# letterboxed top-left onto a 114-grey 640² canvas; raw per-anchor grid outputs.
+DETECTOR_INPUT = 640
+DETECTOR_STRIDES = (8, 16, 32)
+DETECTOR_MIN_SCORE = 0.35
+DETECTOR_NMS = 0.5
+VEHICLE_CLASSES = [2, 3, 7]  # COCO car, motorcycle, truck (race cars are often called trucks)
+
+_DETECTORS: dict = {}
+
+
+def _detector(model_path: str):
+    if model_path not in _DETECTORS:
+        if not os.path.isfile(model_path):
+            raise FileNotFoundError(f"object detector model not found: {model_path}")
+        _DETECTORS[model_path] = cv2.dnn.readNet(model_path)
+    return _DETECTORS[model_path]
+
+
+def _yolox_anchors(size: int = DETECTOR_INPUT) -> tuple:
+    grids, strides = [], []
+    for s in DETECTOR_STRIDES:
+        n = size // s
+        xv, yv = np.meshgrid(np.arange(n), np.arange(n))
+        grids.append(np.stack((xv, yv), 2).reshape(-1, 2))
+        strides.append(np.full((n * n, 1), s))
+    return np.concatenate(grids), np.concatenate(strides)
+
+
+def decode_vehicles(raw: np.ndarray, scale: float) -> list:
+    """Raw YOLOX output (anchors × 85) → [(x0, y0, x1, y1, score)] vehicle boxes in
+    source pixels after NMS. `scale` is the letterbox resize factor."""
+    grid, stride = _yolox_anchors()
+    xy = (raw[:, :2] + grid) * stride
+    wh = np.exp(raw[:, 2:4]) * stride
+    cls = raw[:, 4:5] * raw[:, 5:][:, VEHICLE_CLASSES]
+    score = cls.max(axis=1)
+    keep = score >= DETECTOR_MIN_SCORE
+    if not keep.any():
+        return []
+    xy, wh, score = xy[keep] / scale, wh[keep] / scale, score[keep]
+    tl = xy - wh / 2
+    picked = cv2.dnn.NMSBoxes(np.hstack([tl, wh]).tolist(), score.tolist(), DETECTOR_MIN_SCORE, DETECTOR_NMS)
+    return [(tl[i, 0], tl[i, 1], tl[i, 0] + wh[i, 0], tl[i, 1] + wh[i, 1], float(score[i]))
+            for i in np.asarray(picked).reshape(-1)]
+
+
+def pick_vehicle(boxes: list, w: int, h: int):
+    """The most prominent box (score × area) as (x0, y0, x1, y1) frame fractions
+    clipped to the frame, or None when there is no vehicle."""
+    if not boxes:
+        return None
+    x0, y0, x1, y1, _ = max(boxes, key=lambda b: b[4] * (b[2] - b[0]) * (b[3] - b[1]))
+    return (min(max(x0 / w, 0.0), 1.0), min(max(y0 / h, 0.0), 1.0),
+            min(max(x1 / w, 0.0), 1.0), min(max(y1 / h, 0.0), 1.0))
+
+
+def vehicle_box(rgb: np.ndarray, model_path: str):
+    h, w = rgb.shape[:2]
+    scale = min(DETECTOR_INPUT / h, DETECTOR_INPUT / w)
+    canvas = np.full((DETECTOR_INPUT, DETECTOR_INPUT, 3), 114.0, np.float32)
+    canvas[:int(h * scale), :int(w * scale)] = cv2.resize(rgb, (int(w * scale), int(h * scale)))
+    net = _detector(model_path)
+    net.setInput(np.transpose(canvas, (2, 0, 1))[np.newaxis])
+    raw = net.forward(net.getUnconnectedOutLayersNames())[0][0]
+    return pick_vehicle(decode_vehicles(raw, scale), w, h)
+
+
 _CASCADES: dict = {}
 
 
@@ -421,10 +489,14 @@ def process_single_image(filepath: str, sharp_mode: str, exp_mode: str, cancel_p
         return filepath, None, None, str(e)
 
 
-def process_single_saliency(filepath: str, fast_jpeg: bool = False, exp_mode: str = "whole_frame"):
+def process_single_saliency(filepath: str, fast_jpeg: bool = False, exp_mode: str = "whole_frame",
+                            detector: str = ""):
+    """The SAM prompt is a vehicle box (x0, y0, x1, y1) when `detector` finds one,
+    else the saliency point (x, y)."""
     try:
         rgb = load_image(filepath, fast_jpeg)
-        return (filepath, saliency_point(rgb), sharpness_score(rgb, "subject_focus"),
+        prompt = vehicle_box(rgb, detector) if detector else None
+        return (filepath, prompt or saliency_point(rgb), sharpness_score(rgb, "subject_focus"),
                 exposure_status(rgb, exp_mode), None)
     except Exception as e:
         return filepath, None, None, None, str(e)
@@ -439,14 +511,18 @@ def read_prescores(path: str) -> dict:
 
 
 def emit_saliency_points(manifest, args):
-    """Writes id,x_frac,y_frac to args.results for each burst's shortlist: the
-    frames worth running SAM on, picked by the center-weighted heuristic.
+    """Writes id,x0,y0,x1,y1 frame fractions to args.results for each burst's
+    shortlist: the frames worth running SAM on, picked by the center-weighted
+    heuristic. A box prompt fills all four; a point prompt leaves x1,y1 empty.
     With args.prescores, also writes id,fallback_score,exposure for every frame
     so the scoring pass needn't decode frames outside the shortlist again.
     Images that fail to decode are left out and so can't be keepers."""
     total = len(manifest)
     prescores = getattr(args, "prescores", "")
     exp_mode = getattr(args, "exp_mode", "whole_frame")
+    detector = getattr(args, "detector", "")
+    if detector:
+        _detector(detector)  # a missing or unreadable model fails the run, not each frame
     for path in (args.results, prescores):
         if path:
             with open(path, "w", newline="", encoding="utf-8"):
@@ -463,7 +539,7 @@ def emit_saliency_points(manifest, args):
     done = 0
     with concurrent.futures.ProcessPoolExecutor(max_workers=workers, initializer=_init_worker) as executor:
         future_to_id = {
-            executor.submit(process_single_saliency, row[1], args.fast_jpeg, exp_mode): row[0]
+            executor.submit(process_single_saliency, row[1], args.fast_jpeg, exp_mode, detector): row[0]
             for row in manifest
         }
         for future in concurrent.futures.as_completed(future_to_id):
@@ -487,8 +563,8 @@ def emit_saliency_points(manifest, args):
                 with open(args.results, "a", newline="", encoding="utf-8") as f:
                     w = csv.writer(f)
                     for i in sorted(picks):
-                        x, y = found[burst][i][0]
-                        w.writerow([i, round(x, 4), round(y, 4)])
+                        prompt = [round(v, 4) for v in found[burst][i][0]]
+                        w.writerow([i] + prompt + [""] * (4 - len(prompt)))
                 del found[burst]
             done += 1
             write_progress(args.progress, done, total, 0, 0)
@@ -699,7 +775,10 @@ if __name__ == "__main__":
     parser.add_argument("--fast-jpeg", action="store_true",
                         help="Decode JPEGs at reduced scale (faster; scores shift slightly)")
     parser.add_argument("--emit-saliency-points", action="store_true",
-                        help="Write id,x_frac,y_frac to the results path instead of scoring")
+                        help="Write id,x0,y0,x1,y1 SAM prompts to the results path instead of scoring")
+    parser.add_argument("--detector", default="",
+                        help="With --emit-saliency-points: YOLOX .onnx whose most prominent vehicle box "
+                             "prompts SAM; frames without one fall back to the saliency point")
     parser.add_argument("--prescores", default="",
                         help="sam_subject: per-frame fallback scores written by the saliency pass "
                              "and read by the scoring pass, so frames outside the shortlist decode once")

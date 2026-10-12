@@ -202,6 +202,21 @@ the labels off.
     frame, that whole burst falls back to *subject bias*, so its frames
     are never compared on two different scales, and the plugin tells you
     how many frames it masked.
+
+    **Optional vehicle detector.** Guessing the subject point works on a
+    bright livery but can pick a sponsor board or kerb instead. For
+    motorsport, give SAM a box around the car instead: download
+    [`object_detection_yolox_2022nov.onnx`](https://github.com/opencv/opencv_zoo/tree/main/models/object_detection_yolox)
+    (36 MB, Apache-2.0, from OpenCV's model zoo) anywhere you like, and
+    set *Assisted Culling: object detector model* in preferences → Lua
+    options to that file. On each shortlisted frame, YOLOX then finds cars,
+    motorcycles and trucks (race cars are often labelled as trucks), and the
+    most prominent one, scored by confidence × size, becomes SAM's prompt.
+    So a car filling a third of the frame beats a small one in the
+    background. A frame with no vehicle (a crowd shot, a pit board) uses
+    the point guess as before. If the file is missing or isn't a model,
+    the run stops and says so. It runs on the CPU and adds about a tenth of
+    a second per frame. Leave the preference empty to switch it off.
 - **exposure** — *whole frame*, *subject only (ignore sky)* (drops the top
   20% of the frame before checking for clipping), *strict histogram*
   (tighter clipping thresholds), or *ignore exposure*.
@@ -344,8 +359,12 @@ Things that cost time to find out, recorded so they don't again:
   `darktable.ai` only runs inside darktable's Lua process, while scoring
   happens in the separate Python process. So this mode runs in three
   stages instead of two: the scorer shortlists each burst and picks a
-  salient point per shortlisted frame (`score_images.py
-  --emit-saliency-points --keep-mode …`), the plugin runs SAM on those in
+  prompt per shortlisted frame (`score_images.py --emit-saliency-points
+  --keep-mode … [--detector yolox.onnx]`). Each row of that file is
+  `id,x0,y0,x1,y1` in frame fractions: a vehicle box fills all four, and
+  a salient point leaves `x1,y1` empty. A box goes to SAM as two corner
+  points labelled 2 and 3, the same encoding darktable's
+  `dt_seg_point_t` documents. The plugin runs SAM on those in
   Lua and writes a mask PNG each, and the scorer then reads the mask path
   and shortlist flag from a 4th and 5th manifest column. EXIF can't
   supply the prompt instead:

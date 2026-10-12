@@ -58,6 +58,13 @@ check("parse_csv_line splits into 6 fields", #parsed, 6)
 check("parse_csv_line field 2 keeps spaces", parsed[2], "/home/user/photo 01.NEF")
 check("parse_csv_line rejects wrong field count", C.parse_csv_line("1,2,3", 6), nil)
 
+local point = C.parse_prompt(C.parse_csv_line("124,0.5,0.25,,", 5))
+check("parse_prompt: empty corner is a point", point.x0 == 0.5 and point.y0 == 0.25 and point.x1 == nil, true)
+local box = C.parse_prompt(C.parse_csv_line("123,0.21,0.4,0.68,0.77", 5))
+check("parse_prompt: four numbers are a box", box.x0 == 0.21 and box.y1 == 0.77, true)
+check("parse_prompt: half a corner is malformed", C.parse_prompt(C.parse_csv_line("1,0.2,0.4,0.6,", 5)), nil)
+check("parse_prompt: non-number is malformed", C.parse_prompt(C.parse_csv_line("1,x,0.4,,", 5)), nil)
+
 local flags = C.parse_flags("overexposed;eyes_closed")
 check("parse_flags reads every flag", tostring(flags.overexposed and flags.eyes_closed), "true")
 check("parse_flags: empty field is no flags", next(C.parse_flags("")), nil)

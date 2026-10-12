@@ -37,6 +37,28 @@ def run_tests():
     flat = np.full((90, 90, 3), 128, dtype=np.uint8)
     check("saliency: flat frame falls back to frame centre", S.saliency_point(flat), (0.5, 0.5))
 
+    # decode_vehicles / pick_vehicle -------------------------------------------
+    raw = np.zeros((8400, 85), np.float32)
+    raw[410, :4] = (0.5, 0.5, np.log(5), np.log(5))   # stride-8 cell (10, 5): 40 px box centred (84, 44)
+    raw[410, 4], raw[410, 5 + 2] = 0.9, 1.0          # a car
+    raw[411, :4] = (-0.5, 0.5, np.log(5), np.log(5))  # the same box, weaker: NMS drops it
+    raw[411, 4], raw[411, 5 + 2] = 0.6, 1.0
+    raw[500, :4] = (0.5, 0.5, np.log(5), np.log(5))
+    raw[500, 4], raw[500, 5 + 0] = 0.9, 1.0          # a person: not a vehicle
+    boxes = S.decode_vehicles(raw, 0.5)
+    check("detector: one vehicle survives class filter and NMS", len(boxes), 1)
+    check("detector: box mapped back to source pixels",
+          [round(float(v), 1) for v in boxes[0]], [128.0, 48.0, 208.0, 128.0, 0.9])
+    check("detector: nothing above threshold → no boxes", S.decode_vehicles(np.zeros((8400, 85), np.float32), 1.0), [])
+
+    small_sure = (10, 10, 30, 30, 0.95)
+    big_unsure = (100, 50, 300, 250, 0.5)
+    check("pick vehicle: prominence beats raw confidence",
+          S.pick_vehicle([small_sure, big_unsure], 400, 300), (0.25, 50 / 300, 0.75, 250 / 300))
+    check("pick vehicle: box clipped to the frame",
+          S.pick_vehicle([(-20, 0, 420, 150, 0.8)], 400, 300), (0.0, 0.0, 1.0, 0.5))
+    check("pick vehicle: none found", S.pick_vehicle([], 400, 300), None)
+
     # parse_manifest_row -----------------------------------------------------
     check("manifest: 4-column row keeps mask path",
           S.parse_manifest_row(["1", "/a.jpg", "3", "/m.png"]), ("1", "/a.jpg", "3", "/m.png", ""))
@@ -170,8 +192,18 @@ def run_tests():
                      keep_mode="single_best", exp_mode="whole_frame", fast_jpeg=False, prescores=pre_p))
     pre_rows = list(_csv.reader(open(pre_p)))
     check("stage A: prescores every frame", sorted(r[0] for r in pre_rows), ["0", "1", "2", "3", "4"])
-    shortlisted_ids = {r[0] for r in _csv.reader(open(points_p))}
+    point_rows = list(_csv.reader(open(points_p)))
+    shortlisted_ids = {r[0] for r in point_rows}
     check("stage A: points only for the shortlist", len(shortlisted_ids), 3)
+    check("stage A: point prompts leave the box corner empty", {(len(r), r[3], r[4]) for r in point_rows},
+          {(5, "", "")})
+    try:
+        S.main(Namespace(manifest=man_a, results=points_p, progress="", emit_saliency_points=True,
+                         keep_mode="single_best", exp_mode="whole_frame", fast_jpeg=False, prescores="",
+                         detector=os.path.join(tmp, "missing.onnx")))
+        check("stage A: missing detector model fails the run", "no error", "FileNotFoundError")
+    except FileNotFoundError:
+        check("stage A: missing detector model fails the run", "FileNotFoundError", "FileNotFoundError")
 
     # stage C: point non-shortlisted rows at files that don't exist; they must still score
     man_c = os.path.join(tmp, "c.csv")

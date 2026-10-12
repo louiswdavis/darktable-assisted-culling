@@ -78,6 +78,17 @@ function M.parse_csv_line(line, n)
     return parts
 end
 
+-- Stage A points row {id, x0, y0, x1, y1} → SAM prompt: a box when x1,y1 are
+-- set, else a point at x0,y0. nil when the numbers don't parse.
+function M.parse_prompt(parts)
+    local x0, y0 = tonumber(parts[2]), tonumber(parts[3])
+    if not (x0 and y0) then return nil end
+    if parts[4] == "" and parts[5] == "" then return { x0 = x0, y0 = y0 } end
+    local x1, y1 = tonumber(parts[4]), tonumber(parts[5])
+    if not (x1 and y1) then return nil end
+    return { x0 = x0, y0 = y0, x1 = x1, y1 = y1 }
+end
+
 local ok, dt = pcall(require, "darktable")
 if not ok then return M end
 
@@ -126,7 +137,11 @@ if dt.gui then
         "Assisted Culling: score_images.py",
         "path to score_images.py from darktable-assisted-culling (empty = auto-detect)",
         "")
-        
+    dt.preferences.register("assisted_culling", "detector_model", "file",
+        "Assisted Culling: object detector model (YOLOX .onnx)",
+        "subject tracking (SAM) only: outlines the most prominent car, motorcycle or truck for SAM instead of guessing a subject point; frames without one still use the guess (empty = off)",
+        "")
+
     -- Register UI State Preferences
     dt.preferences.register("assisted_culling", "apply_while_scoring", "bool",
         "Assisted Culling: apply ratings while scoring",
@@ -257,7 +272,7 @@ end
 
 -- Segments the subject under (x_frac, y_frac) and saves a 0/1 PNG mask of the
 -- image area (padding cropped off). Errors if the model finds nothing there.
-local function sam_mask(encoder, decoder, img, x_frac, y_frac, out_path)
+local function sam_mask(encoder, decoder, img, prompt, out_path)
     local t = dt.ai.load_image(img, SAM_INPUT_SIZE, SAM_INPUT_SIZE)
     local h, w = t.shape[3], t.shape[4]
     if h > SAM_INPUT_SIZE or w > SAM_INPUT_SIZE then
@@ -285,13 +300,18 @@ local function sam_mask(encoder, decoder, img, x_frac, y_frac, out_path)
         error("unexpected SAM encoder output count " .. #feats, 0)
     end
 
-    -- one foreground point plus the (0,0) label -1 padding point SAM's ONNX export expects
-    local coords = dt.ai.create_tensor({ 1, 2, 2 })
-    coords:set({ 0, 0, 0 }, x_frac * w)
-    coords:set({ 0, 0, 1 }, y_frac * h)
-    local labels = dt.ai.create_tensor({ 1, 2 })
-    labels:set({ 0, 0 }, 1)
-    labels:set({ 0, 1 }, -1)
+    -- a foreground point (label 1) or box corners (labels 2 and 3), then the
+    -- (0,0) label -1 padding point SAM's ONNX export expects
+    local pts = prompt.x1 and { { prompt.x0, prompt.y0, 2 }, { prompt.x1, prompt.y1, 3 } }
+        or { { prompt.x0, prompt.y0, 1 } }
+    local coords = dt.ai.create_tensor({ 1, #pts + 1, 2 })
+    local labels = dt.ai.create_tensor({ 1, #pts + 1 })
+    for i, p in ipairs(pts) do
+        coords:set({ 0, i - 1, 0 }, p[1] * w)
+        coords:set({ 0, i - 1, 1 }, p[2] * h)
+        labels:set({ 0, i - 1 }, p[3])
+    end
+    labels:set({ 0, #pts }, -1)
     inputs[#inputs + 1] = coords
     inputs[#inputs + 1] = labels
     inputs[#inputs + 1] = dt.ai.create_tensor({ 1, 1, SAM_PREV_MASK_DIM, SAM_PREV_MASK_DIM })
@@ -555,11 +575,13 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             end
 
             -- Stage A: the scorer shortlists each burst's best frames by the fast heuristic
-            -- and picks one salient point per shortlisted frame to prompt SAM with.
+            -- and picks one prompt per shortlisted frame: a vehicle box or a salient point.
+            local detector = dt.gui and dt.preferences.read("assisted_culling", "detector_model", "file") or ""
             local points_cmd = shell_quote(py_bin) .. " -u " .. shell_quote(sc_script)
                 .. " " .. shell_quote(MANIFEST_PATH)
                 .. " " .. shell_quote(POINTS_PATH)
                 .. " --emit-saliency-points"
+                .. (detector ~= "" and (" --detector " .. shell_quote(detector)) or "")
                 .. " --keep-mode " .. shell_quote(tostring(keep_mode))
                 .. " --exp-mode " .. shell_quote(tostring(exp_mode))
                 .. " --prescores " .. shell_quote(PRESCORE_PATH)
@@ -605,9 +627,10 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                 local pfh = io.open(POINTS_PATH, "r")
                 if pfh then
                     for line in pfh:lines() do
-                        local parts = M.parse_csv_line(line, 3)
-                        if parts and by_id[parts[1]] then
-                            points[#points + 1] = parts
+                        local parts = M.parse_csv_line(line, 5)
+                        local prompt = parts and M.parse_prompt(parts)
+                        if prompt and by_id[parts[1]] then
+                            points[#points + 1] = { id = parts[1], prompt = prompt }
                             shortlisted[by_id[parts[1]].id] = true
                         end
                     end
@@ -617,11 +640,10 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                 local made, first_sam_error = 0, nil
                 for i, pt in ipairs(points) do
                     if cancelled() then break end
-                    local img = by_id[pt[1]]
+                    local img = by_id[pt.id]
                     local out = mask_path_for(img.id)
                     sam_ids[#sam_ids + 1] = img.id
-                    local ok_mask, mask_err = pcall(sam_mask, encoder, decoder, img,
-                        tonumber(pt[2]), tonumber(pt[3]), out)
+                    local ok_mask, mask_err = pcall(sam_mask, encoder, decoder, img, pt.prompt, out)
                     if ok_mask then
                         mask_for_id[img.id] = out
                         made = made + 1
