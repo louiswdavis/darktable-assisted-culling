@@ -37,6 +37,7 @@ HIGHLIGHT_CLIP = 250 / 255
 CLIP_PCT_FLAG = 0.02
 
 STAR_THRESHOLDS = [(95, 5), (85, 4), (75, 3), (60, 2), (45, 1), (0, 0)]
+RELATIVE_REFERENCE_PERCENTILE = 95
 
 TIER_THRESHOLDS = [
     (1800, 5),
@@ -47,9 +48,9 @@ TIER_THRESHOLDS = [
     (0, 0),
 ]
 
-# Per-frame problem flags → (points off the relative-mode score, stars off in
-# tier mode). A frame pays for every flag it carries. Relative-mode keepers
-# start at 100, so 15 points is one star (STAR_THRESHOLDS) and 30 is three.
+# Per-frame problem flags → (points off the binary-mode score, stars off in
+# universal and relative mode). A frame pays for every flag it carries. Binary-mode
+# keepers start at 100, so 15 points is one star (STAR_THRESHOLDS) and 30 is three.
 # The results CSV lists a frame's flags in column 3; culling.lua maps each to a tag.
 FLAG_PENALTIES = {
     "overexposed": (30, 1),
@@ -771,10 +772,11 @@ def emit_saliency_points(manifest, args, cache):
 
 
 def process_burst_logic(burst_id, burst_sharpness, burst_flags, burst_size, args, results_path,
-                        eligible=None, diag_tags=None) -> list:
+                        eligible=None, diag_tags=None, reference=None) -> list:
     """Appends the burst's result rows and returns its keepers, best first.
     diag_tags maps an id to its diagnostic tags (under "Assisted Culling|"),
-    written ";"-joined in the 7th column."""
+    written ";"-joined in the 7th column. reference is the relative mode's
+    selection-wide sharpness for 100 points (see relative_references)."""
     if not burst_sharpness:
         return []
 
@@ -799,6 +801,14 @@ def process_burst_logic(burst_id, burst_sharpness, burst_flags, burst_size, args
         flags = burst_flags[img_id]
 
         if args.rank_mode == "relative":
+            score = 100.0 * raw_score / reference if reference else 0.0
+            for threshold, stars in STAR_THRESHOLDS:
+                if score >= threshold:
+                    break
+            else:
+                stars = 0
+            stars = max(0, stars - sum(FLAG_PENALTIES[f][1] for f in penalised[img_id]))
+        elif args.rank_mode == "binary":
             score = 100.0 if is_keeper else 0.0
             score -= sum(FLAG_PENALTIES[f][0] for f in penalised[img_id])
             for threshold, stars in STAR_THRESHOLDS:
@@ -841,6 +851,13 @@ def process_burst_logic(burst_id, burst_sharpness, burst_flags, burst_size, args
     with open(results_path, "a", newline="", encoding="utf-8") as f:
         csv.writer(f).writerows(burst_rows)
     return burst_keepers
+
+
+def relative_references(groups: dict) -> dict:
+    """group → the sharpness that earns 100 points in relative mode: the 95th
+    percentile of the group's keeper-eligible scores, so one freak frame
+    can't flatten everyone else's stars."""
+    return {g: float(np.percentile(v, RELATIVE_REFERENCE_PERCENTILE)) for g, v in groups.items() if v}
 
 
 def main(args):
@@ -934,9 +951,15 @@ def score_manifest(manifest, args, cache):
             burst_tags.append("Scored|Masked" if used_masks else "Scored|Subject bias")
             note += f", masked {masked} of {len(short)} shortlisted" + ("" if used_masks else ", so subject bias")
         diag = {i: ([prescored[i][3]] if i in prescored and prescored[i][3] else []) + burst_tags for i in raw}
-        keepers = process_burst_logic(burst_id, scores, burst_flags[burst_id], len(burst_groups[burst_id]),
-                                      args, args.results, eligible, diag)
-        log(f"{note}, keepers {', '.join(keepers) or 'none'}")
+        if args.rank_mode == "relative":
+            # masked and fallback scores, and each sharpness mode, run on their own scales
+            group = (mode_of[burst_id], sam and used_masks)
+            relative_scores.setdefault(group, []).extend(scores[i] for i in eligible if i in scores)
+            deferred.append((burst_id, scores, burst_flags[burst_id], eligible, diag, note, group))
+        else:
+            keepers = process_burst_logic(burst_id, scores, burst_flags[burst_id], len(burst_groups[burst_id]),
+                                          args, args.results, eligible, diag)
+            log(f"{note}, keepers {', '.join(keepers) or 'none'}")
         del burst_sharpness[burst_id]
         del burst_flags[burst_id]
         if completed_bursts % 25 == 0:
@@ -946,6 +969,8 @@ def score_manifest(manifest, args, cache):
     # frames with a fresh SAM mask are decoded again. The rest use that
     # fallback score, plus the cached masked score when there is one.
     sam = args.sharp_mode == "sam_subject"
+    # relative mode rates against the whole selection, so its bursts wait for the last one
+    deferred, relative_scores = [], {}
     prescored = read_prescores(getattr(args, "prescores", "")) if sam else {}
 
     # keyed on the burst's effective mode, so the EXIF rules and their
@@ -1020,6 +1045,15 @@ def score_manifest(manifest, args, cache):
             if now - last_progress >= 0.1 or processed_count == total_images:
                 last_progress = now
                 write_progress(args.progress, processed_count, total_images, completed_bursts, total_bursts)
+
+    references = relative_references(relative_scores)
+    for (mode, masked), ref in references.items():
+        log(f"relative: {ref:.1f} sharpness is 100 points for {mode}{' masked' if masked else ''} "
+            f"({len(relative_scores[(mode, masked)])} frames)")
+    for burst_id, scores, flags, eligible, diag, note, group in deferred:
+        keepers = process_burst_logic(burst_id, scores, flags, len(burst_groups[burst_id]),
+                                      args, args.results, eligible, diag, references.get(group))
+        log(f"{note}, keepers {', '.join(keepers) or 'none'}")
 
 
 if __name__ == "__main__":
