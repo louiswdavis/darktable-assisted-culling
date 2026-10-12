@@ -157,13 +157,14 @@ if dt.gui then
         "Assisted Culling: burst gap (seconds)",
         "photos taken closer together than this are grouped into one burst",
         2, 1, 60)
-    dt.preferences.register("assisted_culling", "last_genre", "integer", "Last Genre", "", 1, 1, 5)
-    dt.preferences.register("assisted_culling", "last_rank_mode", "integer", "Last Rank Mode", "", 1, 1, 2)
-    -- defaults match the landscape preset (preset_configs[1]), which last_genre defaults to
-    dt.preferences.register("assisted_culling", "last_sharp_mode", "integer", "Last Sharpness Mode", "", 2, 1, 6)
-    dt.preferences.register("assisted_culling", "last_exp_mode", "integer", "Last Exposure Mode", "", 3, 1, 4)
-    dt.preferences.register("assisted_culling", "last_keep_mode", "integer", "Last Keeper Mode", "", 1, 1, 4)
-    dt.preferences.register("assisted_culling", "last_nk_mode", "integer", "Last Non-Keeper Mode", "", 1, 1, 8)
+end
+
+-- The panel's last combobox choices live in darktablerc but stay out of the
+-- preferences dialog (unregistered), so an unset one reads as 0.
+local function read_choice(name, default, count)
+    local v = dt.preferences.read("assisted_culling", name, "integer")
+    if v < 1 or v > count then return default end
+    return v
 end
 
 local function file_exists(name)
@@ -1118,7 +1119,7 @@ local function install_panel()
         label = _("preset"),
         tooltip = _("Sets global configurations based on photography genre."),
         _("landscape"), _("portrait"), _("sport"), _("macro"), _("custom"),
-        selected = dt.preferences.read("assisted_culling", "last_genre", "integer") or 1,
+        selected = read_choice("last_genre", 1, 5),
         changed_callback = function(widget)
             if is_updating then return end
             is_updating = true
@@ -1145,7 +1146,7 @@ local function install_panel()
         label = _("ranking mode"),
         tooltip = _("universal: stars from fixed sharpness tiers.\nrelative: keepers get top stars, the rest none."),
         _("universal absolute"), _("relative batch percentile"),
-        selected = dt.preferences.read("assisted_culling", "last_rank_mode", "integer") or 1, 
+        selected = read_choice("last_rank_mode", preset_configs[1][1], 2),
         changed_callback = function(widget)
             if is_updating then return end
             dt.preferences.write("assisted_culling", "last_rank_mode", "integer", widget.selected)
@@ -1157,7 +1158,7 @@ local function install_panel()
         label = _("sharpness"),
         tooltip = _("How sharpness is measured. Edge-to-edge scores the softest areas of the frame (ignoring plain sky), so a soft corner costs a frame. Face & eyes falls back to subject bias when no face is found, and tags a frame Eyes Closed (one star lower) when a clear face shows no open eyes. Subject tracking (SAM) segments the subject with darktable's AI mask model before scoring; it's slower than the rest, since each burst's top few frames go through the model."),
         _("center crop"), _("edge-to-edge uniformity"), _("absolute peak 1%"), _("face & eyes (OpenCV)"), _("subject bias (center-weighted)"), _("subject tracking (SAM)"),
-        selected = dt.preferences.read("assisted_culling", "last_sharp_mode", "integer") or 1, 
+        selected = read_choice("last_sharp_mode", preset_configs[1][2], 6),
         changed_callback = function(widget)
             if is_updating then return end
             dt.preferences.write("assisted_culling", "last_sharp_mode", "integer", widget.selected)
@@ -1169,7 +1170,7 @@ local function install_panel()
         label = _("exposure"),
         tooltip = _("Flags clipped shadows/highlights (Overexposed/Underexposed tag, one star lower)."),
         _("whole frame"), _("subject only (ignore sky)"), _("strict histogram"), _("ignore exposure"),
-        selected = dt.preferences.read("assisted_culling", "last_exp_mode", "integer") or 1, 
+        selected = read_choice("last_exp_mode", preset_configs[1][3], 4),
         changed_callback = function(widget)
             if is_updating then return end
             dt.preferences.write("assisted_culling", "last_exp_mode", "integer", widget.selected)
@@ -1181,7 +1182,7 @@ local function install_panel()
         label = _("keepers"),
         tooltip = _("How many of each burst are kept (the sharpest ones)."),
         _("single best only"), _("portrait (1 or 2)"), _("dynamic (1 to 5)"), _("keep all (focus stack)"),
-        selected = dt.preferences.read("assisted_culling", "last_keep_mode", "integer") or 1, 
+        selected = read_choice("last_keep_mode", preset_configs[1][4], 4),
         changed_callback = function(widget)
             if is_updating then return end
             dt.preferences.write("assisted_culling", "last_keep_mode", "integer", widget.selected)
@@ -1193,7 +1194,7 @@ local function install_panel()
         label = _("non-keepers"),
         tooltip = _("What to do with images that are not kept. They always get the Rejected tag."),
         _("leave alone"), _("reject (-1)"), _("0 stars"), _("1 star"), _("2 stars"), _("3 stars"), _("4 stars"), _("5 stars"),
-        selected = dt.preferences.read("assisted_culling", "last_nk_mode", "integer") or 1, 
+        selected = read_choice("last_nk_mode", 1, 8),
         changed_callback = function(widget)
             if is_updating then return end
             dt.preferences.write("assisted_culling", "last_nk_mode", "integer", widget.selected)
