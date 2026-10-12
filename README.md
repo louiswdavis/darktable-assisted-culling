@@ -276,6 +276,7 @@ EXIF can't supply the prompt instead: darktable exposes focus *distance*, not th
 Everything you'd change per shoot is a panel option or a preference. What's left is a named constant at the top of the file that uses it:
 
 - `culling.lua`: `BURST_GAP_SECONDS` (default 2) is the burst gap used when the preference isn't available, e.g. headless runs. On a 14-frame hand-held phone series (frames 4–50 s apart) 2 s grouped nothing, while 5 s clustered three pairs and picked the sharper frame each time.
+- `culling.lua`: `STAGE2_BATCH_WRITE_BUDGET` (60 tag writes) and `STAGE2_BATCH_LINES` (200 results) size each slice of the final apply step before it yields to the GUI. Lower them if darktable stutters while ratings apply.
 - `score_images.py`:
   - `SHADOW_CLIP`, `HIGHLIGHT_CLIP` and `CLIP_PCT_FLAG` control exposure flagging.
   - `STAR_THRESHOLDS` (relative mode) and `TIER_THRESHOLDS` (universal mode) turn sharpness into stars.
@@ -362,7 +363,8 @@ Things that cost time to find out, recorded so they don't again:
 - **`darktable-cli` never runs your `luarc`.** Since 5.6 the user `luarc` is loaded by `script_manager` (GUI only); before that the C code only loaded it when a GUI existed. `--luacmd` still runs, and it's the way to test headlessly. Anything GTK-wrapped (`register_lib`, `preferences.register`) blocks forever headless, so the plugin gates those on `dt.gui`.
 - **`dt.control.execute` releases the Lua lock** while the child runs. That keeps the GUI responsive, but headless it lets `darktable-cli` tear Lua down mid-run once its export finishes, so without a GUI the plugin uses plain `os.execute` and holds the lock.
 - **`group_with` first removes the image from its current group**, and removing a *leader* hands its group to another member. The plugin no longer stacks bursts with darktable's image grouping (bursts are a scoring concept only, tracked by capture time), but if that's ever added back: on a re-run over already-grouped images, attaching to a leader that still sits in an old group scatters the burst, so detach each keeper into a fresh group before attaching its burst-mates.
-- **Windows shell-outs go through a `.bat` file**, following `lib/dtutils/system.lua` in darktable's lua-scripts: cmd.exe mangles a command line with more than one quoted item.
+- **Windows shell-outs go through a `.bat` file**, following `lib/dtutils/system.lua` in darktable's lua-scripts: cmd.exe mangles a command line with more than one quoted item. In that file, write the exit code with the redirect first (`> "f" echo %ERRORLEVEL%`): `echo 0> "f"` reads as "redirect handle 0" and leaves `f` empty.
+- **Setting `img.rating` from Lua reloads the whole collection, once per image** (`src/lua/image.c`); tags and darktable's own rating action don't. So the final apply step sets ratings in batches: for each star value it selects that batch and fires the `views/thumbtable/rating` action, then restores your selection. The action rates darktable's *act-on* images (the hovered thumbnail, or the images shown in preview or culling layout), so the plugin checks `dt.gui.action_images` equals the batch first and rates one by one when it doesn't. "Apply ratings while scoring" keeps per-image writes, since changing the selection while you're working would get in the way.
 
 ## License
 

@@ -109,6 +109,13 @@ end
 local STAGE2_WRITE_BUDGET = 12   -- writes per slice before yielding
 local STAGE2_SLEEP_MIN_MS = 20   -- minimum yield per slice
 local STAGE2_SLEEP_MAX_MS = 300  -- maximum yield per slice
+-- Final drain only: ratings are batched, so a slice spends its budget on tag
+-- writes alone, which don't reload the collection.
+local STAGE2_BATCH_WRITE_BUDGET = 60
+local STAGE2_BATCH_LINES = 200   -- results per batched slice
+
+-- darktable's "views/thumbtable/rating" action elements, by star value
+local RATING_ELEMENTS = { [-1] = "reject", [0] = "zero", "one", "two", "three", "four", "five" }
 
 local IS_WINDOWS = dt.configuration.running_os == "windows"
 local THIS_DIR = (debug.getinfo(1, "S").source:sub(2):match("^(.*)[/\\]")) or "."
@@ -687,10 +694,12 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                     dt.control.sleep(10) -- hand the Lua lock back so the cancel button and hinter respond
                 end
 
+                -- not dt.print_error: the run carries on, and a red toast reads as a failure
                 if made < #points and not cancelled() then
-                    dt.print(string.format("Assisted Culling: SAM masked %d of %d shortlisted frames; bursts with an unmasked shortlisted frame use the center-weighted fallback.",
-                        made, #points))
-                    if first_sam_error then dt.print_error("Assisted Culling: first SAM error: " .. first_sam_error) end
+                    local why = first_sam_error == "empty mask" and "no subject found"
+                        or ("first error: " .. tostring(first_sam_error))
+                    dt.print(string.format("Assisted Culling: SAM masked %d of %d shortlisted frames (%s); those bursts use subject bias instead. Still running.",
+                        made, #points, why))
                 end
             end
             encoder:close()
@@ -746,13 +755,23 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         -- Reads are cheap; writes reload the lighttable collection / rewrite XMP, so skip no-ops.
         -- Every mark is a tag, never a colour label, so a re-run or "clear" can undo exactly
         -- what earlier passes set without touching labels the user applied by hand.
+        -- Set by the final drain: ratings collect here per star value and go out in
+        -- batches, since each img.rating write reloads the whole collection.
+        local rating_batch = nil
+
         local function apply_to_image(img, want_rating, is_keeper, flags)
             ensure_tags()
             local writes = 0
             local have = tags_of(img)
 
             if want_rating ~= nil and img.rating ~= want_rating then
-                img.rating = want_rating; writes = writes + 1
+                if rating_batch then
+                    local list = rating_batch[want_rating] or {}
+                    list[#list + 1] = img
+                    rating_batch[want_rating] = list
+                else
+                    img.rating = want_rating; writes = writes + 1
+                end
             end
 
             writes = writes + sync_tag(img, have, keeper_tag, TAG_KEEPER, is_keeper)
@@ -827,15 +846,70 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             end
         end
 
+        -- Applies each star value's batch with one rating action on a temporary
+        -- selection, then restores the user's selection. The action targets
+        -- darktable's act-on images (the hovered image, the ones shown in preview or
+        -- culling layout), so it only runs when those are exactly the batch; otherwise,
+        -- and for any image the action missed, it falls back to per-image writes.
+        local n_action_missed = 0
+        local function flush_ratings()
+            local batch = rating_batch
+            if next(batch) == nil then return end
+            rating_batch = {}
+            local in_lighttable = dt.gui.current_view().id == "lighttable"
+            local saved = in_lighttable and dt.gui.selection() or nil
+            for rating, imgs in pairs(batch) do
+                local used_action = false
+                if in_lighttable then
+                    local member = {}
+                    for _, img in ipairs(imgs) do member[img.id] = true end
+                    dt.gui.selection(imgs)
+                    local targets, exact = dt.gui.action_images, true
+                    if #targets ~= #imgs then exact = false end
+                    for _, t in ipairs(targets) do
+                        if not member[t.id] then exact = false; break end
+                    end
+                    if exact then
+                        local ok_a, err_a = pcall(dt.gui.action, "views/thumbtable/rating",
+                            RATING_ELEMENTS[rating], rating == -1 and "activate" or "select", 1.0)
+                        if not ok_a then first_error = first_error or tostring(err_a) end
+                        used_action = ok_a
+                    end
+                end
+                for _, img in ipairs(imgs) do
+                    if img.rating ~= rating then
+                        if used_action then n_action_missed = n_action_missed + 1 end
+                        local ok_set, err = pcall(function() img.rating = rating end)
+                        if not ok_set then
+                            applied_total = applied_total - 1
+                            failed_total = failed_total + 1
+                            first_error = first_error or tostring(err)
+                        end
+                    end
+                end
+            end
+            if saved then dt.gui.selection(saved) end
+        end
+
         -- One paced slice: stop after the write budget, then yield to the GUI in
         -- proportion to how long the slice took. Returns false if nothing was pending.
         local function apply_slice()
             if pending_idx > #pending then return false end
             local slice_start = os.clock()
-            local budget = STAGE2_WRITE_BUDGET
-            while pending_idx <= #pending and budget > 0 do
-                budget = budget - math.max(1, apply_line(pending[pending_idx]))
-                pending_idx = pending_idx + 1
+            if rating_batch then
+                local budget, lines = STAGE2_BATCH_WRITE_BUDGET, 0
+                while pending_idx <= #pending and budget > 0 and lines < STAGE2_BATCH_LINES do
+                    budget = budget - apply_line(pending[pending_idx])
+                    pending_idx = pending_idx + 1
+                    lines = lines + 1
+                end
+                flush_ratings()
+            else
+                local budget = STAGE2_WRITE_BUDGET
+                while pending_idx <= #pending and budget > 0 do
+                    budget = budget - math.max(1, apply_line(pending[pending_idx]))
+                    pending_idx = pending_idx + 1
+                end
             end
             local slice_ms = (os.clock() - slice_start) * 1000
             dt.control.sleep(math.max(STAGE2_SLEEP_MIN_MS, math.min(STAGE2_SLEEP_MAX_MS, math.floor(slice_ms))))
@@ -912,6 +986,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             end
             local started = os.time()
             local last_toast_pct = 0
+            rating_batch = {}
 
             while pending_idx <= total_lines do
                 if M.cancel_requested or (culling_job and not culling_job.valid) or file_exists(CANCEL_PATH) then
@@ -971,6 +1046,9 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             if n_skipped > 0 then msg = msg .. string.format(", %d unreadable (skipped)", n_skipped) end
             if n_locked > 0 then msg = msg .. string.format(", %d locked (left alone)", n_locked) end
             if failed_total > 0 then msg = msg .. string.format(", %d failed to update (see log)", failed_total) end
+            if n_action_missed > 0 then
+                msg = msg .. string.format(", %d missed by darktable's rating action (rated one by one)", n_action_missed)
+            end
             dt.print(msg)
             if first_error then dt.print_error("Assisted Culling: first apply error: " .. first_error) end
         end
