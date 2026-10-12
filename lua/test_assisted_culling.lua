@@ -1,8 +1,8 @@
--- Run with: lua test_culling.lua
--- Exercises the darktable-independent half of culling.lua directly.
+-- Run with: lua test_assisted_culling.lua
+-- Exercises the darktable-independent half of assisted_culling.lua directly.
 
 package.path = package.path .. ";./?.lua"
-local C = require("culling")
+local C = require("assisted_culling")
 
 local failures = 0
 local function check(name, got, want)

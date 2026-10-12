@@ -56,24 +56,24 @@ Linux / macOS:
 
 ```
 mkdir -p ~/.config/darktable/lua/contrib
-ln -s "$(pwd)/lua/culling.lua" ~/.config/darktable/lua/contrib/culling.lua
-echo 'require "contrib/culling"' >> ~/.config/darktable/luarc
+ln -s "$(pwd)/lua/assisted_culling.lua" ~/.config/darktable/lua/contrib/assisted_culling.lua
+echo 'require "contrib/assisted_culling"' >> ~/.config/darktable/luarc
 ```
 
 Windows (Command Prompt). Creating symbolic links needs an Administrator prompt unless Developer Mode is enabled.
 
 ```
 if not exist "%LOCALAPPDATA%\darktable\lua\contrib" mkdir "%LOCALAPPDATA%\darktable\lua\contrib"
-mklink "%LOCALAPPDATA%\darktable\lua\contrib\culling.lua" "%CD%\lua\culling.lua"
-echo require "contrib/culling" >> "%LOCALAPPDATA%\darktable\luarc"
+mklink "%LOCALAPPDATA%\darktable\lua\contrib\assisted_culling.lua" "%CD%\lua\assisted_culling.lua"
+echo require "contrib/assisted_culling" >> "%LOCALAPPDATA%\darktable\luarc"
 ```
 
 Windows (PowerShell). Same Administrator caveat.
 
 ```
 New-Item -ItemType Directory -Force "$env:LOCALAPPDATA\darktable\lua\contrib"
-New-Item -ItemType SymbolicLink -Path "$env:LOCALAPPDATA\darktable\lua\contrib\culling.lua" -Value "$PWD\lua\culling.lua"
-Add-Content "$env:LOCALAPPDATA\darktable\luarc" 'require "contrib/culling"'
+New-Item -ItemType SymbolicLink -Path "$env:LOCALAPPDATA\darktable\lua\contrib\assisted_culling.lua" -Value "$PWD\lua\assisted_culling.lua"
+Add-Content "$env:LOCALAPPDATA\darktable\luarc" 'require "contrib/assisted_culling"'
 ```
 
 ### 3. Point the plugin at Python
@@ -81,7 +81,7 @@ Add-Content "$env:LOCALAPPDATA\darktable\luarc" 'require "contrib/culling"'
 Start darktable, open **preferences → lua options**, and set:
 
 - **Assisted Culling: python interpreter**: the venv's `python.exe` / `bin/python`
-- **Assisted Culling: score_images.py**: `python/score_images.py` from this repo, or leave it empty and keep `score_images.py` next to `culling.lua`
+- **Assisted Culling: score_images.py**: `python/score_images.py` from this repo, or leave it empty and keep `score_images.py` next to `assisted_culling.lua`
 
 The other preferences are optional; see [Preferences](#preferences).
 
@@ -252,16 +252,16 @@ All under **preferences → lua options**.
 you select images in lighttable
         |
         v
-culling.lua groups the selection into bursts by EXIF capture time
+assisted_culling.lua groups the selection into bursts by EXIF capture time
         |
         v
-culling.lua writes manifest.csv (id, filepath, burst_id, …, shutter, aperture) and runs score_images.py
+assisted_culling.lua writes manifest.csv (id, filepath, burst_id, …, shutter, aperture) and runs score_images.py
         |
         v
 score_images.py scores sharpness and exposure, picks the keepers per burst, writes results.csv
         |
         v
-culling.lua reads results.csv and applies ratings and tags
+assisted_culling.lua reads results.csv and applies ratings and tags
 ```
 
 Two small processes talking through CSV files. The Lua side is split into pure logic (time parsing, clustering, CSV) with no darktable dependency, and the darktable integration proper; only the second half needs darktable to run.
@@ -306,9 +306,9 @@ EXIF can't supply the prompt instead: darktable exposes focus *distance*, not th
 
 Everything you'd change per shoot is a panel option or a preference. What's left is a named constant at the top of the file that uses it:
 
-- `culling.lua`: `BURST_GAP_SECONDS` (default 2) is the burst gap used when the preference isn't available, e.g. headless runs. On a 14-frame hand-held phone series (frames 4–50 s apart) 2 s grouped nothing, while 5 s clustered three pairs and picked the sharper frame each time.
-- `culling.lua`: `PROGRESS_ANALYSIS` (0.75) is the share of the progress bar for analysis; applying ratings fills the rest. In SAM mode, `PROGRESS_SUBJECTS` (0.15) and `PROGRESS_SAM` (0.45) mark where finding subjects and segmenting end.
-- `culling.lua`: `STAGE2_BATCH_WRITE_BUDGET` (60 tag writes) and `STAGE2_BATCH_LINES` (200 results) size each slice of the final apply step before it yields to the GUI. Lower them if darktable stutters while ratings apply.
+- `assisted_culling.lua`: `BURST_GAP_SECONDS` (default 2) is the burst gap used when the preference isn't available, e.g. headless runs. On a 14-frame hand-held phone series (frames 4–50 s apart) 2 s grouped nothing, while 5 s clustered three pairs and picked the sharper frame each time.
+- `assisted_culling.lua`: `PROGRESS_ANALYSIS` (0.75) is the share of the progress bar for analysis; applying ratings fills the rest. In SAM mode, `PROGRESS_SUBJECTS` (0.15) and `PROGRESS_SAM` (0.45) mark where finding subjects and segmenting end.
+- `assisted_culling.lua`: `STAGE2_BATCH_WRITE_BUDGET` (60 tag writes) and `STAGE2_BATCH_LINES` (200 results) size each slice of the final apply step before it yields to the GUI. Lower them if darktable stutters while ratings apply.
 - `score_images.py`:
   - `SHADOW_CLIP`, `HIGHLIGHT_CLIP` and `CLIP_PCT_FLAG` control exposure flagging.
   - `TIER_THRESHOLDS` (universal mode) and `STAR_THRESHOLDS` (binary and relative mode, as a percentage) turn sharpness into stars.

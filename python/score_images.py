@@ -51,7 +51,7 @@ TIER_THRESHOLDS = [
 # Per-frame problem flags → (points off the binary-mode score, stars off in
 # universal and relative mode). A frame pays for every flag it carries. Binary-mode
 # keepers start at 100, so 15 points is one star (STAR_THRESHOLDS) and 30 is three.
-# The results CSV lists a frame's flags in column 3; culling.lua maps each to a tag.
+# The results CSV lists a frame's flags in column 3; assisted_culling.lua maps each to a tag.
 FLAG_PENALTIES = {
     "overexposed": (30, 1),
     "underexposed": (30, 1),

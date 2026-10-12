@@ -1,4 +1,4 @@
--- e2e_cli.lua — headless end-to-end check of culling.lua inside darktable-cli.
+-- e2e_cli.lua — headless end-to-end check of assisted_culling.lua inside darktable-cli.
 --
 -- darktable's GUI isn't needed: darktable-cli runs Lua too, it just never
 -- loads the user luarc (since 5.6 that's done by script_manager, GUI only),
@@ -50,7 +50,7 @@ local function list_files(folder)
 end
 
 local ok, err = pcall(function()
-    local culling = require "contrib/culling"
+    local culling = require "contrib/assisted_culling"
     if GAP then culling.BURST_GAP_SECONDS = GAP end
     log("plugin loaded, gap = " .. culling.BURST_GAP_SECONDS .. ", gui = " .. tostring(dt.gui ~= nil))
 
