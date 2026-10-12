@@ -48,7 +48,8 @@ def run_tests():
     boxes = S.decode_vehicles(raw, 0.5)
     check("detector: one vehicle survives class filter and NMS", len(boxes), 1)
     check("detector: box mapped back to source pixels",
-          [round(float(v), 1) for v in boxes[0]], [128.0, 48.0, 208.0, 128.0, 0.9])
+          [round(float(v), 1) for v in boxes[0][:5]], [128.0, 48.0, 208.0, 128.0, 0.9])
+    check("detector: box keeps its COCO class", boxes[0][5], 2)
     check("detector: nothing above threshold → no boxes", S.decode_vehicles(np.zeros((8400, 85), np.float32), 1.0), [])
 
     weak = np.zeros((8400, 85), np.float32)
@@ -59,13 +60,19 @@ def run_tests():
           S.strongest_detections(weak, 0.5, 400, 400),
           "strongest person 0.45 (0.04x0.04 of frame), strongest vehicle car 0.20 (0.20x0.20 of frame)")
 
-    small_sure = (10, 10, 30, 30, 0.95)
-    big_unsure = (100, 50, 300, 250, 0.5)
+    small_sure = (10, 10, 30, 30, 0.95, 2)
+    big_unsure = (100, 50, 300, 250, 0.5, 7)
     check("pick vehicle: prominence beats raw confidence",
-          S.pick_vehicle([small_sure, big_unsure], 400, 300), (0.25, 50 / 300, 0.75, 250 / 300))
+          S.pick_vehicle([small_sure, big_unsure], 400, 300), ((0.25, 50 / 300, 0.75, 250 / 300), 7))
     check("pick vehicle: box clipped to the frame",
-          S.pick_vehicle([(-20, 0, 420, 150, 0.8)], 400, 300), (0.0, 0.0, 1.0, 0.5))
+          S.pick_vehicle([(-20, 0, 420, 150, 0.8, 3)], 400, 300), ((0.0, 0.0, 1.0, 0.5), 3))
     check("pick vehicle: none found", S.pick_vehicle([], 400, 300), None)
+
+    # diagnostic tags ------------------------------------------------------------
+    check("subject tag: vehicle class", S.subject_tag(7), "Subject|Vehicle|Truck")
+    check("subject tag: no vehicle found", S.subject_tag(None), "Subject|Vehicle|Guessed")
+    check("technique tag: pan", S.technique_tag("subject_peak"), "Technique|Panning")
+    check("technique tag: wide aperture", S.technique_tag("subject_focus"), "Technique|Shallow DoF")
 
     # parse_manifest_row -----------------------------------------------------
     check("manifest: 4-column row keeps mask path",
@@ -253,6 +260,8 @@ def run_tests():
           ["0", "1", "2", "3", "4"])
     check("stage C: keeper comes from the shortlist",
           [r[0] for r in res_rows if r[4] == "1"][0] in shortlisted_ids, True)
+    check("stage C: no masks and no detector tags only the fallback",
+          {r[6] for r in res_rows}, {"Scored|Subject bias"})
 
     # score cache: plain modes ------------------------------------------------
     import sqlite3 as _sq
@@ -295,6 +304,8 @@ def run_tests():
           plain_run(manifest=exif_manifest("fast.csv", "0.002"))["1"], "12345.0")
     check("cache: a pan is scored as subject_peak, not read from the subject bias entry",
           plain_run(manifest=exif_manifest("pan.csv", "0.008"))["1"] != "12345.0", True)
+    check("diagnostic tags: a pan is tagged Technique|Panning",
+          {r[6] for r in _csv.reader(open(os.path.join(tmp, "plain_res.csv")))}, {"Technique|Panning"})
 
     db = _sq.connect(cache_p)
     db.execute("UPDATE scores SET used = 0")
