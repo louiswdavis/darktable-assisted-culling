@@ -139,6 +139,21 @@ def run_tests():
     check("flags (universal): exposure and eyes closed stack",
           keeper_row(("underexposed", "eyes_closed"), "universal"), ("underexposed;eyes_closed", 3))
 
+    check("penalised_flags: a flag the whole burst shares costs nothing",
+          S.penalised_flags({"a": ("underexposed", "eyes_closed"), "b": ("underexposed",)}),
+          {"a": ("eyes_closed",), "b": ()})
+    check("penalised_flags: a lone frame still pays for its flags",
+          S.penalised_flags({"a": ("underexposed",)}), {"a": ("underexposed",)})
+    check("penalised_flags: tag-only flags cost nothing",
+          S.penalised_flags({"a": ("eyes_closed",), "b": ()}, {"eyes_closed"}), {"a": (), "b": ()})
+
+    open(res_path, "w").close()
+    S.process_burst_logic("1", {"a": 5000.0, "b": 4000.0}, {"a": ("underexposed",), "b": ("underexposed",)}, 2,
+                          Namespace(keep_mode="keep_all", rank_mode="universal", nk_mode="leave"), res_path)
+    rows = [line.strip().split(",") for line in open(res_path)]
+    check("burst logic: shared flag keeps its tag but not its penalty",
+          [(r[2], int(r[5])) for r in rows], [("underexposed", 5), ("underexposed", 5)])
+
     # single decode in sam_subject: stage A prescores, stage C skips non-shortlisted --
     import csv as _csv
 

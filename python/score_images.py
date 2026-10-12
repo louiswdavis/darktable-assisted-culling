@@ -60,6 +60,15 @@ def frame_flags(exposure: str, eyes_closed: bool = False) -> tuple:
     flags = () if exposure == "ok" else (exposure,)
     return flags + ("eyes_closed",) if eyes_closed else flags
 
+
+def penalised_flags(burst_flags: dict, tag_only=frozenset()) -> dict:
+    """id → the flags that cost that frame stars. Tag-only flags never do, nor
+    does a flag every frame of a multi-frame burst shares: a burst that's all
+    dark or all eyes-closed was most likely shot that way on purpose."""
+    shared = set.intersection(*map(set, burst_flags.values())) if len(burst_flags) > 1 else set()
+    exempt = shared | set(tag_only)
+    return {i: tuple(f for f in flags if f not in exempt) for i, flags in burst_flags.items()}
+
 SALIENCY_GRID = 5
 
 
@@ -502,6 +511,7 @@ def process_burst_logic(burst_id, burst_sharpness, burst_flags, burst_size, args
     num_keepers = len(burst_keepers)
     top_40_count = max(1, int(round(num_keepers * 0.4)))
     top_40_keepers = set(burst_keepers[:top_40_count])
+    penalised = penalised_flags(burst_flags, getattr(args, "tag_only_flags", frozenset()))
 
     burst_rows = []
     for img_id in sorted_members:
@@ -511,7 +521,7 @@ def process_burst_logic(burst_id, burst_sharpness, burst_flags, burst_size, args
 
         if args.rank_mode == "relative":
             score = 100.0 if is_keeper else 0.0
-            score -= sum(FLAG_PENALTIES[f][0] for f in flags)
+            score -= sum(FLAG_PENALTIES[f][0] for f in penalised[img_id])
             for threshold, stars in STAR_THRESHOLDS:
                 if max(0, score) >= threshold:
                     break
@@ -523,7 +533,7 @@ def process_burst_logic(burst_id, burst_sharpness, burst_flags, burst_size, args
                     break
             else:
                 stars = 0
-            stars = max(0, stars - sum(FLAG_PENALTIES[f][1] for f in flags))
+            stars = max(0, stars - sum(FLAG_PENALTIES[f][1] for f in penalised[img_id]))
 
         if is_keeper:
             if args.keep_mode != "keep_all" and num_keepers > 1 and img_id not in top_40_keepers:
@@ -693,8 +703,13 @@ if __name__ == "__main__":
     parser.add_argument("--prescores", default="",
                         help="sam_subject: per-frame fallback scores written by the saliency pass "
                              "and read by the scoring pass, so frames outside the shortlist decode once")
+    parser.add_argument("--tag-only-flags", default="", type=lambda s: frozenset(filter(None, s.split(","))),
+                        help="Comma-separated flags that are still listed but never cost stars")
 
     args = parser.parse_args()
+    unknown = args.tag_only_flags - set(FLAG_PENALTIES)
+    if unknown:
+        parser.error(f"unknown --tag-only-flags: {', '.join(sorted(unknown))}")
 
     try:
         main(args)

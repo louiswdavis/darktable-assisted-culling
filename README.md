@@ -130,6 +130,14 @@ shows in darktable's message area. When it's done:
   enough to judge, with no open eyes found (one star lower). Dark sunglasses
   trigger it too.
 
+Flags only ever cost stars; they never decide which frame is kept. They
+also cost nothing when **every frame in a burst** shares them: a burst
+that's all dark or all eyes-closed was most likely shot that way, so it
+keeps the tag but not the penalty. For styles where a flag is the point
+(low-key, high-key), switch off *"Assisted Culling: … lowers stars"* for
+that flag in darktable's preferences → Lua options: it's still tagged, and
+the stars are left alone.
+
 Filter on these in darktable's **collections** module (tag → Assisted
 Culling) to step through just the keepers, or just the rejects; the
 parent `Assisted Culling` tag collects everything the plugin has scored.

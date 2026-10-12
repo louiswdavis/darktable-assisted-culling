@@ -370,6 +370,27 @@ local FLAGS = {
 local ALL_TAGS = { TAG_KEEPER, TAG_REJECT, TAG_CULLED }
 for _, f in ipairs(FLAGS) do ALL_TAGS[#ALL_TAGS + 1] = f.tag end
 
+if dt.gui then
+    for _, f in ipairs(FLAGS) do
+        local label = f.tag:match("|(.+)$")
+        dt.preferences.register("assisted_culling", "penalise_" .. f.name, "bool",
+            "Assisted Culling: " .. label .. " lowers stars",
+            "off = still tag " .. label .. ", but leave the star rating alone (for shots where it's a style, not a mistake)",
+            true)
+    end
+end
+
+-- Flags the user set to tag-only, as the scorer's --tag-only-flags value.
+local function tag_only_flags()
+    local names = {}
+    for _, f in ipairs(FLAGS) do
+        if not dt.preferences.read("assisted_culling", "penalise_" .. f.name, "bool") then
+            names[#names + 1] = f.name
+        end
+    end
+    return table.concat(names, ",")
+end
+
 local function fmt_eta(elapsed, done, total)
     if elapsed < 3 or done <= 0 or done >= total then return "" end
     local remaining = math.ceil(elapsed * (total - done) / done)
@@ -636,6 +657,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             .. " --exp-mode " .. shell_quote(tostring(exp_mode))
             .. " --keep-mode " .. shell_quote(tostring(keep_mode))
             .. " --nk-mode " .. shell_quote(tostring(nk_mode))
+            .. " --tag-only-flags " .. shell_quote(tag_only_flags())
             .. (fast_jpeg and " --fast-jpeg" or "")
             .. (sam_model and (" --prescores " .. shell_quote(PRESCORE_PATH)) or "")
             .. " 2> " .. shell_quote(LOG_PATH)
