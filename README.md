@@ -39,9 +39,9 @@ Everything runs locally: a Lua plugin inside darktable and a small Python/OpenCV
 git clone https://github.com/louiswdavis/darktable-assisted-culling
 cd darktable-assisted-culling
 
-# Windows
+# Windows (Command Prompt or PowerShell)
 python -m venv .venv
-.venv/Scripts/pip install -r python/requirements.txt
+.venv\Scripts\pip install -r python\requirements.txt
 
 # Linux / macOS (no plain `python` on macOS)
 python3 -m venv .venv
@@ -316,8 +316,13 @@ No `lua` binary handy? `pip install lupa` in the venv, then:
 The scorer's pure functions (saliency point, vehicle detection decoding, mask-aware sharpness, flags, manifest parsing) have their own tests on synthetic images, and a stress test runs 6000 mock frames through the whole scorer:
 
 ```
+# Linux / macOS
 .venv/bin/python python/test_score_images.py
 .venv/bin/python python/stress_test_cull.py
+
+# Windows
+.venv\Scripts\python python\test_score_images.py
+.venv\Scripts\python python\stress_test_cull.py
 ```
 
 ### Running the scorer on its own
