@@ -894,7 +894,8 @@ def score_manifest(manifest, args, cache):
     if args.sharp_mode == "face_detect" and not hasattr(cv2, "CascadeClassifier"):
         print(
             f"OpenCV {cv2.__version__} in {sys.executable} has no Haar face detector (removed in OpenCV 5), "
-            f"which the face & eyes mode needs. Install with: \"{sys.executable}\" -m pip install \"opencv-python-headless<5\"",
+            f"which the face & eyes mode needs. Install with: \"{sys.executable}\" -m pip install \"opencv-python-headless<5\", "
+            "or pick another sharpness mode.",
             file=sys.stderr,
         )
         sys.exit(3)
