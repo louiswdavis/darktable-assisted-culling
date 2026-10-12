@@ -160,6 +160,15 @@ How each frame's focus is measured.
 - *subject bias (center-weighted)*: a 3×3 grid scored on its sharpest patch, with the center patches counting more, on the assumption the subject is mid-frame. A classical heuristic, not AI.
 - *subject tracking (SAM)*: masks the subject with darktable's own AI mask model and scores sharpness only inside the mask. See below.
 
+#### Shooting intent from EXIF
+
+Two settings tell the scorer a soft background or soft edges were on purpose. Each burst is judged on its median shutter speed and aperture, so all its frames are scored the same way. Frames without EXIF are left out of the median.
+
+- **Panning** (1/125 s or slower) in *subject bias*: only the sharpest patch counts. The usual small credit for an evenly sharp frame is dropped, since a pan's background is meant to be streaked. *Edge-to-edge uniformity* ignores shutter speed, because a slow shutter there is usually a tripod landscape.
+- **Shallow depth of field** (f/4 or wider) in *edge-to-edge uniformity*: the burst is scored with *subject bias* instead, so wide-open shots with soft corners aren't penalised for them.
+
+The other modes already ignore the background, so EXIF doesn't change them.
+
 #### Subject tracking (SAM)
 
 This is the mode that isn't fooled when autofocus lands on a catch fence instead of the car. SAM needs a hint of where the subject is, so the plugin gives it one: the frame's most distinctive region (edge detail plus colour contrast, like a bright livery against grey tarmac), or a box around a detected vehicle if you've set up the [vehicle detector](#vehicle-detector).
@@ -224,7 +233,7 @@ you select images in lighttable
 culling.lua groups the selection into bursts by EXIF capture time
         |
         v
-culling.lua writes manifest.csv (id, filepath, burst_id) and runs score_images.py
+culling.lua writes manifest.csv (id, filepath, burst_id, …, shutter, aperture) and runs score_images.py
         |
         v
 score_images.py scores sharpness and exposure, picks the keepers per burst, writes results.csv
@@ -249,7 +258,7 @@ An earlier version grouped frames by perceptual image hashing. That technique is
 
 1. **Shortlist and prompt** (Python). `score_images.py --emit-saliency-points --keep-mode … [--detector yolox.onnx]` shortlists each burst and writes one prompt per shortlisted frame as `id,x0,y0,x1,y1,cached` in frame fractions. A vehicle box fills all four; a salient point leaves `x1,y1` empty. `cached` is `1` when that frame's masked score is already in the score cache.
 2. **Mask** (Lua). The plugin runs SAM on each prompt that isn't cached and writes a mask PNG. A box goes to SAM as two corner points labelled 2 and 3, the encoding darktable's `dt_seg_point_t` documents.
-3. **Score** (Python). The scorer reads the mask path, shortlist flag and darktable edit time from the 4th, 5th and 6th manifest columns.
+3. **Score** (Python). The scorer reads the mask path, shortlist flag and darktable edit time from the 4th, 5th and 6th manifest columns. Every mode gets shutter and aperture in the 7th and 8th.
 
 ### Score cache
 
@@ -260,7 +269,7 @@ A cached score is only reused when everything that produced it is the same:
 | Changes the score (new entry) | Only uses the score (reused) |
 |-------------------------------|------------------------------|
 | the file itself (path, modified time, size) | ranking mode |
-| sharpness mode | keepers, non-keepers |
+| sharpness mode, as adjusted by [shooting intent](#shooting-intent-from-exif) | keepers, non-keepers |
 | exposure mode | burst gap |
 | fast JPEG decode | the per-flag "… lowers stars" preferences |
 | SAM mode: the mask model, the vehicle detector file, the prompt, and your last darktable edit of the frame | |
@@ -283,15 +292,18 @@ Everything you'd change per shoot is a panel option or a preference. What's left
   - `FLAG_PENALTIES` sets what each flag costs: points off the relative score (15 points is one star) and stars off in universal mode.
   - `BLINK_MIN_FACE_PX` is the smallest face width judged for closed eyes.
   - `DETECTOR_MIN_SCORE` is the confidence a vehicle detection needs.
+  - `PANNING_SHUTTER` (1/125 s) and `SHALLOW_DOF_APERTURE` (f/4) are the [shooting intent](#shooting-intent-from-exif) cutoffs.
   - `SCORE_CACHE_MAX_AGE_DAYS` (default 90) is how long an unused cache entry is kept.
-  - `SCORE_CACHE_VERSION`: bump it after changing any of the constants above that feed a score (clip levels, `MAX_DIM`, `BLINK_MIN_FACE_PX`, `DETECTOR_MIN_SCORE`, …) or the scoring code, so old cached scores aren't reused. Star and penalty tables don't need a bump.
+  - `SCORE_CACHE_VERSION`: bump it after changing any of the constants above that feed a score (clip levels, `MAX_DIM`, `BLINK_MIN_FACE_PX`, `DETECTOR_MIN_SCORE`, …) or the scoring code, so old cached scores aren't reused. Star and penalty tables don't need a bump, and neither do the shooting-intent cutoffs: they only pick which mode a burst uses, and the mode is already part of the cache key.
 
 These are sensible starting points, not tuned defaults. Run a real shoot through it, see what gets flagged, and adjust.
 
 ## Troubleshooting
 
 - **The panel isn't there.** Start darktable with `-d lua` and look for `LUA ERROR` in the log. On Windows the log is `Documents\Darktable\darktable-log.txt`.
-- **"no results" or "scorer produced no ratings".** The scorer failed. Its stderr is in `dt_assisted_culling_stderr.log` in darktable's temp directory. The usual cause is the interpreter preference pointing at a Python without the requirements installed.
+- **Every run writes a log** to `assisted_culling.log` in darktable's config directory (e.g. `%LOCALAPPDATA%\darktable` on Windows); the run before it is kept as `assisted_culling.prev.log`. It has the settings, the scorer commands, every message shown on screen, each burst's shortlist, sharpness mode and keepers, and in SAM mode one line per segmented frame with its prompt and the exact error if SAM failed on it. Start here when a result looks wrong.
+- **"no results" or "scorer produced no ratings".** The scorer failed; its output is at the end of the run log. The usual cause is the interpreter preference pointing at a Python without the requirements installed.
+- **"SAM masked 0 of N shortlisted frames".** Look for the `SAM … failed:` lines in the run log for the error on each frame.
 - **"score cache … is unreadable".** The cache file is damaged. Delete `assisted_culling/scores.sqlite` in darktable's config directory; the next run rebuilds it.
 - **Scores look stale after changing a constant in `score_images.py`.** Bump `SCORE_CACHE_VERSION` (see Tuning), or delete the cache file.
 - **darktable itself crashes on startup on Windows 11** (`0xC0000005`). darktable's Windows binaries are unsigned, and Smart App Control blocks unsigned DLLs that haven't built up reputation; it blocked `libdarkroom.dll` from 5.6.1 on a test machine. Check the `Microsoft-Windows-CodeIntegrity/Operational` event log for event 3077. Don't turn Smart App Control off (it's a one-way switch). An older release passes: `winget install --id darktable.darktable --version 5.4.1` ran with no blocks, and this plugin needs nothing newer.
