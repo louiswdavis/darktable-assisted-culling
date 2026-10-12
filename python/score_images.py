@@ -180,31 +180,31 @@ def _yolox_anchors(size: int = DETECTOR_INPUT) -> tuple:
 
 
 def decode_vehicles(raw: np.ndarray, scale: float) -> list:
-    """Raw YOLOX output (anchors × 85) → [(x0, y0, x1, y1, score)] vehicle boxes in
-    source pixels after NMS. `scale` is the letterbox resize factor."""
+    """Raw YOLOX output (anchors × 85) → [(x0, y0, x1, y1, score, coco_class)]
+    vehicle boxes in source pixels after NMS. `scale` is the letterbox resize factor."""
     grid, stride = _yolox_anchors()
     xy = (raw[:, :2] + grid) * stride
     wh = np.exp(raw[:, 2:4]) * stride
     cls = raw[:, 4:5] * raw[:, 5:][:, VEHICLE_CLASSES]
-    score = cls.max(axis=1)
+    score, best = cls.max(axis=1), cls.argmax(axis=1)
     keep = score >= DETECTOR_MIN_SCORE
     if not keep.any():
         return []
-    xy, wh, score = xy[keep] / scale, wh[keep] / scale, score[keep]
+    xy, wh, score, best = xy[keep] / scale, wh[keep] / scale, score[keep], best[keep]
     tl = xy - wh / 2
     picked = cv2.dnn.NMSBoxes(np.hstack([tl, wh]).tolist(), score.tolist(), DETECTOR_MIN_SCORE, DETECTOR_NMS)
-    return [(tl[i, 0], tl[i, 1], tl[i, 0] + wh[i, 0], tl[i, 1] + wh[i, 1], float(score[i]))
-            for i in np.asarray(picked).reshape(-1)]
+    return [(tl[i, 0], tl[i, 1], tl[i, 0] + wh[i, 0], tl[i, 1] + wh[i, 1], float(score[i]),
+             VEHICLE_CLASSES[best[i]]) for i in np.asarray(picked).reshape(-1)]
 
 
 def pick_vehicle(boxes: list, w: int, h: int):
-    """The most prominent box (score × area) as (x0, y0, x1, y1) frame fractions
-    clipped to the frame, or None when there is no vehicle."""
+    """(the most prominent box (score × area) as (x0, y0, x1, y1) frame fractions
+    clipped to the frame, its COCO class), or None when there is no vehicle."""
     if not boxes:
         return None
-    x0, y0, x1, y1, _ = max(boxes, key=lambda b: b[4] * (b[2] - b[0]) * (b[3] - b[1]))
-    return (min(max(x0 / w, 0.0), 1.0), min(max(y0 / h, 0.0), 1.0),
-            min(max(x1 / w, 0.0), 1.0), min(max(y1 / h, 0.0), 1.0))
+    x0, y0, x1, y1, _, coco = max(boxes, key=lambda b: b[4] * (b[2] - b[0]) * (b[3] - b[1]))
+    return ((min(max(x0 / w, 0.0), 1.0), min(max(y0 / h, 0.0), 1.0),
+             min(max(x1 / w, 0.0), 1.0), min(max(y1 / h, 0.0), 1.0)), coco)
 
 
 COCO_NAMES = {0: "person", 1: "bicycle", 2: "car", 3: "motorcycle", 4: "airplane", 5: "bus",
@@ -226,8 +226,15 @@ def strongest_detections(raw: np.ndarray, scale: float, w: int, h: int) -> str:
     return f"strongest {describe(i, c)}, strongest vehicle {describe(vi, VEHICLE_CLASSES[vc])}"
 
 
+def subject_tag(coco) -> str:
+    """The diagnostic tag (under "Assisted Culling|") for a detector result:
+    the vehicle's class, or Guessed when the detector found none."""
+    return "Subject|Vehicle|" + (COCO_NAMES[coco].capitalize() if coco is not None else "Guessed")
+
+
 def vehicle_box(rgb: np.ndarray, model_path: str) -> tuple:
-    """(box as frame fractions or None, log note: "" when a vehicle was found)."""
+    """(box as frame fractions or None, COCO class or None, log note: "" when a
+    vehicle was found)."""
     h, w = rgb.shape[:2]
     scale = min(DETECTOR_INPUT / h, DETECTOR_INPUT / w)
     canvas = np.full((DETECTOR_INPUT, DETECTOR_INPUT, 3), 114.0, np.float32)
@@ -235,8 +242,10 @@ def vehicle_box(rgb: np.ndarray, model_path: str) -> tuple:
     net = _detector(model_path)
     net.setInput(np.transpose(canvas, (2, 0, 1))[np.newaxis])
     raw = net.forward(net.getUnconnectedOutLayersNames())[0][0]
-    box = pick_vehicle(decode_vehicles(raw, scale), w, h)
-    return box, "" if box else f"no vehicle at {DETECTOR_MIN_SCORE}: {strongest_detections(raw, scale, w, h)}"
+    found = pick_vehicle(decode_vehicles(raw, scale), w, h)
+    if found:
+        return found[0], found[1], ""
+    return None, None, f"no vehicle at {DETECTOR_MIN_SCORE}: {strongest_detections(raw, scale, w, h)}"
 
 
 _CASCADES: dict = {}
@@ -526,6 +535,11 @@ def burst_sharp_mode(sharp_mode: str, exposures, apertures) -> str:
     return sharp_mode
 
 
+def technique_tag(burst_mode: str) -> str:
+    """The diagnostic tag (under "Assisted Culling|") for a mode burst_sharp_mode switched to."""
+    return "Technique|Panning" if burst_mode == "subject_peak" else "Technique|Shallow DoF"
+
+
 # Bump whenever a change to the scoring code changes any number stored in the cache.
 SCORE_CACHE_VERSION = 2
 SCORE_CACHE_MAX_AGE_DAYS = 90
@@ -636,23 +650,29 @@ def process_single_image(filepath: str, sharp_mode: str, exp_mode: str, cancel_p
 def process_single_saliency(filepath: str, fast_jpeg: bool = False, exp_mode: str = "whole_frame",
                             detector: str = ""):
     """The SAM prompt is a vehicle box (x0, y0, x1, y1) when `detector` finds one,
-    else the saliency point (x, y). The last field is the detector's log note."""
+    else the saliency point (x, y). The last two fields are the subject tag
+    ("" without a detector) and the detector's log note."""
     try:
         rgb = load_image(filepath, fast_jpeg)
-        prompt, note = vehicle_box(rgb, detector) if detector else (None, "")
+        if detector:
+            prompt, coco, note = vehicle_box(rgb, detector)
+            subject = subject_tag(coco)
+        else:
+            prompt, subject, note = None, "", ""
         return (filepath, prompt or saliency_point(rgb), sharpness_score(rgb, "subject_focus"),
-                exposure_status(rgb, exp_mode), None, note)
+                exposure_status(rgb, exp_mode), None, subject, note)
     except Exception as e:
-        return filepath, None, None, None, str(e), ""
+        return filepath, None, None, None, str(e), "", ""
 
 
 def read_prescores(path: str) -> dict:
-    """id → (fallback sharpness, exposure status, prompt) from a stage-A prescore file."""
+    """id → (fallback sharpness, exposure status, prompt, subject tag) from a
+    stage-A prescore file."""
     if not path or not os.path.exists(path):
         return {}
     with open(path, newline="", encoding="utf-8") as f:
-        return {row[0]: (float(row[1]), row[2], [float(v) for v in row[3:] if v])
-                for row in csv.reader(f) if len(row) == 7}
+        return {row[0]: (float(row[1]), row[2], [float(v) for v in row[3:7] if v], row[7])
+                for row in csv.reader(f) if len(row) == 8}
 
 
 def emit_saliency_points(manifest, args, cache):
@@ -661,9 +681,9 @@ def emit_saliency_points(manifest, args, cache):
     heuristic. A box prompt fills all four; a point prompt leaves x1,y1 empty.
     cached is "1" when the frame's masked score is already in the cache, so
     darktable needn't run SAM on it.
-    With args.prescores, also writes id,fallback_score,exposure,x0,y0,x1,y1 for
-    every frame so the scoring pass needn't decode frames outside the shortlist
-    again. Images that fail to decode are left out and so can't be keepers."""
+    With args.prescores, also writes id,fallback_score,exposure,x0,y0,x1,y1,subject
+    for every frame so the scoring pass needn't decode frames outside the
+    shortlist again. Images that fail to decode are left out and so can't be keepers."""
     total = len(manifest)
     prescores = getattr(args, "prescores", "")
     exp_mode = getattr(args, "exp_mode", "whole_frame")
@@ -687,7 +707,7 @@ def emit_saliency_points(manifest, args, cache):
     def stage_a_key(filepath):
         return ("stage_a", file_key(filepath), exp_mode, args.fast_jpeg, det_key)
 
-    def record(image_id, prompt, heuristic, exposure):
+    def record(image_id, prompt, heuristic, exposure, subject):
         nonlocal done
         image_id, filepath, burst = row_of[image_id][:3]
         if prompt is not None:
@@ -695,7 +715,8 @@ def emit_saliency_points(manifest, args, cache):
             found[burst][image_id] = (prompt, heuristic)
             if prescores:
                 with open(prescores, "a", newline="", encoding="utf-8") as f:
-                    csv.writer(f).writerow([image_id, heuristic, exposure] + prompt + [""] * (4 - len(prompt)))
+                    csv.writer(f).writerow([image_id, heuristic, exposure] + prompt + [""] * (4 - len(prompt))
+                                           + [subject])
         remaining[burst] -= 1
         if remaining[burst] == 0 and found[burst]:
             picks = shortlist({i: v[1] for i, v in found[burst].items()}, args.keep_mode)
@@ -718,7 +739,7 @@ def emit_saliency_points(manifest, args, cache):
         if hit:
             if hit.get("note"):
                 log(f"{row[0]} ({os.path.basename(row[1])}): {hit['note']} (cached)")
-            record(row[0], hit["prompt"], hit["heuristic"], hit["exposure"])
+            record(row[0], hit["prompt"], hit["heuristic"], hit["exposure"], hit["subject"])
         else:
             to_decode.append(row)
     log(f"finding subjects: {total} frames in {len(remaining)} bursts, {total - len(to_decode)} from cache, "
@@ -736,7 +757,7 @@ def emit_saliency_points(manifest, args, cache):
                 executor.shutdown(wait=False, cancel_futures=True)
                 sys.exit(130)
             image_id = future_to_id[future]
-            filepath, prompt, heuristic, exposure, err, note = future.result()
+            filepath, prompt, heuristic, exposure, err, subject, note = future.result()
             if err:
                 log(f"skip saliency {image_id} ({filepath}): {err}")
                 prompt = None
@@ -744,14 +765,16 @@ def emit_saliency_points(manifest, args, cache):
                 if note:
                     log(f"{image_id} ({os.path.basename(filepath)}): {note}")
                 cache.put({"prompt": [float(v) for v in prompt], "heuristic": float(heuristic), "exposure": exposure,
-                           "note": note}, *stage_a_key(filepath))
-            record(image_id, prompt, heuristic, exposure)
+                           "subject": subject, "note": note}, *stage_a_key(filepath))
+            record(image_id, prompt, heuristic, exposure, subject)
     log("finding subjects: done")
 
 
 def process_burst_logic(burst_id, burst_sharpness, burst_flags, burst_size, args, results_path,
-                        eligible=None) -> list:
-    """Appends the burst's result rows and returns its keepers, best first."""
+                        eligible=None, diag_tags=None) -> list:
+    """Appends the burst's result rows and returns its keepers, best first.
+    diag_tags maps an id to its diagnostic tags (under "Assisted Culling|"),
+    written ";"-joined in the 7th column."""
     if not burst_sharpness:
         return []
 
@@ -812,6 +835,7 @@ def process_burst_logic(burst_id, burst_sharpness, burst_flags, burst_size, args
             burst_id,
             int(is_keeper),
             stars,
+            ";".join((diag_tags or {}).get(img_id, [])),
         ])
 
     with open(results_path, "a", newline="", encoding="utf-8") as f:
@@ -895,18 +919,22 @@ def score_manifest(manifest, args, cache):
         completed_bursts += 1
         raw = burst_sharpness[burst_id]
         scores, eligible = resolve_burst_scores(raw, candidates_of.get(burst_id))
-        keepers = process_burst_logic(burst_id, scores, burst_flags[burst_id], len(burst_groups[burst_id]),
-                                      args, args.results, eligible)
+        burst_tags = []
         note = f"burst {burst_id}: {len(raw)} of {len(burst_groups[burst_id])} frames scored, mode {mode_of[burst_id]}"
         if mode_of[burst_id] != args.sharp_mode:
+            burst_tags.append(technique_tag(mode_of[burst_id]))
             med = [float(np.median(known)) if (known := [v for v in vals if v > 0]) else 0.0
                    for vals in exif_of[burst_id]]
             note += f" from EXIF (median {med[0]:.4g} s, f/{med[1]:.3g}; 0 = unknown)"
         if sam:
             short = [k for k, v in raw.items() if isinstance(v, tuple) and k in candidates_of.get(burst_id, raw)]
             masked = sum(raw[k][0] is not None for k in short)
-            note += f", masked {masked} of {len(short)} shortlisted" + ("" if short and masked == len(short)
-                                                                       else ", so subject bias")
+            used_masks = bool(short) and masked == len(short)
+            burst_tags.append("Scored|Masked" if used_masks else "Scored|Subject bias")
+            note += f", masked {masked} of {len(short)} shortlisted" + ("" if used_masks else ", so subject bias")
+        diag = {i: ([prescored[i][3]] if i in prescored and prescored[i][3] else []) + burst_tags for i in raw}
+        keepers = process_burst_logic(burst_id, scores, burst_flags[burst_id], len(burst_groups[burst_id]),
+                                      args, args.results, eligible, diag)
         log(f"{note}, keepers {', '.join(keepers) or 'none'}")
         del burst_sharpness[burst_id]
         del burst_flags[burst_id]
@@ -938,7 +966,7 @@ def score_manifest(manifest, args, cache):
             for image_id, filepath, mask_path, shortlisted, edited in items:
                 known = None
                 if sam and not mask_path and image_id in prescored:
-                    fallback, exp, prompt = prescored[image_id]
+                    fallback, exp, prompt, _ = prescored[image_id]
                     hit = cache.get(*masked_key(filepath, args, prompt, edited)) if shortlisted == "1" else None
                     known = ((hit["masked"] if hit else None, fallback), frame_flags(exp))
                 elif not sam:

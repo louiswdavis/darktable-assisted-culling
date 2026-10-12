@@ -89,6 +89,37 @@ function M.parse_prompt(parts)
     return { x0 = x0, y0 = y0, x1 = x1, y1 = y1 }
 end
 
+-- Diagnostic tags the scorer lists in results column 7, relative to
+-- "Assisted Culling|". Synced by prefix, so a new kind (Subject|Animal|…)
+-- needs no change here.
+M.DIAG_PREFIXES = { "Assisted Culling|Subject|", "Assisted Culling|Technique|", "Assisted Culling|Scored|" }
+
+function M.is_diag_tag(name)
+    for _, p in ipairs(M.DIAG_PREFIXES) do
+        if name:sub(1, #p) == p then return true end
+    end
+    return false
+end
+
+-- have: an image's tag names (name → true); wanted: the scorer's ";"-joined
+-- column 7. Returns the full names to attach and to detach, sorted.
+function M.diag_tag_changes(have, wanted)
+    local want, attach, detach = {}, {}, {}
+    for rel in wanted:gmatch("[^;]+") do
+        local name = "Assisted Culling|" .. rel
+        if M.is_diag_tag(name) then
+            want[name] = true
+            if not have[name] then attach[#attach + 1] = name end
+        end
+    end
+    for name in pairs(have) do
+        if not want[name] and M.is_diag_tag(name) then detach[#detach + 1] = name end
+    end
+    table.sort(attach)
+    table.sort(detach)
+    return attach, detach
+end
+
 local ok, dt = pcall(require, "darktable")
 if not ok then return M end
 
@@ -167,6 +198,10 @@ if dt.gui then
         "Assisted Culling: burst gap (seconds)",
         "photos taken closer together than this are grouped into one burst",
         2, 1, 60)
+    dt.preferences.register("assisted_culling", "diagnostic_tags", "bool",
+        "Assisted Culling: diagnostic tags",
+        "tag how each frame was judged (Assisted Culling|Subject, |Technique, |Scored) for filtering and spot-checks; off removes them on the next run",
+        true)
 end
 
 -- The panel's last combobox choices live in darktablerc but stay out of the
@@ -814,7 +849,10 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         -- batches, since each img.rating write reloads the whole collection.
         local rating_batch = nil
 
-        local function apply_to_image(img, want_rating, is_keeper, flags)
+        local diag_on = not dt.gui or dt.preferences.read("assisted_culling", "diagnostic_tags", "bool")
+        local diag_tag_objs = {}
+
+        local function apply_to_image(img, want_rating, is_keeper, flags, diag)
             ensure_tags()
             local writes = 0
             local have = tags_of(img)
@@ -837,12 +875,20 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             if have[TAG_CULLED] then -- marker from older versions; Keeper/Rejected already say "processed"
                 tags.detach(tags.find(TAG_CULLED), img); writes = writes + 1
             end
+            local attach, detach = M.diag_tag_changes(have, diag)
+            for _, name in ipairs(attach) do
+                diag_tag_objs[name] = diag_tag_objs[name] or tags.create(name)
+                tags.attach(diag_tag_objs[name], img); writes = writes + 1
+            end
+            for _, name in ipairs(detach) do
+                tags.detach(tags.find(name), img); writes = writes + 1
+            end
             return writes
         end
 
         -- Returns the number of DB-touching writes performed.
         local function apply_line(line)
-            local parts = M.parse_csv_line(line, 6)
+            local parts = M.parse_csv_line(line, 7)
             if not parts then return 0 end
             for k, val in ipairs(parts) do
                 parts[k] = val:match("^%s*(.-)%s*$")
@@ -862,7 +908,8 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
 
             local writes = 0
             for _, img in ipairs(group) do
-                local ok_apply, res = pcall(apply_to_image, img, want_rating, is_keeper, flags)
+                local ok_apply, res = pcall(apply_to_image, img, want_rating, is_keeper, flags,
+                    diag_on and parts[7] or "")
                 if ok_apply then
                     applied_total = applied_total + 1
                     writes = writes + res
@@ -1151,12 +1198,15 @@ function M.clear_marks(images)
         dt.print(_("Assisted Culling: select some images first"))
         return
     end
-    local found = {}
+    local found, any_diag = {}, false
     for _, name in ipairs(ALL_TAGS) do
         local t = tags.find(name)
         if t then table.insert(found, { tag = t, name = name }) end
     end
-    if #found == 0 then
+    for i = 1, #tags do
+        if M.is_diag_tag(tags[i].name) then any_diag = true; break end
+    end
+    if #found == 0 and not any_diag then
         dt.print("Assisted Culling: nothing to clear, no culling tags exist.")
         return
     end
@@ -1174,6 +1224,10 @@ function M.clear_marks(images)
                     local writes = 0
                     for _, ft in ipairs(found) do
                         if have[ft.name] then tags.detach(ft.tag, img); writes = writes + 1 end
+                    end
+                    local _, detach = M.diag_tag_changes(have, "")
+                    for _, name in ipairs(detach) do
+                        tags.detach(tags.find(name), img); writes = writes + 1
                     end
                     return writes
                 end)
