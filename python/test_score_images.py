@@ -36,9 +36,11 @@ check("saliency: flat frame falls back to frame centre", S.saliency_point(flat),
 
 # parse_manifest_row -----------------------------------------------------
 check("manifest: 4-column row keeps mask path",
-      S.parse_manifest_row(["1", "/a.jpg", "3", "/m.png"]), ("1", "/a.jpg", "3", "/m.png"))
+      S.parse_manifest_row(["1", "/a.jpg", "3", "/m.png"]), ("1", "/a.jpg", "3", "/m.png", ""))
+check("manifest: 5-column row keeps shortlist flag",
+      S.parse_manifest_row(["1", "/a.jpg", "3", "", "0"]), ("1", "/a.jpg", "3", "", "0"))
 check("manifest: 3-column row gets empty mask path",
-      S.parse_manifest_row(["1", "/a.jpg", "3"]), ("1", "/a.jpg", "3", ""))
+      S.parse_manifest_row(["1", "/a.jpg", "3"]), ("1", "/a.jpg", "3", "", ""))
 
 # mask-aware sharpness ---------------------------------------------------
 tmp = tempfile.mkdtemp()
@@ -62,6 +64,58 @@ check("sam: all-zero mask falls back",
       S.sharpness_score(scene, "sam_subject", mask_path=empty_path), fallback)
 check("sam: unmasked fallback matches subject_focus",
       fallback, S.sharpness_score(scene, "subject_focus"))
+
+# orientation and mask/image agreement ------------------------------------
+from PIL import Image
+
+tall = np.zeros((60, 120, 3), np.uint8)  # stored landscape
+rot_path = os.path.join(tmp, "rotated.jpg")
+exif = Image.Exif()
+exif[0x0112] = 6  # camera held vertically: display rotated 90° CW
+Image.fromarray(tall).save(rot_path, exif=exif)
+check("load_image honours EXIF orientation", S.load_image(rot_path).shape[:2], (120, 60))
+
+wide_mask = os.path.join(tmp, "wide.png")
+m = np.zeros((60, 120), np.uint8)
+m[:, :60] = 255
+cv2.imwrite(wide_mask, m)
+check("sam: mask with a different aspect ratio falls back",
+      S.sharpness_score(scene, "sam_subject", mask_path=wide_mask), fallback)
+
+# resolve_burst_scores -----------------------------------------------------
+check("burst: all masked → masked scores, all eligible",
+      S.resolve_burst_scores({"a": (5.0, 1.0), "b": (7.0, 2.0)}), ({"a": 5.0, "b": 7.0}, {"a", "b"}))
+check("burst: any unmasked → everyone uses fallback",
+      S.resolve_burst_scores({"a": (5.0, 1.0), "b": (None, 2.0)}), ({"a": 1.0, "b": 2.0}, {"a", "b"}))
+check("burst: plain floats pass through",
+      S.resolve_burst_scores({"a": 3.0}), ({"a": 3.0}, {"a"}))
+check("burst: masked shortlist → only the shortlist can keep",
+      S.resolve_burst_scores({"a": (5.0, 1.0), "b": (None, 2.0)}, candidates={"a"}),
+      ({"a": 5.0, "b": 2.0}, {"a"}))
+check("burst: a shortlisted frame without a mask → whole burst falls back",
+      S.resolve_burst_scores({"a": (None, 1.0), "b": (None, 2.0), "c": (6.0, 3.0)}, candidates={"a", "c"}),
+      ({"a": 1.0, "b": 2.0, "c": 3.0}, {"a", "b", "c"}))
+
+# keepers_allowed / shortlist ----------------------------------------------
+check("allowed: single best", S.keepers_allowed("single_best", 40), 1)
+check("allowed: dynamic, long burst", S.keepers_allowed("dynamic_burst", 40), 5)
+check("allowed: keep all", S.keepers_allowed("keep_all", 7), 7)
+check("shortlist: top 3 by heuristic score",
+      S.shortlist({"a": 1.0, "b": 5.0, "c": 3.0, "d": 4.0, "e": 2.0}, "single_best"), {"b", "d", "c"})
+check("shortlist: grows to the keeper count",
+      len(S.shortlist({str(i): float(i) for i in range(30)}, "dynamic_burst")), 5)
+check("shortlist: small burst keeps everyone",
+      S.shortlist({"a": 1.0, "b": 2.0}, "single_best"), {"a", "b"})
+
+# process_burst_logic respects eligibility ----------------------------------
+from argparse import Namespace
+res_path = os.path.join(tmp, "res.csv")
+open(res_path, "w").close()
+S.process_burst_logic("1", {"a": 9.0, "b": 1.0}, {"a": "ok", "b": "ok"}, 2,
+                      Namespace(keep_mode="single_best", rank_mode="universal", nk_mode="leave"),
+                      res_path, eligible={"b"})
+keeper_rows = [line.split(",")[0] for line in open(res_path) if line.split(",")[4] == "1"]
+check("burst logic: ineligible frame can't keep even when it scores higher", keeper_rows, ["b"])
 
 
 print("")
