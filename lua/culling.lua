@@ -223,15 +223,21 @@ local function shell_quote(s)
     return "'" .. s:gsub("'", "'\\''") .. "'"
 end
 
+-- The exit code goes to a temp file renamed onto done_path, so done_path
+-- never exists without its code in it.
 local function run_async_command(cmd, done_path)
+    local done_tmp = done_path .. ".tmp"
     if IS_WINDOWS then
         local bat = TMP_DIR .. "/dt_assisted_culling_run.bat"
         local vbs = TMP_DIR .. "/dt_assisted_culling_run.vbs"
         local f = io.open(bat, "w")
         if not f then return end
+        local win_done, win_tmp = done_path:gsub("/", "\\"), done_tmp:gsub("/", "\\")
         f:write("@echo off\r\nchcp 65001>nul\r\n")
         f:write(cmd, " < NUL\r\n")
-        f:write("echo %ERRORLEVEL%> \"", done_path:gsub("/", "\\"), "\"\r\n")
+        -- redirect first: "echo 0> f" would redirect handle 0 and leave f empty
+        f:write('> "', win_tmp, '" echo %ERRORLEVEL%\r\n')
+        f:write('move /y "', win_tmp, '" "', win_done, '" >nul\r\n')
         f:close()
         local f_vbs = io.open(vbs, "w")
         if not f_vbs then return end
@@ -240,7 +246,8 @@ local function run_async_command(cmd, done_path)
         f_vbs:close()
         os.execute('wscript.exe "' .. vbs:gsub("/", "\\") .. '"')
     else
-        os.execute('( ' .. cmd .. ' ; echo $? > ' .. shell_quote(done_path) .. ' ) >/dev/null 2>&1 &')
+        os.execute('( ' .. cmd .. ' ; echo $? > ' .. shell_quote(done_tmp)
+            .. ' ; mv -f ' .. shell_quote(done_tmp) .. ' ' .. shell_quote(done_path) .. ' ) >/dev/null 2>&1 &')
     end
 end
 
@@ -943,7 +950,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             else
                 dt.print(_("Assisted Culling cancelled. No images were changed."))
             end
-        elseif done_code ~= 0 and done_code ~= nil then
+        elseif done_code ~= 0 then
             local tail = read_log_tail()
             if #tail > 300 then tail = tail:sub(#tail - 299) end
             if tail ~= "" then
