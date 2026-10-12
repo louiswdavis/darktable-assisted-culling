@@ -21,7 +21,7 @@
 --     has  lua/luarc/darktable_first_run_complete=TRUE  (a normal GUI start
 --     writes it; set it by hand if darktable's GUI has never come up).
 --
--- Writes one TSV row per image with the rating / labels / group leader
+-- Writes one TSV row per image with the rating and Assisted Culling tags
 -- darktable now holds, which is the plugin's whole observable output.
 
 local dt = require "darktable"
@@ -63,11 +63,16 @@ local ok, err = pcall(function()
     culling.score_images(images)
 
     local f = assert(io.open(REPORT, "w"))
-    f:write("id\tfilename\ttaken\trating\tred\tyellow\tgroup_leader\n")
+    f:write("id\tfilename\ttaken\trating\ttags\n")
     for _, img in ipairs(images) do
+        local marks = {}
+        for _, t in ipairs(dt.tags.get_tags(img)) do
+            local leaf = t.name:match("^Assisted Culling|(.+)$")
+            if leaf then marks[#marks + 1] = leaf end
+        end
+        table.sort(marks)
         f:write(table.concat({ img.id, img.filename, tostring(img.exif_datetime_taken),
-            tostring(img.rating), tostring(img.red), tostring(img.yellow),
-            tostring(img.group_leader and img.group_leader.id) }, "\t"), "\n")
+            tostring(img.rating), table.concat(marks, ",") }, "\t"), "\n")
     end
     f:close()
     log("wrote " .. REPORT)
