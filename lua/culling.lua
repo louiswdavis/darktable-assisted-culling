@@ -211,10 +211,21 @@ end
 
 -- The panel's last combobox choices live in darktablerc but stay out of the
 -- preferences dialog (unregistered), so an unset one reads as 0.
+-- Also stores the result, so a combo's startup changed_callback (see store_choice) sees no change.
 local function read_choice(name, default, count)
     local v = dt.preferences.read("assisted_culling", name, "integer")
-    if v < 1 or v > count then return default end
+    if v < 1 or v > count then v = default end
+    dt.preferences.write("assisted_culling", name, "integer", v)
     return v
+end
+
+-- Combobox changed_callbacks run asynchronously, after any guard flag is reset, and
+-- every `selected` assignment fires one, even an unchanged one. A callback acts
+-- only when this reports a real change from the stored value.
+local function store_choice(name, value)
+    if dt.preferences.read("assisted_culling", name, "integer") == value then return false end
+    dt.preferences.write("assisted_culling", name, "integer", value)
+    return true
 end
 
 local function file_exists(name)
@@ -1347,8 +1358,8 @@ local function install_panel()
         if is_updating then return end
         is_updating = true
         if genre_combo then
-            genre_combo.selected = 5
             dt.preferences.write("assisted_culling", "last_genre", "integer", 5)
+            genre_combo.selected = 5
         end
         is_updating = false
     end
@@ -1359,21 +1370,20 @@ local function install_panel()
         _("landscape"), _("portrait"), _("sport"), _("macro"), _("custom"),
         selected = read_choice("last_genre", 1, 5),
         changed_callback = function(widget)
-            if is_updating then return end
+            if is_updating or not store_choice("last_genre", widget.selected) then return end
             is_updating = true
-            dt.preferences.write("assisted_culling", "last_genre", "integer", widget.selected)
-            
+
             local conf = preset_configs[widget.selected]
             if conf then
-                if rank_combo then rank_combo.selected = conf[1] end
-                if sharp_combo then sharp_combo.selected = conf[2] end
-                if exp_combo then exp_combo.selected = conf[3] end
-                if keep_combo then keep_combo.selected = conf[4] end
-                
                 dt.preferences.write("assisted_culling", "last_rank_mode", "integer", conf[1])
                 dt.preferences.write("assisted_culling", "last_sharp_mode", "integer", conf[2])
                 dt.preferences.write("assisted_culling", "last_exp_mode", "integer", conf[3])
                 dt.preferences.write("assisted_culling", "last_keep_mode", "integer", conf[4])
+
+                if rank_combo then rank_combo.selected = conf[1] end
+                if sharp_combo then sharp_combo.selected = conf[2] end
+                if exp_combo then exp_combo.selected = conf[3] end
+                if keep_combo then keep_combo.selected = conf[4] end
             end
             
             is_updating = false
@@ -1386,8 +1396,7 @@ local function install_panel()
         _("universal absolute"), _("binary (keepers top)"), _("relative to selection"),
         selected = read_choice("last_rank_mode", preset_configs[1][1], 3),
         changed_callback = function(widget)
-            if is_updating then return end
-            dt.preferences.write("assisted_culling", "last_rank_mode", "integer", widget.selected)
+            if is_updating or not store_choice("last_rank_mode", widget.selected) then return end
             trigger_custom_override()
         end
     }
@@ -1398,8 +1407,7 @@ local function install_panel()
         _("center crop"), _("edge-to-edge uniformity"), _("absolute peak 1%"), _("face & eyes (OpenCV)"), _("subject bias (center-weighted)"), _("subject tracking (SAM)"),
         selected = read_choice("last_sharp_mode", preset_configs[1][2], 6),
         changed_callback = function(widget)
-            if is_updating then return end
-            dt.preferences.write("assisted_culling", "last_sharp_mode", "integer", widget.selected)
+            if is_updating or not store_choice("last_sharp_mode", widget.selected) then return end
             trigger_custom_override()
         end
     }
@@ -1410,8 +1418,7 @@ local function install_panel()
         _("whole frame"), _("subject only (ignore sky)"), _("strict histogram"), _("ignore exposure"),
         selected = read_choice("last_exp_mode", preset_configs[1][3], 4),
         changed_callback = function(widget)
-            if is_updating then return end
-            dt.preferences.write("assisted_culling", "last_exp_mode", "integer", widget.selected)
+            if is_updating or not store_choice("last_exp_mode", widget.selected) then return end
             trigger_custom_override()
         end
     }
@@ -1422,8 +1429,7 @@ local function install_panel()
         _("single best only"), _("portrait (1 or 2)"), _("dynamic (1 to 5)"), _("keep all (focus stack)"),
         selected = read_choice("last_keep_mode", preset_configs[1][4], 4),
         changed_callback = function(widget)
-            if is_updating then return end
-            dt.preferences.write("assisted_culling", "last_keep_mode", "integer", widget.selected)
+            if is_updating or not store_choice("last_keep_mode", widget.selected) then return end
             trigger_custom_override()
         end
     }
@@ -1434,8 +1440,7 @@ local function install_panel()
         _("leave alone"), _("reject (-1)"), _("0 stars"), _("1 star"), _("2 stars"), _("3 stars"), _("4 stars"), _("5 stars"),
         selected = read_choice("last_nk_mode", 1, 8),
         changed_callback = function(widget)
-            if is_updating then return end
-            dt.preferences.write("assisted_culling", "last_nk_mode", "integer", widget.selected)
+            if is_updating or not store_choice("last_nk_mode", widget.selected) then return end
             trigger_custom_override()
         end
     }
@@ -1471,19 +1476,19 @@ local function install_panel()
             if is_updating then return end
             is_updating = true
             local conf = preset_configs[1]
-            genre_combo.selected = 1
-            rank_combo.selected = conf[1]
-            sharp_combo.selected = conf[2]
-            exp_combo.selected = conf[3]
-            keep_combo.selected = conf[4]
-            non_keeper_combo.selected = 1
-
             dt.preferences.write("assisted_culling", "last_genre", "integer", 1)
             dt.preferences.write("assisted_culling", "last_rank_mode", "integer", conf[1])
             dt.preferences.write("assisted_culling", "last_sharp_mode", "integer", conf[2])
             dt.preferences.write("assisted_culling", "last_exp_mode", "integer", conf[3])
             dt.preferences.write("assisted_culling", "last_keep_mode", "integer", conf[4])
             dt.preferences.write("assisted_culling", "last_nk_mode", "integer", 1)
+
+            genre_combo.selected = 1
+            rank_combo.selected = conf[1]
+            sharp_combo.selected = conf[2]
+            exp_combo.selected = conf[3]
+            keep_combo.selected = conf[4]
+            non_keeper_combo.selected = 1
             is_updating = false
         end,
         genre_combo,
