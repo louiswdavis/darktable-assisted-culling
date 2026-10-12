@@ -720,18 +720,18 @@ function M.clear_marks(images)
 end
 
 local rank_opts = {"universal", "relative"}
-local sharp_opts = {"subject_focus", "face_detect", "tiles_uniformity", "peak", "center"}
+local sharp_opts = {"center", "tiles_uniformity", "peak", "face_detect", "subject_focus"}
 local exp_opts = {"whole_frame", "subject_only", "strict", "none"}
-local keep_opts = {"dynamic_burst", "portrait_mode", "single_best", "keep_all"}
+local keep_opts = {"single_best", "portrait_mode", "dynamic_burst", "keep_all"}
 local nk_opts = {"leave", "reject", "0", "1", "2", "3", "4", "5"}
 
 local genre_combo, rank_combo, sharp_combo, exp_combo, keep_combo, non_keeper_combo
 
 local function execute_current_config(images)
     local r_val = rank_opts[rank_combo and rank_combo.selected or 1] or "universal"
-    local s_val = sharp_opts[sharp_combo and sharp_combo.selected or 1] or "subject_focus"
+    local s_val = sharp_opts[sharp_combo and sharp_combo.selected or 1] or "center"
     local e_val = exp_opts[exp_combo and exp_combo.selected or 1] or "whole_frame"
-    local k_val = keep_opts[keep_combo and keep_combo.selected or 1] or "dynamic_burst"
+    local k_val = keep_opts[keep_combo and keep_combo.selected or 1] or "single_best"
     local nk_val = nk_opts[non_keeper_combo and non_keeper_combo.selected or 1] or "leave"
     
     M.score_images(images, r_val, s_val, e_val, k_val, nk_val)
@@ -825,7 +825,7 @@ local function install_panel()
     sharp_combo = dt.new_widget("combobox") {
         label = _("sharpness"),
         tooltip = _("How sharpness is measured."),
-        _("center crop"), _("edge-to-edge uniformity"), _("absolute peak 1%"), _("face & eyes (OpenCV)"), _("subject tracking (AI)"),
+        _("center crop"), _("edge-to-edge uniformity"), _("absolute peak 1%"), _("face & eyes (OpenCV)"), _("subject bias (center-weighted)"),
         selected = dt.preferences.read("assisted_culling", "last_sharp_mode", "integer") or 1, 
         changed_callback = function(widget)
             if is_updating then return end
