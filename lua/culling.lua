@@ -134,7 +134,7 @@ if dt.gui then
         2, 1, 60)
     dt.preferences.register("assisted_culling", "last_genre", "integer", "Last Genre", "", 1, 1, 5)
     dt.preferences.register("assisted_culling", "last_rank_mode", "integer", "Last Rank Mode", "", 1, 1, 2)
-    dt.preferences.register("assisted_culling", "last_sharp_mode", "integer", "Last Sharpness Mode", "", 1, 1, 5)
+    dt.preferences.register("assisted_culling", "last_sharp_mode", "integer", "Last Sharpness Mode", "", 1, 1, 6)
     dt.preferences.register("assisted_culling", "last_exp_mode", "integer", "Last Exposure Mode", "", 1, 1, 4)
     dt.preferences.register("assisted_culling", "last_keep_mode", "integer", "Last Keeper Mode", "", 1, 1, 4)
     dt.preferences.register("assisted_culling", "last_nk_mode", "integer", "Last Non-Keeper Mode", "", 1, 1, 8)
@@ -924,7 +924,7 @@ function M.clear_marks(images)
 end
 
 local rank_opts = {"universal", "relative"}
-local sharp_opts = {"center", "tiles_uniformity", "peak", "face_detect", "subject_focus"}
+local sharp_opts = {"center", "tiles_uniformity", "peak", "face_detect", "subject_focus", "sam_subject"}
 local exp_opts = {"whole_frame", "subject_only", "strict", "none"}
 local keep_opts = {"single_best", "portrait_mode", "dynamic_burst", "keep_all"}
 local nk_opts = {"leave", "reject", "0", "1", "2", "3", "4", "5"}
@@ -1028,8 +1028,8 @@ local function install_panel()
 
     sharp_combo = dt.new_widget("combobox") {
         label = _("sharpness"),
-        tooltip = _("How sharpness is measured. Face & eyes falls back to edge-to-edge uniformity when no face is found, so it adds nothing over that mode for bursts with no people in them."),
-        _("center crop"), _("edge-to-edge uniformity"), _("absolute peak 1%"), _("face & eyes (OpenCV)"), _("subject bias (center-weighted)"),
+        tooltip = _("How sharpness is measured. Face & eyes falls back to edge-to-edge uniformity when no face is found, so it adds nothing over that mode for bursts with no people in them. Subject tracking (SAM) segments the subject with darktable's AI mask model before scoring; it's much slower than the rest (every image is decoded twice and run through the model), so use it on smaller batches or a final pass."),
+        _("center crop"), _("edge-to-edge uniformity"), _("absolute peak 1%"), _("face & eyes (OpenCV)"), _("subject bias (center-weighted)"), _("subject tracking (SAM)"),
         selected = dt.preferences.read("assisted_culling", "last_sharp_mode", "integer") or 1, 
         changed_callback = function(widget)
             if is_updating then return end
