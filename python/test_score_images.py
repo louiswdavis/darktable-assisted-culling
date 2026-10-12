@@ -184,18 +184,25 @@ def run_tests():
     check("frame_flags: exposure ok and eyes open is no flags", S.frame_flags("ok"), ())
     check("frame_flags: both problems", S.frame_flags("overexposed", True), ("overexposed", "eyes_closed"))
 
-    def keeper_row(flags, rank_mode):
+    def keeper_row(flags, rank_mode, sharp=5000.0, reference=None):
         open(res_path, "w").close()
-        S.process_burst_logic("1", {"a": 5000.0}, {"a": flags}, 1,
+        S.process_burst_logic("1", {"a": sharp}, {"a": flags}, 1,
                               Namespace(keep_mode="single_best", rank_mode=rank_mode, nk_mode="leave"),
-                              res_path)
+                              res_path, reference=reference)
         row = open(res_path).read().strip().split(",")
         return row[2], int(row[5])
 
-    for mode in ("universal", "relative"):
+    for mode in ("universal", "binary"):
         check(f"flags ({mode}): clean keeper gets 5 stars", keeper_row((), mode), ("", 5))
         check(f"flags ({mode}): eyes closed is one star lower", keeper_row(("eyes_closed",), mode),
               ("eyes_closed", 4))
+    check("relative: a keeper at the reference gets 5 stars", keeper_row((), "relative", 400.0, 400.0), ("", 5))
+    check("relative: 80% of the reference is 3 stars", keeper_row((), "relative", 320.0, 400.0), ("", 3))
+    check("relative: eyes closed is one star lower", keeper_row(("eyes_closed",), "relative", 400.0, 400.0),
+          ("eyes_closed", 4))
+    check("relative: no reference is 0 stars", keeper_row((), "relative", 400.0), ("", 0))
+    check("relative reference: one freak frame doesn't set the scale",
+          S.relative_references({"g": [100.0] * 19 + [10000.0]})["g"] < 1000, True)
     check("flags (universal): exposure and eyes closed stack",
           keeper_row(("underexposed", "eyes_closed"), "universal"), ("underexposed;eyes_closed", 3))
 
