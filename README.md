@@ -57,7 +57,8 @@ far more reliable.
 - darktable 5.4 or newer, built with Lua (the official builds are);
   the *subject tracking (SAM)* sharpness mode additionally needs 5.6+ with
   an AI mask model downloaded
-- Python 3.10+ with `opencv-python-headless`, `numpy`, `Pillow`, `rawpy`
+- Python 3.10+ with `opencv-python-headless` (4.x; `requirements.txt` pins
+  `<5`), `numpy`, `Pillow`, `rawpy`
 
 `rawpy` needs `libraw`; the Windows and macOS wheels bundle it. On Linux
 install `libraw-dev` first, or skip `rawpy` if you only shoot JPEG — it's
@@ -152,15 +153,23 @@ the labels off.
   everything else none, scored against the rest of its own burst.
 - **sharpness** — how each frame's focus is measured:
   - *center crop* — Laplacian variance over the middle 50% of the frame.
-  - *edge-to-edge uniformity* — a 3×3 patch grid scored with equal weight,
-    for subjects that should be sharp corner to corner (landscapes, macro).
+  - *edge-to-edge uniformity* — splits the frame into a 3×3 grid and
+    scores the weakest third of it, so one soft corner (camera shake,
+    tilted focus, a soft lens edge) costs the frame. Plain areas like clear
+    sky are left out, judged on their large-scale tones, which blur
+    doesn't change. For frames that should be sharp corner to corner
+    (landscapes, architecture). Because it scores the weakest areas, its
+    numbers run lower than the other modes', so expect fewer stars from
+    *universal* ranking; *relative* ranking isn't affected.
   - *absolute peak 1%* — the sharpest 1% of edges in the whole frame.
   - *face & eyes (OpenCV)* — detects the largest face via OpenCV's Haar
     cascades and scores sharpness over the eyes if found, the whole face
-    box otherwise; falls back to *edge-to-edge uniformity* when no face is
-    detected.
-  - *subject bias (center-weighted)* — the same 3×3 grid as above, but the
-    center patches count more, on the assumption the subject is mid-frame.
+    box otherwise; falls back to *subject bias* when no face is detected.
+    Needs OpenCV 4.x: OpenCV 5 removed the Haar detector, and the scorer
+    stops with an install hint if it finds 5.
+  - *subject bias (center-weighted)* — a 3×3 grid scored on its sharpest
+    patch, with the center patches counting more, on the assumption the
+    subject is mid-frame.
     This is a classical heuristic, not AI — see **Limitations and ideas**.
   - *subject tracking (SAM)* — finds the frame's most distinctive region
     (edge detail plus colour contrast; a bright car livery against grey

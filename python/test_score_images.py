@@ -156,6 +156,30 @@ def run_tests():
     check("stage C: keeper comes from the shortlist",
           [r[0] for r in res_rows if r[4] == "1"][0] in shortlisted_ids, True)
 
+    # edge-to-edge uniformity rewards the weakest areas, ignoring featureless sky --
+    # a "landscape": large tonal shapes plus fine texture, like rock or foliage
+    shapes = cv2.resize(rng.integers(40, 215, (6, 6, 3), dtype=np.uint8), (300, 300),
+                        interpolation=cv2.INTER_CUBIC).astype(np.int16)
+    grain = rng.integers(-40, 40, (300, 300, 3), dtype=np.int16)
+    detail = np.clip(shapes + grain, 0, 255).astype(np.uint8)
+    even = cv2.GaussianBlur(detail, (3, 3), 0)          # moderately sharp everywhere
+    one_spot = cv2.GaussianBlur(detail, (15, 15), 0)     # soft everywhere...
+    one_spot[100:200, 100:200] = detail[100:200, 100:200]  # ...except one crisp patch
+    check("uniformity: evenly sharp frame beats one sharp patch",
+          S.sharpness_score(even, "tiles_uniformity") > S.sharpness_score(one_spot, "tiles_uniformity"), True)
+
+    sky_sharp = even.copy()
+    sky_sharp[:100] = 200                                # flat sky across the top third
+    sky_soft = cv2.GaussianBlur(detail, (9, 9), 0)
+    sky_soft[:100] = 200
+    sharp_score = S.sharpness_score(sky_sharp, "tiles_uniformity")
+    # if the flat sky patches counted, both scores would collapse to ~0
+    check("uniformity: flat sky doesn't flatten every score",
+          sharp_score > 2 * S.sharpness_score(sky_soft, "tiles_uniformity"), True)
+
+    check("face mode without a face falls back to subject bias",
+          S.sharpness_score(one_spot, "face_detect"), S.sharpness_score(one_spot, "subject_focus"))
+
 
     print("")
     if failures == 0:

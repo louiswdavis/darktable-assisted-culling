@@ -1064,7 +1064,7 @@ local function install_panel()
 
     sharp_combo = dt.new_widget("combobox") {
         label = _("sharpness"),
-        tooltip = _("How sharpness is measured. Face & eyes falls back to edge-to-edge uniformity when no face is found, so it adds nothing over that mode for bursts with no people in them. Subject tracking (SAM) segments the subject with darktable's AI mask model before scoring; it's slower than the rest, since each burst's top few frames go through the model."),
+        tooltip = _("How sharpness is measured. Edge-to-edge scores the softest areas of the frame (ignoring plain sky), so a soft corner costs a frame. Face & eyes falls back to subject bias when no face is found. Subject tracking (SAM) segments the subject with darktable's AI mask model before scoring; it's slower than the rest, since each burst's top few frames go through the model."),
         _("center crop"), _("edge-to-edge uniformity"), _("absolute peak 1%"), _("face & eyes (OpenCV)"), _("subject bias (center-weighted)"), _("subject tracking (SAM)"),
         selected = dt.preferences.read("assisted_culling", "last_sharp_mode", "integer") or 1, 
         changed_callback = function(widget)

@@ -185,6 +185,35 @@ def _masked_sharpness(denoised: np.ndarray, mask_path: str):
     return float(cv2.Laplacian(denoised, cv2.CV_64F)[inside].var())
 
 
+UNIFORMITY_MIN_CONTRAST = 6.0  # large-scale patch std (0–255) below which it's featureless, e.g. clear sky
+
+
+def _uniformity_score(denoised: np.ndarray) -> float:
+    """Mean Laplacian variance of the weakest third of a 3x3 grid, so a soft
+    corner pulls the score down. Featureless patches are skipped: clear sky
+    looks equally flat sharp or blurred and would otherwise decide every frame.
+    "Featureless" is judged on the patch shrunk to 8x8, i.e. its large-scale
+    tones, which blur leaves intact, so a soft corner is never mistaken for sky."""
+    h, w = denoised.shape
+    h_step, w_step = h // 3, w // 3
+    textured, every = [], []
+    for r in range(3):
+        for c in range(3):
+            patch = denoised[r * h_step:(r + 1) * h_step, c * w_step:(c + 1) * w_step]
+            if patch.size == 0:
+                continue
+            var = float(cv2.Laplacian(patch, cv2.CV_64F).var())
+            every.append(var)
+            coarse = cv2.resize(patch, (8, 8), interpolation=cv2.INTER_AREA)
+            if float(coarse.std()) >= UNIFORMITY_MIN_CONTRAST:
+                textured.append(var)
+    if not textured:
+        return float(np.median(every)) if every else float(cv2.Laplacian(denoised, cv2.CV_64F).var())
+    textured.sort()
+    weakest = textured[:max(1, len(textured) // 3)]
+    return float(np.mean(weakest))
+
+
 def sharpness_score(rgb: np.ndarray, mode: str, mask_path: str = "") -> float:
     gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
     denoised = cv2.bilateralFilter(gray, 5, 50, 50)
@@ -206,17 +235,14 @@ def sharpness_score(rgb: np.ndarray, mode: str, mask_path: str = "") -> float:
         face_score = _face_eye_sharpness(gray, denoised)
         if face_score is not None:
             return face_score
-        # no face in frame: fall through to the frame-wide heuristic below
+        # no face in frame: fall through to the center-weighted heuristic below
+    if mode == "tiles_uniformity":
+        return _uniformity_score(denoised)
 
-    # 3x3 patch grid. subject_focus (and sam_subject without a usable mask)
-    # weights the center patches higher, assuming the subject sits mid-frame;
-    # tiles_uniformity, and face_detect when no face was found, weight every
-    # patch equally.
+    # 3x3 patch grid weighted toward the center, assuming the subject sits
+    # mid-frame (subject_focus, and the fallback for face_detect / sam_subject).
     h_step, w_step = h // 3, w // 3
-    if mode in ("subject_focus", "sam_subject"):
-        patch_weights = [[0.8, 1.0, 0.8], [1.0, 1.2, 1.0], [0.8, 1.0, 0.8]]
-    else:
-        patch_weights = [[1.0, 1.0, 1.0] for _ in range(3)]
+    patch_weights = [[0.8, 1.0, 0.8], [1.0, 1.2, 1.0], [0.8, 1.0, 0.8]]
 
     weighted_vars = []
     patch_vars = []
@@ -523,7 +549,15 @@ def main(args):
                 file=sys.stderr,
             )
             sys.exit(3)
-    
+
+    if args.sharp_mode == "face_detect" and not hasattr(cv2, "CascadeClassifier"):
+        print(
+            f"OpenCV {cv2.__version__} in {sys.executable} has no Haar face detector (removed in OpenCV 5), "
+            f"which the face & eyes mode needs. Install with: \"{sys.executable}\" -m pip install \"opencv-python-headless<5\"",
+            file=sys.stderr,
+        )
+        sys.exit(3)
+
     burst_completion = {b_id: 0 for b_id in burst_groups}
     burst_sharpness = {b_id: {} for b_id in burst_groups}
     burst_exposure = {b_id: {} for b_id in burst_groups}
