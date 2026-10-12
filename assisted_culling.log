@@ -1,0 +1,36 @@
+14:23:22 lua: run started: darktable 5.6.0, 39 images (0 locked left out)
+14:23:22 lua: settings: rank universal, sharpness sam_subject, exposure whole_frame, keepers dynamic_burst, non-keepers leave
+14:23:22 lua: fast JPEG false, apply while scoring false, SAM model mask-object-sam21-small
+14:23:22 lua: Assisted Culling: scoring 39 images in 4 bursts (dynamic burst keepers, universal ranking, 2s burst gap)
+14:23:27 lua: finding subjects: "C:\Users\Louis\Pictures\DarkTable\Settings\Plugins\darktable-assisted-culling\.venv\Scripts\python.exe" -u "C:\Users\Louis\Pictures\DarkTable\Settings\Plugins\darktable-assisted-culling\python\score_images.py" "C:\Users\Louis\AppData\Local\Temp/dt_assisted_culling_manifest.csv" "C:\Users\Louis\AppData\Local\Temp/dt_assisted_culling_points.csv" --emit-saliency-points --detector "C:\Users\Louis\Pictures\DarkTable\Settings\Plugins\darktable-assisted-culling\models\object_detection_yolox_2022nov.onnx" --keep-mode "dynamic_burst" --exp-mode "whole_frame" --prescores "C:\Users\Louis\AppData\Local\Temp/dt_assisted_culling_prescores.csv" --cache "C:\Users\Louis\AppData\Local\darktable/assisted_culling/scores.sqlite" --sam-model "mask-object-sam21-small" --progress "C:\Users\Louis\AppData\Local\Temp/dt_assisted_culling_progress.txt" 2>> "C:\Users\Louis\AppData\Local\darktable/assisted_culling.log"
+14:23:29 py: burst 1: shortlist of 6 frames: 180989 point, 180993 box, 181000 point
+14:23:29 py: burst 2: shortlist of 14 frames: 181041 box, 181045 box, 181049 box, 181053 point
+14:23:29 py: burst 3: shortlist of 8 frames: 181070 point, 181074 box, 181078 box
+14:23:30 py: burst 4: shortlist of 11 frames: 181102 point, 181114 point, 181118 point
+14:23:30 py: finding subjects: 39 frames in 4 bursts, 39 from cache, detector C:\Users\Louis\Pictures\DarkTable\Settings\Plugins\darktable-assisted-culling\models\object_detection_yolox_2022nov.onnx
+14:23:30 py: finding subjects: done
+14:23:30 lua: finding subjects: scorer exit 0
+14:23:30 lua: SAM: 13 shortlisted, 0 already cached, 13 to segment
+14:23:31 lua: SAM 180989 (DSC00174.ARW) point 0.300,0.900: masked
+14:23:33 lua: SAM 180993 (DSC00175.ARW) box 0.210,0.444-0.581,0.573: masked
+14:23:34 lua: SAM 181000 (DSC00177.ARW) point 0.100,0.900: masked
+14:23:35 lua: SAM 181041 (DSC00187.ARW) box 0.301,0.569-0.559,0.685: masked
+14:23:35 lua: SAM 181045 (DSC00188.ARW) box 0.276,0.567-0.569,0.688: masked
+14:23:36 lua: SAM 181049 (DSC00189.ARW) box 0.271,0.562-0.564,0.680: masked
+14:23:37 lua: SAM 181053 (DSC00190.ARW) point 0.900,0.900: masked
+14:23:38 lua: SAM 181070 (DSC00194.ARW) point 0.900,0.100: masked
+14:23:39 lua: SAM 181074 (DSC00195.ARW) box 0.377,0.544-0.710,0.681: masked
+14:23:40 lua: SAM 181078 (DSC00196.ARW) box 0.367,0.552-0.711,0.691: masked
+14:23:41 lua: SAM 181102 (DSC00202.ARW) point 0.300,0.900: masked
+14:23:42 lua: SAM 181114 (DSC00205.ARW) point 0.700,0.900: masked
+14:23:43 lua: SAM 181118 (DSC00206.ARW) point 0.900,0.900: masked
+14:23:44 lua: scoring: "C:\Users\Louis\Pictures\DarkTable\Settings\Plugins\darktable-assisted-culling\.venv\Scripts\python.exe" -u "C:\Users\Louis\Pictures\DarkTable\Settings\Plugins\darktable-assisted-culling\python\score_images.py" "C:\Users\Louis\AppData\Local\Temp/dt_assisted_culling_manifest.csv" "C:\Users\Louis\AppData\Local\Temp/dt_assisted_culling_results.csv" --progress "C:\Users\Louis\AppData\Local\Temp/dt_assisted_culling_progress.txt" --rank-mode "universal" --sharp-mode "sam_subject" --exp-mode "whole_frame" --keep-mode "dynamic_burst" --nk-mode "leave" --tag-only-flags "" --prescores "C:\Users\Louis\AppData\Local\Temp/dt_assisted_culling_prescores.csv" --sam-model "mask-object-sam21-small" --cache "C:\Users\Louis\AppData\Local\darktable/assisted_culling/scores.sqlite" 2>> "C:\Users\Louis\AppData\Local\darktable/assisted_culling.log"
+14:23:46 py: scoring: 39 frames in 4 bursts, 26 from cache or stage A, 13 to decode, sharpness sam_subject
+14:23:47 py: burst 1: 6 of 6 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 180993, 180989
+14:23:47 py: burst 4: 11 of 11 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 181114, 181102, 181118
+14:23:47 py: burst 2: 14 of 14 frames scored, mode sam_subject, masked 4 of 4 shortlisted, keepers 181053, 181045, 181049, 181041
+14:23:47 py: burst 3: 8 of 8 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 181074, 181078
+14:23:47 lua: scoring: scorer exit 0
+14:23:47 lua: Assisted Culling: applying ratings to 39...
+14:23:52 lua: Assisted Culling done: 11 keepers, 28 not kept
+14:23:52 lua: run finished
