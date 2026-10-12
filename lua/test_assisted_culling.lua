@@ -50,7 +50,8 @@ check("burst: clustering is order-independent",
 
 -- csv helpers ------------------------------------------------------------
 local line = C.csv_line({ 42, "/home/user/photo 01.NEF", 7 })
-check("csv_line joins fields", line, "42,/home/user/photo 01.NEF,7")
+check("csv_line quotes and joins fields", line, '"42","/home/user/photo 01.NEF","7"')
+check("csv_line doubles embedded quotes", C.csv_line({ 'a "b", c' }), '"a ""b"", c"')
 
 local parsed = C.parse_csv_line("42,/home/user/photo 01.NEF,7,ok,1,4", 6)
 check("parse_csv_line splits into 6 fields", #parsed, 6)
