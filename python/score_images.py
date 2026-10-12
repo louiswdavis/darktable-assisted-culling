@@ -19,7 +19,7 @@ from pathlib import Path
 try:
     import numpy as np
     import cv2
-    from PIL import Image
+    from PIL import Image, ImageOps
 except ImportError as _e:
     print(
         f"Missing Python package '{_e.name or _e}' in {sys.executable}. "
@@ -50,17 +50,25 @@ EXPOSURE_PENALTY_STARS = 1
 SALIENCY_GRID = 5
 
 
-def _open_rgb(source, fast_jpeg: bool) -> np.ndarray:
+def _open_rgb(source, fast_jpeg: bool) -> tuple:
+    """(rgb array upright per EXIF orientation, whether the file carried a rotation)."""
     img = Image.open(source)
     if fast_jpeg:
         try:
             img.draft("RGB", (MAX_DIM, MAX_DIM))
         except Exception:
             pass
-    return np.array(img.convert("RGB"))
+    rotated = img.getexif().get(0x0112, 1) not in (0, 1)
+    return np.array(ImageOps.exif_transpose(img).convert("RGB")), rotated
+
+
+# LibRaw's sizes.flip codes → the np.rot90 turns (counter-clockwise) that make the image upright
+_RAW_FLIP_TURNS = {3: 2, 5: 1, 6: 3}
 
 
 def load_image(filepath: str, fast_jpeg: bool = False) -> np.ndarray:
+    """Decoded image, downscaled and upright, so it matches the orientation
+    darktable's own pipeline (and therefore the SAM masks) uses."""
     ext = Path(filepath).suffix.lower()
     if ext in RAW_EXTENSIONS:
         import rawpy
@@ -68,15 +76,18 @@ def load_image(filepath: str, fast_jpeg: bool = False) -> np.ndarray:
             try:
                 thumb = raw.extract_thumb()
                 if thumb.format == rawpy.ThumbFormat.JPEG:
-                    rgb = _open_rgb(io.BytesIO(thumb.data), fast_jpeg)
+                    rgb, rotated = _open_rgb(io.BytesIO(thumb.data), fast_jpeg)
                 elif thumb.format == rawpy.ThumbFormat.BITMAP:
-                    rgb = thumb.data
+                    rgb, rotated = thumb.data, False
                 else:
                     raise ValueError("Unsupported thumbnail")
+                # embedded previews are usually stored unrotated; the raw header says how to turn them
+                if not rotated:
+                    rgb = np.ascontiguousarray(np.rot90(rgb, _RAW_FLIP_TURNS.get(raw.sizes.flip, 0)))
             except Exception:
                 rgb = raw.postprocess(half_size=True, use_camera_wb=True, no_auto_bright=True)
     else:
-        rgb = _open_rgb(filepath, fast_jpeg)
+        rgb, _ = _open_rgb(filepath, fast_jpeg)
 
     h, w = rgb.shape[:2]
     scale = MAX_DIM / max(h, w)
@@ -154,13 +165,20 @@ def _face_eye_sharpness(gray: np.ndarray, denoised: np.ndarray):
     return float(cv2.Laplacian(face_crop, cv2.CV_64F).var())
 
 
+MASK_ASPECT_TOLERANCE = 0.03
+
+
 def _masked_sharpness(denoised: np.ndarray, mask_path: str):
     """Laplacian variance inside a SAM mask PNG, or None if the mask is missing,
-    unreadable or empty, so the caller can fall back to the heuristic."""
+    unreadable, empty, or framed differently from the image (e.g. a darkroom
+    crop changed the aspect ratio), so the caller can fall back."""
     mask = cv2.imread(mask_path, cv2.IMREAD_GRAYSCALE) if os.path.exists(mask_path) else None
     if mask is None:
         return None
     h, w = denoised.shape
+    mh, mw = mask.shape
+    if abs((mw / mh) / (w / h) - 1) > MASK_ASPECT_TOLERANCE:
+        return None
     inside = cv2.resize(mask, (w, h), interpolation=cv2.INTER_NEAREST) > 127
     if not inside.any():
         return None
@@ -262,9 +280,53 @@ def _init_worker():
         pass
 
 
+SHORTLIST_MIN = 3
+
+
+def keepers_allowed(keep_mode: str, burst_size: int) -> int:
+    if keep_mode == "dynamic_burst":
+        return 1 if burst_size <= 4 else (2 if burst_size <= 8 else (3 if burst_size <= 12 else (4 if burst_size <= 18 else 5)))
+    if keep_mode == "portrait_mode":
+        return 1 if burst_size <= 3 else 2
+    if keep_mode == "single_best":
+        return 1
+    return burst_size
+
+
+def shortlist(heuristic: dict, keep_mode: str) -> set:
+    """Ids of the frames worth running SAM on: the top heuristic scorers, at
+    least SHORTLIST_MIN and never fewer than the burst can keep."""
+    k = max(SHORTLIST_MIN, keepers_allowed(keep_mode, len(heuristic)))
+    return set(sorted(heuristic, key=heuristic.get, reverse=True)[:k])
+
+
+def resolve_burst_scores(scores: dict, candidates=None) -> tuple:
+    """(one float per image, ids eligible to be keepers).
+
+    sam_subject scores arrive as (masked or None, fallback) pairs, and the two
+    aren't on the same scale. If every shortlisted frame (every frame, when
+    there's no shortlist) got a mask, shortlisted frames compete on their
+    masked score and only they can keep; the rest keep their fallback score
+    for star tiers. Otherwise the whole burst uses the fallback and everyone
+    is eligible. Plain floats pass through, all eligible."""
+    everyone = set(scores)
+    pairs = {k: v for k, v in scores.items() if isinstance(v, tuple)}
+    if not pairs:
+        return dict(scores), everyone
+    shortlisted = set(pairs) if candidates is None else set(pairs) & set(candidates)
+    if shortlisted and all(pairs[k][0] is not None for k in shortlisted):
+        resolved = {k: (v[0] if k in shortlisted else v[1]) if isinstance(v, tuple) else v
+                    for k, v in scores.items()}
+        return resolved, shortlisted
+    return {k: v[1] if isinstance(v, tuple) else v for k, v in scores.items()}, everyone
+
+
 def parse_manifest_row(row) -> tuple:
-    """(id, filepath, burst_id, mask_path); mask_path is "" for 3-column rows."""
-    return (row[0], row[1], row[2], row[3] if len(row) > 3 else "")
+    """(id, filepath, burst_id, mask_path, shortlisted). The last two are ""
+    when absent; shortlisted is "1"/"0" only in sam_subject runs."""
+    return (row[0], row[1], row[2],
+            row[3] if len(row) > 3 else "",
+            row[4] if len(row) > 4 else "")
 
 
 def process_single_image(filepath: str, sharp_mode: str, exp_mode: str, cancel_path: str = "",
@@ -273,7 +335,13 @@ def process_single_image(filepath: str, sharp_mode: str, exp_mode: str, cancel_p
         return filepath, None, None, "cancelled"
     try:
         rgb = load_image(filepath, fast_jpeg)
-        sharp = sharpness_score(rgb, sharp_mode, mask_path)
+        if sharp_mode == "sam_subject":
+            # both scores, so the burst can settle on one scale once every frame is in
+            gray = cv2.bilateralFilter(cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY), 5, 50, 50)
+            masked = _masked_sharpness(gray, mask_path) if mask_path else None
+            sharp = (masked, sharpness_score(rgb, "subject_focus"))
+        else:
+            sharp = sharpness_score(rgb, sharp_mode, mask_path)
         exp = exposure_status(rgb, exp_mode)
         return filepath, sharp, exp, None
     except Exception as e:
@@ -282,18 +350,27 @@ def process_single_image(filepath: str, sharp_mode: str, exp_mode: str, cancel_p
 
 def process_single_saliency(filepath: str, fast_jpeg: bool = False):
     try:
-        return filepath, saliency_point(load_image(filepath, fast_jpeg)), None
+        rgb = load_image(filepath, fast_jpeg)
+        return filepath, saliency_point(rgb), sharpness_score(rgb, "subject_focus"), None
     except Exception as e:
-        return filepath, None, str(e)
+        return filepath, None, None, str(e)
 
 
 def emit_saliency_points(manifest, args):
-    """Writes id,x_frac,y_frac per image to args.results. Images that fail to
-    decode are left out; the Lua side then scores them without a mask."""
+    """Writes id,x_frac,y_frac to args.results for each burst's shortlist: the
+    frames worth running SAM on, picked by the center-weighted heuristic.
+    Images that fail to decode are left out and so can't be keepers."""
     total = len(manifest)
     with open(args.results, "w", newline="", encoding="utf-8"):
         pass
     write_progress(args.progress, 0, total, 0, 0)
+
+    burst_of = {row[0]: row[2] for row in manifest}
+    remaining = {}
+    for row in manifest:
+        remaining[row[2]] = remaining.get(row[2], 0) + 1
+    found = {b: {} for b in remaining}  # burst → id → (point, heuristic score)
+
     workers = max(1, (os.cpu_count() or 2) - 1)
     done = 0
     with concurrent.futures.ProcessPoolExecutor(max_workers=workers, initializer=_init_worker) as executor:
@@ -307,31 +384,37 @@ def emit_saliency_points(manifest, args):
                 executor.shutdown(wait=False, cancel_futures=True)
                 sys.exit(130)
             image_id = future_to_id[future]
-            filepath, point, err = future.result()
+            burst = burst_of[image_id]
+            filepath, point, heuristic, err = future.result()
             if err:
                 print(f"skip saliency {image_id} ({filepath}): {err}", file=sys.stderr)
             else:
+                found[burst][image_id] = (point, heuristic)
+            remaining[burst] -= 1
+            if remaining[burst] == 0 and found[burst]:
+                picks = shortlist({i: v[1] for i, v in found[burst].items()}, args.keep_mode)
                 with open(args.results, "a", newline="", encoding="utf-8") as f:
-                    csv.writer(f).writerow([image_id, round(point[0], 4), round(point[1], 4)])
+                    w = csv.writer(f)
+                    for i in sorted(picks):
+                        x, y = found[burst][i][0]
+                        w.writerow([i, round(x, 4), round(y, 4)])
+                del found[burst]
             done += 1
             write_progress(args.progress, done, total, 0, 0)
 
 
-def process_burst_logic(burst_id, burst_sharpness, burst_exposure, burst_size, args, results_path):
+def process_burst_logic(burst_id, burst_sharpness, burst_exposure, burst_size, args, results_path,
+                        eligible=None):
     if not burst_sharpness:
         return
 
-    if args.keep_mode == "dynamic_burst":
-        allowed = 1 if burst_size <= 4 else (2 if burst_size <= 8 else (3 if burst_size <= 12 else (4 if burst_size <= 18 else 5)))
-    elif args.keep_mode == "portrait_mode":
-        allowed = 1 if burst_size <= 3 else 2
-    elif args.keep_mode == "single_best":
-        allowed = 1
-    else:
-        allowed = burst_size
+    allowed = keepers_allowed(args.keep_mode, burst_size)
+    if eligible is None:
+        eligible = set(burst_sharpness)
 
-    sorted_members = sorted(burst_sharpness.keys(), key=lambda i: burst_sharpness[i], reverse=True)
-    keepers = set(sorted_members[:allowed])
+    sorted_members = sorted(burst_sharpness.keys(),
+                            key=lambda i: (i in eligible, burst_sharpness[i]), reverse=True)
+    keepers = set([i for i in sorted_members if i in eligible][:allowed])
 
     burst_keepers = [i for i in sorted_members if i in keepers]
     num_keepers = len(burst_keepers)
@@ -402,8 +485,13 @@ def main(args):
         return
 
     burst_groups = {}
-    for image_id, filepath, burst_id, mask_path in manifest:
+    candidates_of = {}  # burst → shortlisted ids, only when the manifest carries a shortlist
+    for image_id, filepath, burst_id, mask_path, shortlisted in manifest:
         burst_groups.setdefault(burst_id, []).append((image_id, filepath, mask_path))
+        if shortlisted:
+            picks = candidates_of.setdefault(burst_id, set())
+            if shortlisted == "1":
+                picks.add(image_id)
 
     total_bursts = len(burst_groups)
 
@@ -467,13 +555,16 @@ def main(args):
 
             if burst_completion[burst_id] == len(burst_groups[burst_id]):
                 completed_bursts += 1
+                scores, eligible = resolve_burst_scores(burst_sharpness[burst_id],
+                                                        candidates_of.get(burst_id))
                 process_burst_logic(
-                    burst_id, 
-                    burst_sharpness[burst_id], 
-                    burst_exposure[burst_id], 
-                    len(burst_groups[burst_id]), 
-                    args, 
-                    args.results
+                    burst_id,
+                    scores,
+                    burst_exposure[burst_id],
+                    len(burst_groups[burst_id]),
+                    args,
+                    args.results,
+                    eligible,
                 )
                 
                 del burst_sharpness[burst_id]
