@@ -17,6 +17,7 @@ local action_button = nil
 local is_running = false
 local is_clearing = false
 local clear_button = nil
+local run_tag_check = nil
 
 function M.exif_time_to_epoch(s)
     if not s then return nil end
@@ -171,6 +172,7 @@ local POINTS_DONE_PATH = POINTS_PATH .. ".done"
 local PRESCORE_PATH = TMP_DIR .. "/dt_assisted_culling_prescores.csv"
 -- Per-frame scores reused across runs; tmp_dir is wiped, the config dir isn't.
 local CACHE_PATH = dt.configuration.config_dir .. "/assisted_culling/scores.sqlite"
+local REPORT_PATH = dt.configuration.config_dir .. "/assisted_culling/last-run.csv"
 
 local function mask_path_for(id)
     return TMP_DIR .. "/dt_assisted_culling_mask_" .. tostring(id) .. ".png"
@@ -475,6 +477,7 @@ end
 
 local TAG_KEEPER = "Assisted Culling|Keeper"
 local TAG_REJECT = "Assisted Culling|Rejected"
+local TAG_RUN_FORMAT = "Assisted Culling|Run|%Y-%m-%d %H:%M"
 local TAG_CULLED = "Assisted Culling|Culled" -- no longer written; still cleared from older passes
 -- Set by the user; runs leave these images out entirely. Never written or cleared by the plugin.
 local TAG_LOCKED = "Assisted Culling|Locked"
@@ -851,6 +854,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             .. (sam_model and (" --prescores " .. shell_quote(PRESCORE_PATH)
                 .. " --sam-model " .. shell_quote(sam_model)) or "")
             .. " --cache " .. shell_quote(CACHE_PATH)
+            .. " --report " .. shell_quote(REPORT_PATH)
             .. " 2>> " .. shell_quote(LOG_PATH)
 
         if cancelled() then
@@ -879,6 +883,9 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         -- ---- result application (shared by "while scoring" and the final drain) ----
         local keeper_tag, reject_tag
         local flag_tags = {}
+        -- one stamp per run; not in ALL_TAGS, so clearing marks and later runs leave earlier stamps alone
+        local run_stamp = run_tag_check and run_tag_check.value and os.date(TAG_RUN_FORMAT) or nil
+        local run_stamp_tag
         local function ensure_tags()
             if not keeper_tag then
                 keeper_tag = tags.create(TAG_KEEPER)
@@ -916,6 +923,10 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             writes = writes + sync_tag(img, have, reject_tag, TAG_REJECT, not is_keeper)
             for i, f in ipairs(FLAGS) do
                 writes = writes + sync_tag(img, have, flag_tags[i], f.tag, flags[f.name] == true)
+            end
+            if run_stamp and not have[run_stamp] then
+                run_stamp_tag = run_stamp_tag or tags.create(run_stamp)
+                tags.attach(run_stamp_tag, img); writes = writes + 1
             end
             if have[TAG_CULLED] then -- marker from older versions; Keeper/Rejected already say "processed"
                 tags.detach(tags.find(TAG_CULLED), img); writes = writes + 1
@@ -1472,6 +1483,12 @@ local function install_panel()
         start_culling(true)
     end
 
+    run_tag_check = dt.new_widget("check_button") {
+        label = _("Tag each run"),
+        tooltip = _("Add a timestamp tag (Assisted Culling|Run|YYYY-MM-DD HH:MM) to every image a run writes, so the latest run's photos can be filtered apart from earlier ones. Stamps accumulate; remove old ones in darktable's tag manager. Clear culling marks leaves them."),
+        value = false,
+    }
+
     clear_button = dt.new_widget("button") {
         label = _("Clear culling marks"),
         tooltip = _("Remove the Assisted Culling tags from the selected images. Star ratings and colour labels are not changed."),
@@ -1515,6 +1532,7 @@ local function install_panel()
         exp_combo,
         keep_combo,
         non_keeper_combo,
+        run_tag_check,
         action_button,
         clear_button
     }

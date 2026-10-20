@@ -860,6 +860,45 @@ def relative_references(groups: dict) -> dict:
     return {g: float(np.percentile(v, RELATIVE_REFERENCE_PERCENTILE)) for g, v in groups.items() if v}
 
 
+REPORT_HEADER = ["burst", "file", "rank", "of", "score", "stars", "keeper", "flags", "tags", "why"]
+
+
+def report_rows(manifest, result_rows, keepers_per_burst) -> list:
+    """One row per scored frame, bursts in manifest order and frames best first, saying why it
+    was kept or not. stars is "leave" for a non-keeper the run left alone."""
+    file_of = {row[0]: row[1] for row in manifest}
+    by_burst = {}
+    for row in result_rows:
+        if len(row) >= 6:
+            by_burst.setdefault(row[3], []).append(row)
+    out = []
+    for burst_id in dict.fromkeys(row[2] for row in manifest):
+        rows = sorted(by_burst.get(burst_id, []), key=lambda r: -float(r[1]))
+        allowed = keepers_per_burst(len(rows))
+        for rank, (img_id, score, flags, _burst, keeper, stars, *rest) in enumerate(rows, 1):
+            why = (f"kept: rank {rank} of {len(rows)}, {allowed} allowed" if keeper == "1"
+                   else f"not kept: rank {rank} of {len(rows)}, only {allowed} allowed or not eligible")
+            if flags:
+                why += f"; flagged {flags.replace(';', ', ')}"
+            out.append([burst_id, os.path.basename(file_of.get(img_id, img_id)), rank, len(rows),
+                        score, stars, "yes" if keeper == "1" else "no", flags, rest[0] if rest else "", why])
+    return out
+
+
+def write_report(manifest, args):
+    """Writes args.report (CSV, REPORT_HEADER) from the finished results file; a failure is
+    logged, never fatal, since the scores are already on their way back to darktable."""
+    try:
+        with open(args.results, newline="", encoding="utf-8") as f:
+            result_rows = [row for row in csv.reader(f) if row]
+        with open(args.report, "w", newline="", encoding="utf-8") as f:
+            w = csv.writer(f)
+            w.writerow(REPORT_HEADER)
+            w.writerows(report_rows(manifest, result_rows, lambda n: keepers_allowed(args.keep_mode, n)))
+    except OSError as e:
+        log(f"couldn't write the report {args.report}: {e}")
+
+
 def main(args):
     with open(args.manifest, newline="", encoding="utf-8") as f:
         manifest = [parse_manifest_row(row) for row in csv.reader(f) if row]
@@ -875,6 +914,8 @@ def main(args):
             emit_saliency_points(manifest, args, cache)
         else:
             score_manifest(manifest, args, cache)
+            if getattr(args, "report", ""):
+                write_report(manifest, args)
     finally:
         cache.close()
 
@@ -1080,6 +1121,8 @@ if __name__ == "__main__":
                              "and read by the scoring pass, so frames outside the shortlist decode once")
     parser.add_argument("--cache", default="",
                         help="SQLite file of per-frame scores reused across runs (created if missing)")
+    parser.add_argument("--report", default="",
+                        help="CSV listing every scored frame with its rank in the burst and why it was kept or not")
     parser.add_argument("--sam-model", default="",
                         help="sam_subject: id of darktable's SAM model, part of the masked-score cache key")
     parser.add_argument("--tag-only-flags", default="", type=lambda s: frozenset(filter(None, s.split(","))),

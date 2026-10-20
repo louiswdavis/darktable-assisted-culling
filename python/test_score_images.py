@@ -396,6 +396,18 @@ def run_tests():
     check("face mode without a face never flags closed eyes",
           S.face_detect_score(one_spot), (S.sharpness_score(one_spot, "subject_focus"), False))
 
+    # report_rows --------------------------------------------------------------
+    rep_manifest = [("1", "/p/a.jpg", "0", "", "", "", 0.0, 0.0), ("2", "/p/b.jpg", "0", "", "", "", 0.0, 0.0),
+                    ("3", "/p/c.jpg", "1", "", "", "", 0.0, 0.0)]
+    rep_results = [["2", "40.0", "blur", "0", "0", "leave", ""], ["1", "80.0", "", "0", "1", "4", "Subject|Car"],
+                   ["3", "55.0", "", "1", "1", "3", ""]]
+    rep = S.report_rows(rep_manifest, rep_results, lambda n: 1)
+    check("report: bursts in manifest order, best frame first", [r[1] for r in rep], ["a.jpg", "b.jpg", "c.jpg"])
+    check("report: a keeper says its rank and the allowance", rep[0][9], "kept: rank 1 of 2, 1 allowed")
+    check("report: a non-keeper lists its flags", rep[1][9],
+          "not kept: rank 2 of 2, only 1 allowed or not eligible; flagged blur")
+    check("report: diagnostic tags carry through", rep[0][8], "Subject|Car")
+
 
     print("")
     if failures == 0:
