@@ -12,6 +12,8 @@ import gc
 import io
 import json
 import os
+import re
+import shutil
 import sqlite3
 import sys
 import time
@@ -885,9 +887,28 @@ def report_rows(manifest, result_rows, keepers_per_burst) -> list:
     return out
 
 
+REPORT_ARCHIVE_KEEP = 20  # reports kept under --report-archive-dir; the oldest are deleted
+
+
+def archive_report(report_path, archive_dir, keep):
+    """Copies the report to <archive_dir>/<YYYYMMDD-HHMMSS>.csv and deletes all but the newest
+    `keep` archived reports. A failure is logged, never fatal: last-run.csv is already written."""
+    try:
+        os.makedirs(archive_dir, exist_ok=True)
+        dest = os.path.join(archive_dir, time.strftime("%Y%m%d-%H%M%S") + ".csv")
+        shutil.copy2(report_path, dest)
+        runs = sorted(n for n in os.listdir(archive_dir) if re.fullmatch(r"\d{8}-\d{6}\.csv", n))
+        for old in runs[:-keep]:
+            os.remove(os.path.join(archive_dir, old))
+        log(f"archived report: {dest}")
+    except OSError as e:
+        log(f"couldn't archive the report: {e}")
+
+
 def write_report(manifest, args):
-    """Writes args.report (CSV, REPORT_HEADER) from the finished results file; a failure is
-    logged, never fatal, since the scores are already on their way back to darktable."""
+    """Writes args.report (CSV, REPORT_HEADER) from the finished results file, then archives it
+    when args.report_archive_dir is set; a failure is logged, never fatal, since the scores are
+    already on their way back to darktable."""
     try:
         with open(args.results, newline="", encoding="utf-8") as f:
             result_rows = [row for row in csv.reader(f) if row]
@@ -897,6 +918,9 @@ def write_report(manifest, args):
             w.writerows(report_rows(manifest, result_rows, lambda n: keepers_allowed(args.keep_mode, n)))
     except OSError as e:
         log(f"couldn't write the report {args.report}: {e}")
+        return
+    if getattr(args, "report_archive_dir", ""):
+        archive_report(args.report, args.report_archive_dir, REPORT_ARCHIVE_KEEP)
 
 
 def main(args):
@@ -1123,6 +1147,8 @@ if __name__ == "__main__":
                         help="SQLite file of per-frame scores reused across runs (created if missing)")
     parser.add_argument("--report", default="",
                         help="CSV listing every scored frame with its rank in the burst and why it was kept or not")
+    parser.add_argument("--report-archive-dir", default="",
+                        help="folder that keeps a timestamped copy of each run's --report (newest 20)")
     parser.add_argument("--sam-model", default="",
                         help="sam_subject: id of darktable's SAM model, part of the masked-score cache key")
     parser.add_argument("--tag-only-flags", default="", type=lambda s: frozenset(filter(None, s.split(","))),

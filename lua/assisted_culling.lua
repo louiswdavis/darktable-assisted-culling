@@ -16,6 +16,10 @@ M.event_registered = false
 local action_button = nil
 local is_running = false
 local is_clearing = false
+-- Jobs clicked while a run is going: { label, run }, each started as the one before finishes.
+-- Selections and settings are captured when queued, not when the job starts.
+local queue = {}
+local run_next -- defined after start_culling; score_images calls it as a run finishes
 local clear_button = nil
 local run_tag_check = nil
 
@@ -77,6 +81,61 @@ function M.parse_csv_line(line, n)
     end
     if #parts ~= n then return nil end
     return parts
+end
+
+-- One line of last-run.csv → its fields, honouring "quoted, fields" and "" escapes.
+function M.parse_report_line(line)
+    local fields, i, n = {}, 1, #line
+    while i <= n + 1 do
+        local value
+        if line:sub(i, i) == '"' then
+            local j = i + 1
+            local buf = {}
+            while j <= n do
+                local c = line:sub(j, j)
+                if c == '"' then
+                    if line:sub(j + 1, j + 1) == '"' then buf[#buf + 1] = '"'; j = j + 2
+                    else break end
+                else
+                    buf[#buf + 1] = c; j = j + 1
+                end
+            end
+            value = table.concat(buf)
+            i = j + 2
+        else
+            local j = line:find(",", i, true) or (n + 1)
+            value = line:sub(i, j - 1)
+            i = j + 1
+        end
+        fields[#fields + 1] = value
+    end
+    return fields
+end
+
+-- last-run.csv text + { filename = true } → one "file: stars, why" line per frame of the run
+-- that matches (a filename can match several rows when versions share a file), and the
+-- filenames the run had no row for.
+function M.explain_report(text, wanted)
+    local lines, seen = {}, {}
+    local first = true
+    for line in text:gmatch("[^\r\n]+") do
+        if first then
+            first = false -- header
+        else
+            local f = M.parse_report_line(line)
+            if #f == 10 and wanted[f[2]] then
+                seen[f[2]] = true
+                local stars = f[6] == "leave" and "left as it was" or (f[6] .. " stars")
+                lines[#lines + 1] = string.format("%s: %s, burst %s, score %s. %s", f[2], stars, f[1], f[5], f[10])
+            end
+        end
+    end
+    local missing = {}
+    for name in pairs(wanted) do
+        if not seen[name] then missing[#missing + 1] = name end
+    end
+    table.sort(missing)
+    return lines, missing
 end
 
 -- Stage A points row {id, x0, y0, x1, y1} → SAM prompt: a box when x1,y1 are
@@ -173,6 +232,7 @@ local PRESCORE_PATH = TMP_DIR .. "/dt_assisted_culling_prescores.csv"
 -- Per-frame scores reused across runs; tmp_dir is wiped, the config dir isn't.
 local CACHE_PATH = dt.configuration.config_dir .. "/assisted_culling/scores.sqlite"
 local REPORT_PATH = dt.configuration.config_dir .. "/assisted_culling/last-run.csv"
+local REPORT_ARCHIVE_DIR = dt.configuration.config_dir .. "/assisted_culling/reports"
 
 local function mask_path_for(id)
     return TMP_DIR .. "/dt_assisted_culling_mask_" .. tostring(id) .. ".png"
@@ -231,6 +291,14 @@ end
 local function file_exists(name)
     local f = io.open(name, "r")
     if f ~= nil then f:close(); return true else return false end
+end
+
+local function read_file(name)
+    local f = io.open(name, "rb")
+    if not f then return nil end
+    local text = f:read("*a")
+    f:close()
+    return text
 end
 
 local function first_existing(paths)
@@ -593,6 +661,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             or _("Assisted Culling: select some images first"))
         is_running = false
         if action_button then action_button.label = _("Start culling") end
+        run_next()
         return
     end
 
@@ -855,6 +924,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                 .. " --sam-model " .. shell_quote(sam_model)) or "")
             .. " --cache " .. shell_quote(CACHE_PATH)
             .. " --report " .. shell_quote(REPORT_PATH)
+            .. " --report-archive-dir " .. shell_quote(REPORT_ARCHIVE_DIR)
             .. " 2>> " .. shell_quote(LOG_PATH)
 
         if cancelled() then
@@ -1268,6 +1338,11 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
     end
     log("run finished")
     flush_log()
+    if scorer_alive and #queue > 0 then
+        dt.print(string.format(_("Assisted Culling: %d queued jobs dropped (the cancelled scorer is still stopping)."), #queue))
+        queue = {}
+    end
+    run_next()
 end
 
 -- Removes the plugin's tags. Ratings are NOT reverted.
@@ -1505,6 +1580,55 @@ local function install_panel()
         if not ok_c then notify_error("Assisted Culling: clearing marks failed: " .. tostring(err_c)) end
     end
 
+    local why_button = dt.new_widget("button") {
+        label = _("Why these ratings?"),
+        tooltip = _("Explain the selected images from the last run's report: stars, rank in the burst, flags. Changes nothing."),
+    }
+
+    why_button.clicked_callback = function()
+        local text = read_file(REPORT_PATH)
+        if not text then
+            dt.print(_("Assisted Culling: no report yet. Run culling first."))
+            return
+        end
+        local wanted, n = {}, 0
+        for _, img in ipairs(dt.gui.action_images) do
+            if not wanted[img.filename] then wanted[img.filename] = true; n = n + 1 end
+        end
+        if n == 0 then
+            dt.print(_("Assisted Culling: select images first."))
+            return
+        end
+        local lines, missing = M.explain_report(text, wanted)
+        for _, l in ipairs(lines) do log("why: " .. l) end
+        for _, name in ipairs(missing) do log("why: " .. name .. ": not in the last run") end
+        if n == 1 then
+            dt.print(lines[1] or string.format(_("Assisted Culling: %s was not in the last run."), missing[1]))
+        else
+            dt.print(string.format(_("Assisted Culling: %d explained, %d not in the last run. Full text in the log."),
+                #lines, #missing))
+        end
+    end
+
+    local report_button = dt.new_widget("button") {
+        label = _("Open last report"),
+        tooltip = _("Open last-run.csv (every frame's rank, score, stars and why) in your spreadsheet app. The newest 20 runs are kept in assisted_culling/reports in darktable's config folder."),
+    }
+
+    report_button.clicked_callback = function()
+        if not file_exists(REPORT_PATH) then
+            dt.print(_("Assisted Culling: no report yet. Run culling first."))
+            return
+        end
+        if IS_WINDOWS then
+            os.execute(string.format('start "" "%s"', REPORT_PATH:gsub("/", "\\")))
+        elseif dt.configuration.running_os == "macos" then
+            os.execute("open " .. shell_quote(REPORT_PATH))
+        else
+            os.execute("xdg-open " .. shell_quote(REPORT_PATH) .. " >/dev/null 2>&1 &")
+        end
+    end
+
     local panel_box = dt.new_widget("box") {
         orientation = "vertical",
         reset_callback = function()
@@ -1534,6 +1658,8 @@ local function install_panel()
         non_keeper_combo,
         run_tag_check,
         action_button,
+        why_button,
+        report_button,
         clear_button
     }
 

@@ -408,6 +408,21 @@ def run_tests():
           "not kept: rank 2 of 2, only 1 allowed or not eligible; flagged blur")
     check("report: diagnostic tags carry through", rep[0][8], "Subject|Car")
 
+    with tempfile.TemporaryDirectory() as arch_tmp:
+        arch_src = os.path.join(arch_tmp, "last-run.csv")
+        with open(arch_src, "w") as f:
+            f.write("x\n")
+        arch_dir = os.path.join(arch_tmp, "reports")
+        os.makedirs(arch_dir)
+        for stamp in ("20200101-000001", "20200101-000002", "20200101-000003"):
+            open(os.path.join(arch_dir, stamp + ".csv"), "w").close()
+        open(os.path.join(arch_dir, "notes.txt"), "w").close()
+        S.archive_report(arch_src, arch_dir, 3)
+        left = sorted(os.listdir(arch_dir))
+        check("report archive: keeps the newest 3 and leaves other files alone", len(left), 4)
+        check("report archive: the oldest is deleted", "20200101-000001.csv" in left, False)
+        check("report archive: the new copy is added", any(n > "2021" for n in left), True)
+
 
     print("")
     if failures == 0:

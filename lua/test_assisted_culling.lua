@@ -87,6 +87,23 @@ local flags = C.parse_flags("overexposed;eyes_closed")
 check("parse_flags reads every flag", tostring(flags.overexposed and flags.eyes_closed), "true")
 check("parse_flags: empty field is no flags", next(C.parse_flags("")), nil)
 
+local pr = C.parse_report_line('1,"a ""x"".jpg",2,3,55.0,leave,no,blur,"Subject|Car,Bird","not kept, rank 2"')
+check("parse_report_line: quoted commas and doubled quotes", table.concat(pr, "|"),
+    '1|a "x".jpg|2|3|55.0|leave|no|blur|Subject|Car,Bird|not kept, rank 2')
+check("parse_report_line: field count", #pr, 10)
+check("parse_report_line: empty trailing field kept", #C.parse_report_line("a,b,"), 3)
+
+local report_text = 'burst,file,rank,of,score,stars,keeper,flags,tags,why\n'
+    .. '0,a.jpg,1,2,80.0,4,yes,,Subject|Car,"kept: rank 1 of 2, 1 allowed"\n'
+    .. '0,b.jpg,2,2,40.0,leave,no,blur,,"not kept: rank 2 of 2, only 1 allowed or not eligible; flagged blur"\n'
+local why_lines, why_missing = C.explain_report(report_text, { ["b.jpg"] = true, ["z.jpg"] = true })
+check("explain_report: one line for the matching frame", #why_lines, 1)
+check("explain_report: a left-alone non-keeper says so", why_lines[1],
+    "b.jpg: left as it was, burst 0, score 40.0. not kept: rank 2 of 2, only 1 allowed or not eligible; flagged blur")
+check("explain_report: names frames the run had no row for", table.concat(why_missing, ","), "z.jpg")
+local why_a = C.explain_report(report_text, { ["a.jpg"] = true })
+check("explain_report: a keeper shows its stars", why_a[1], "a.jpg: 4 stars, burst 0, score 80.0. kept: rank 1 of 2, 1 allowed")
+
 print("")
 if failures == 0 then
     print("all tests passed")
