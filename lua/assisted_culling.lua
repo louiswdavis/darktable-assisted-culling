@@ -538,6 +538,7 @@ local function stop_job(job)
     if cf then cf:write("1"); cf:close() end
     job.valid = false
     is_running = false
+    queue = {}
     if action_button then
         action_button.label = _("Start culling")
     end
@@ -1412,14 +1413,53 @@ local nk_opts = {"leave", "reject", "0", "1", "2", "3", "4", "5"}
 
 local genre_combo, rank_combo, sharp_combo, exp_combo, keep_combo, non_keeper_combo
 
-local function execute_current_config(images)
-    local r_val = rank_opts[rank_combo and rank_combo.selected or 1] or "universal"
-    local s_val = sharp_opts[sharp_combo and sharp_combo.selected or 1] or "center"
-    local e_val = exp_opts[exp_combo and exp_combo.selected or 1] or "whole_frame"
-    local k_val = keep_opts[keep_combo and keep_combo.selected or 1] or "single_best"
-    local nk_val = nk_opts[non_keeper_combo and non_keeper_combo.selected or 1] or "leave"
-    
-    M.score_images(images, r_val, s_val, e_val, k_val, nk_val)
+-- The panel's current choices, read when a job is clicked so a queued job keeps them.
+local function current_settings()
+    return {
+        rank_opts[rank_combo and rank_combo.selected or 1] or "universal",
+        sharp_opts[sharp_combo and sharp_combo.selected or 1] or "center",
+        exp_opts[exp_combo and exp_combo.selected or 1] or "whole_frame",
+        keep_opts[keep_combo and keep_combo.selected or 1] or "single_best",
+        nk_opts[non_keeper_combo and non_keeper_combo.selected or 1] or "leave",
+    }
+end
+
+-- dt.gui.action_images follows the live selection; a queued job needs the selection as it was.
+local function copy_images(images)
+    local out = {}
+    for _, img in ipairs(images) do out[#out + 1] = img end
+    return out
+end
+
+local function launch_score(images, s)
+    is_running = true
+    M.cancel_requested = false
+    if action_button then action_button.label = _("Cancel culling") end
+    M.score_images(images, s[1], s[2], s[3], s[4], s[5])
+end
+
+local function clear_queue()
+    if #queue == 0 then return end
+    dt.print(string.format(_("Assisted Culling: %d queued jobs dropped."), #queue))
+    queue = {}
+end
+
+-- While a run is going, remembers `run` to start when it finishes and returns true. Returns
+-- false when nothing is running or there is nothing to queue, so the caller's own checks speak.
+local function queue_if_busy(label, has_input, run)
+    if not is_running or not has_input then return false end
+    queue[#queue + 1] = { label = label, run = run }
+    dt.print(string.format(_("Assisted Culling: %s queued (%d waiting); it starts when the current run finishes."),
+        label, #queue))
+    return true
+end
+
+-- Starts the oldest queued job; every run calls it as it finishes.
+run_next = function()
+    if is_running or is_clearing or #queue == 0 then return end
+    local nxt = table.remove(queue, 1)
+    log("starting queued job: " .. nxt.label)
+    nxt.run()
 end
 
 local function start_culling(allow_cancel)
@@ -1432,17 +1472,18 @@ local function start_culling(allow_cancel)
             M.cancel_requested = true
             local cf = io.open(CANCEL_PATH, "w")
             if cf then cf:write("1"); cf:close() end
+            clear_queue() -- a cancel means "stop what I started", not "run the rest"
             if action_button then action_button.label = _("Cancelling...") end
             dt.print(_("Assisted Culling: cancelling, finishing the current step..."))
         else
-            dt.print(_("Assisted Culling: already running. Click Cancel culling in the panel to stop it."))
+            local images, settings = copy_images(dt.gui.action_images), current_settings()
+            if not queue_if_busy(_("Culling"), #images > 0, function() launch_score(images, settings) end) then
+                dt.print(_("Assisted Culling: already running. Click Cancel culling in the panel to stop it."))
+            end
         end
         return
     end
-    is_running = true
-    M.cancel_requested = false
-    if action_button then action_button.label = _("Cancel culling") end
-    execute_current_config(dt.gui.action_images)
+    launch_score(dt.gui.action_images, current_settings())
 end
 
 local function install_panel()
@@ -1570,6 +1611,14 @@ local function install_panel()
     }
 
     clear_button.clicked_callback = function()
+        local selected = copy_images(dt.gui.action_images)
+        if queue_if_busy(_("Clear culling marks"), #selected > 0, function()
+            is_clearing = true
+            local ok_q, err_q = pcall(M.clear_marks, selected)
+            is_clearing = false
+            if not ok_q then notify_error("Assisted Culling: clearing marks failed: " .. tostring(err_q)) end
+            run_next()
+        end) then return end
         if is_running or is_clearing then
             dt.print(_("Assisted Culling: busy with another job, try again when it finishes."))
             return
