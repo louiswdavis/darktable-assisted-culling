@@ -176,18 +176,16 @@ local function mask_path_for(id)
     return TMP_DIR .. "/dt_assisted_culling_mask_" .. tostring(id) .. ".png"
 end
 
+local DETECTOR_FILE = "object_detection_yolox_2022nov.onnx"
+
 if dt.gui then
     dt.preferences.register("assisted_culling", "python_bin", "file",
         "Assisted Culling: Python interpreter",
         "Python executable with opencv-python-headless, numpy, Pillow and rawpy installed (e.g. .venv\\Scripts\\python.exe)",
         "")
-    dt.preferences.register("assisted_culling", "score_script", "file",
-        "Assisted Culling: score_images.py",
-        "Path to score_images.py from darktable-assisted-culling (empty = auto-detect)",
-        "")
-    dt.preferences.register("assisted_culling", "detector_model", "file",
-        "Assisted Culling: object detector model (YOLOX .onnx)",
-        "Used only by subject tracking (SAM). Finds the most prominent car, motorcycle or truck and outlines it for SAM; frames without one fall back to a guessed subject point. Leave empty to turn off.",
+    dt.preferences.register("assisted_culling", "plugin_folder", "directory",
+        "Assisted Culling: plugin folder",
+        "The darktable-assisted-culling folder (holds python/, models/ and .venv). Empty = auto-detect. Subject tracking (SAM) uses models/" .. DETECTOR_FILE .. " from it when present, to outline the most prominent car, motorcycle or truck for SAM",
         "")
 
     -- Register UI State Preferences
@@ -242,11 +240,24 @@ local function first_existing(paths)
     return nil
 end
 
+local function plugin_folder_pref()
+    local folder = (dt.preferences.read("assisted_culling", "plugin_folder", "directory") or ""):gsub("[/\\]+$", "")
+    return folder
+end
+
+-- The script is found from the plugin folder preference alone when it's set; a
+-- wrong folder is an error rather than a quiet switch to some other copy.
 local function score_script()
-    local pref = dt.preferences.read("assisted_culling", "score_script", "file") or ""
+    local folder = plugin_folder_pref()
+    if folder ~= "" then
+        local script = folder .. "/python/score_images.py"
+        if not (df.test_file(script, "e") or file_exists(script)) then
+            error("the plugin folder preference (" .. folder .. ") has no python/score_images.py; point it at the darktable-assisted-culling folder, or clear it to auto-detect", 0)
+        end
+        return script
+    end
     local home = os.getenv("USERPROFILE") or os.getenv("HOME") or ""
     local found = first_existing({
-        pref,
         THIS_DIR .. "/score_images.py",
         THIS_DIR .. "/python/score_images.py",
         THIS_DIR .. "/../python/score_images.py",
@@ -256,16 +267,22 @@ local function score_script()
     return found or (THIS_DIR .. "/score_images.py")
 end
 
+local function plugin_root(script)
+    local folder = plugin_folder_pref()
+    if folder ~= "" then return folder end
+    local script_dir = (script and script:match("^(.*)[/\\]")) or THIS_DIR
+    return script_dir:match("^(.*)[/\\]python$") or script_dir
+end
+
 local function python_bin(script)
     local pref = dt.preferences.read("assisted_culling", "python_bin", "file")
     if pref and pref ~= "" then return pref end
 
     local home = os.getenv("USERPROFILE") or os.getenv("HOME") or ""
-    local script_dir = (script and script:match("^(.*)[/\\]")) or THIS_DIR
-    local plugin_root = script_dir:match("^(.*)[/\\]python$") or script_dir
+    local root = plugin_root(script)
     local found = first_existing({
-        plugin_root .. "/.venv/Scripts/python.exe",
-        plugin_root .. "/.venv/bin/python",
+        root .. "/.venv/Scripts/python.exe",
+        root .. "/.venv/bin/python",
         THIS_DIR .. "/../.venv/Scripts/python.exe",
         THIS_DIR .. "/../.venv/bin/python",
         home .. "/Pictures/DarkTable/Settings/Plugins/darktable-assisted-culling/.venv/Scripts/python.exe",
@@ -704,7 +721,8 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
 
             -- Stage A: the scorer shortlists each burst's best frames by the fast heuristic
             -- and picks one prompt per shortlisted frame: a vehicle box or a salient point.
-            local detector = dt.gui and dt.preferences.read("assisted_culling", "detector_model", "file") or ""
+            local detector = plugin_root(sc_script) .. "/models/" .. DETECTOR_FILE
+            if not file_exists(detector) then detector = "" end
             local points_cmd = shell_quote(py_bin) .. " -u " .. shell_quote(sc_script)
                 .. " " .. shell_quote(MANIFEST_PATH)
                 .. " " .. shell_quote(POINTS_PATH)

@@ -81,7 +81,7 @@ Add-Content "$env:LOCALAPPDATA\darktable\luarc" 'require "contrib/assisted_culli
 Start darktable, open **preferences → lua options**, and set:
 
 - **Assisted Culling: python interpreter**: the venv's `python.exe` / `bin/python`
-- **Assisted Culling: score_images.py**: `python/score_images.py` from this repo, or leave it empty and keep `score_images.py` next to `assisted_culling.lua`
+- **Assisted Culling: plugin folder**: this repo's folder. `python/score_images.py`, `models/` and `.venv` are found inside it, so the interpreter preference above is only needed if your Python lives elsewhere. A folder without `python/score_images.py` is an error.
 
 The other preferences are optional; see [Preferences](#preferences).
 
@@ -90,7 +90,7 @@ The other preferences are optional; see [Preferences](#preferences).
 Only needed for the *subject tracking (SAM)* sharpness mode. Every other mode works without them.
 
 1. **SAM mask model** (needs darktable 5.6+). In darktable, open **preferences → AI**, then enable and download a SAM or SAM 2 mask model. darktable stores and manages it, and the plugin uses whichever mask model is enabled there. SegNext mask models aren't supported; if one is enabled, the run stops and says so.
-2. **Vehicle detector** (optional, for motorsport). Download [`object_detection_yolox_2022nov.onnx`](https://github.com/opencv/opencv_zoo/raw/main/models/object_detection_yolox/object_detection_yolox_2022nov.onnx) (36 MB, Apache-2.0), ideally into a `models` folder in the repo, then set **Assisted Culling: object detector model (YOLOX .onnx)** in preferences → lua options to that file. See [Vehicle detector](#vehicle-detector) for what it does.
+2. **Vehicle detector** (optional, for motorsport). Download [`object_detection_yolox_2022nov.onnx`](https://github.com/opencv/opencv_zoo/raw/main/models/object_detection_yolox/object_detection_yolox_2022nov.onnx) (36 MB, Apache-2.0), into the `models` folder in the repo; it's used automatically once it's there. See [Vehicle detector](#vehicle-detector) for what it does.
 
 ## Using it
 
@@ -209,12 +209,12 @@ Guessing the subject point works on a bright livery but can pick a sponsor board
    curl -L -o models/object_detection_yolox_2022nov.onnx https://github.com/opencv/opencv_zoo/raw/main/models/object_detection_yolox/object_detection_yolox_2022nov.onnx
    ```
 
-   Re-cloning the repo deletes it. If you do that often, keep it next to the score cache instead (`assisted_culling` in darktable's config directory).
-2. Set **Assisted Culling: object detector model** in preferences → Lua options to the file's full path, e.g. `C:\Users\you\darktable-assisted-culling\models\object_detection_yolox_2022nov.onnx`.
+   Re-cloning the repo deletes it.
+2. Nothing else: with **Assisted Culling: plugin folder** set, the file is used whenever `models/object_detection_yolox_2022nov.onnx` exists.
 
 On each shortlisted frame, YOLOX finds cars, motorcycles and trucks (race cars are often labelled as trucks). The most prominent one, scored by confidence × size, becomes SAM's prompt, so a car filling a third of the frame beats a small one in the background. A frame with no vehicle (a crowd shot, a pit board) uses the point guess as before.
 
-It runs on the CPU and adds about a tenth of a second per frame. If the file is missing or isn't a model, the run stops and says so. Leave the preference empty to switch it off.
+It runs on the CPU and adds about a tenth of a second per frame. If the file is missing or isn't a model, the run stops and says so. Remove the file from `models/` to switch it off.
 
 ### Exposure
 
@@ -238,8 +238,7 @@ All under **preferences → lua options**.
 | Preference | Default | What it does |
 |------------|---------|--------------|
 | Assisted Culling: python interpreter | empty | Python with the requirements installed |
-| Assisted Culling: score_images.py | empty (auto-detect) | Path to the scorer |
-| Assisted Culling: object detector model (YOLOX .onnx) | empty (off) | Enables the [vehicle detector](#vehicle-detector) in SAM mode |
+| Assisted Culling: plugin folder | empty (auto-detect) | This repo's folder; `python/`, `models/` and `.venv` are found inside it. Its `models/` detector enables the [vehicle detector](#vehicle-detector) in SAM mode |
 | Assisted Culling: apply ratings while scoring | off | Applies results as they arrive instead of all at the end. Faster on big batches, but darktable's UI shares the CPU with the scorer; turn off if it lags. |
 | Assisted Culling: fast JPEG decoding | on | Decodes JPEGs and raw previews at reduced size. Several times faster; scores shift slightly, which matters little since keepers are ranked within each burst. |
 | Assisted Culling: burst gap (seconds) | 2 | Photos taken closer together than this are one burst. 2 s suits continuous-drive bursts; for deliberate re-takes on a phone, 5 s fits better. |
