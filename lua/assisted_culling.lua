@@ -7,7 +7,6 @@
 
 local M = {}
 
-M.BURST_GAP_SECONDS = 2
 M.cancel_requested = false
 M.module_installed = false
 M.event_registered = false
@@ -22,6 +21,7 @@ local queue = {}
 local run_next -- defined after start_culling; score_images calls it as a run finishes
 local clear_button = nil
 local run_tag_check = nil
+local group_support_combo, group_node_entry = nil, nil
 
 function M.exif_time_to_epoch(s)
     if not s then return nil end
@@ -34,29 +34,71 @@ function M.exif_time_to_epoch(s)
     })
 end
 
-function M.cluster_by_time(items, gap_seconds)
-    gap_seconds = gap_seconds or M.BURST_GAP_SECONDS
-    local timed, untimed = {}, {}
-    for _, item in ipairs(items) do
-        if item.epoch then table.insert(timed, item) else table.insert(untimed, item) end
-    end
-    table.sort(timed, function(a, b) return a.epoch < b.epoch end)
+local GROUP_PREFIX = "Assisted Grouping|"
+local GROUP_STAMP = "^%d%d%d%d%-%d%d%-%d%d %d%d:%d%d:%d%d$"
 
-    local burst_of = {}
-    local next_burst = 0
-    local prev_epoch = nil
-    for _, item in ipairs(timed) do
-        if prev_epoch == nil or (item.epoch - prev_epoch) > gap_seconds then
-            next_burst = next_burst + 1
+-- Greatest-stamp "Assisted Grouping|<stamp>|Group" among the tag names, or nil.
+function M.newest_group_node(tag_lists)
+    local best
+    for _, tags in ipairs(tag_lists) do
+        for _, name in ipairs(tags) do
+            if name:sub(1, #GROUP_PREFIX) == GROUP_PREFIX then
+                local stamp, rest = name:sub(#GROUP_PREFIX + 1):match("^([^|]+)|(.*)$")
+                if stamp and stamp:match(GROUP_STAMP) and (rest == "Group" or rest:sub(1, 6) == "Group|") then
+                    if not best or stamp > best then best = stamp end
+                end
+            end
         end
-        burst_of[item.id] = next_burst
-        prev_epoch = item.epoch
     end
-    for _, item in ipairs(untimed) do
-        next_burst = next_burst + 1
-        burst_of[item.id] = next_burst
+    return best and (GROUP_PREFIX .. best .. "|Group") or nil
+end
+
+-- id -> child name under node (first by name); second return lists ids with several children.
+function M.tag_group_keys(items, node)
+    local prefix = node .. "|"
+    local key_of, multi = {}, {}
+    for _, item in ipairs(items) do
+        local children = {}
+        for name in pairs(item.tags) do
+            if name:sub(1, #prefix) == prefix then
+                local child = name:sub(#prefix + 1)
+                if child ~= "" and not child:find("|", 1, true) then children[#children + 1] = child end
+            end
+        end
+        if #children > 0 then
+            table.sort(children)
+            key_of[item.id] = children[1]
+            if #children > 1 then multi[#multi + 1] = item.id end
+        end
     end
-    return burst_of
+    return key_of, multi
+end
+
+function M.native_group_keys(items)
+    local key_of = {}
+    for _, item in ipairs(items) do
+        if item.leader then key_of[item.id] = tostring(item.leader) end
+    end
+    return key_of
+end
+
+-- Dense integers from 1 by first appearance; an id with no key gets its own.
+function M.number_groups(ids, key_of)
+    local group_of, by_key, n = {}, {}, 0
+    for _, id in ipairs(ids) do
+        local key = key_of[id]
+        if key == nil then
+            n = n + 1
+            group_of[id] = n
+        else
+            if not by_key[key] then
+                n = n + 1
+                by_key[key] = n
+            end
+            group_of[id] = by_key[key]
+        end
+    end
+    return group_of
 end
 
 function M.csv_line(fields)
@@ -259,10 +301,14 @@ if dt.gui then
         "Assisted Culling: fast JPEG decoding",
         "Decodes JPEGs and RAW previews at reduced size, several times faster. Sharpness scores shift slightly, but keepers are ranked within each burst, so picks rarely change.",
         true)
-    dt.preferences.register("assisted_culling", "burst_gap_seconds", "integer",
-        "Assisted Culling: burst gap (seconds)",
-        "Photos taken closer together than this are grouped into one burst",
-        2, 1, 60)
+    dt.preferences.register("assisted_culling", "group_support", "string",
+        "Assisted Culling: grouping support",
+        "How photos are grouped before keepers are picked: native (darktable groups), tags (Assisted Grouping tags) or none. Set from the panel",
+        "native")
+    dt.preferences.register("assisted_culling", "group_node", "string",
+        "Assisted Culling: grouping tag node",
+        "Tag node whose children are the groups when grouping support is tags. Empty = the newest Assisted Grouping run. Set from the panel",
+        "")
     dt.preferences.register("assisted_culling", "diagnostic_tags", "bool",
         "Assisted Culling: diagnostic tags",
         "Tag how each frame was judged (Assisted Culling|Subject, |Technique, |Scored) for filtering and spot-checks; off removes them on the next run",
@@ -628,6 +674,20 @@ local function tags_of(img)
     return have
 end
 
+local GROUP_SUPPORT = { { "native", "Native groups" }, { "tags", "Grouping tags" }, { "none", "None" } }
+
+local function group_support_key()
+    local label = group_support_combo and group_support_combo.value
+    for _, g in ipairs(GROUP_SUPPORT) do
+        if g[2] == label then return g[1] end
+    end
+    local stored = dt.preferences.read("assisted_culling", "group_support", "string")
+    for _, g in ipairs(GROUP_SUPPORT) do
+        if g[1] == stored then return stored end
+    end
+    return "native"
+end
+
 -- Returns 1 if a write was needed (attach/detach), else 0.
 local function sync_tag(img, have, tag, name, wanted)
     if wanted and not have[name] then
@@ -702,29 +762,57 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         local n_primary = #primaries
         local n_dups = #images - n_primary
 
-        local time_items = {}
-        for _, img in ipairs(primaries) do
-            table.insert(time_items, { id = img.id, epoch = M.exif_time_to_epoch(img.exif_datetime_taken) })
-        end
+        local primary_ids = {}
+        for _, img in ipairs(primaries) do table.insert(primary_ids, img.id) end
 
-        local gap = M.BURST_GAP_SECONDS
-        if dt.gui then
-            local g = dt.preferences.read("assisted_culling", "burst_gap_seconds", "integer")
-            if g and g >= 1 then gap = g end
+        local mechanism = group_support_key()
+        local key_of, node, multi = {}, nil, {}
+        if mechanism == "native" then
+            local items = {}
+            for _, img in ipairs(primaries) do
+                items[#items + 1] = { id = img.id, leader = img.group_leader and img.group_leader.id }
+            end
+            key_of = M.native_group_keys(items)
+        elseif mechanism == "tags" then
+            local items, lists = {}, {}
+            for _, img in ipairs(primaries) do
+                local have = tags_of(img)
+                items[#items + 1] = { id = img.id, tags = have }
+                local names = {}
+                for name in pairs(have) do names[#names + 1] = name end
+                lists[#lists + 1] = names
+            end
+            local typed = group_node_entry and group_node_entry.text or dt.preferences.read("assisted_culling", "group_node", "string")
+            typed = (typed or ""):match("^%s*(.-)%s*$")
+            -- entry widgets have no change callback: save the typed node when a run reads it
+            if typed ~= (dt.preferences.read("assisted_culling", "group_node", "string") or "") then
+                dt.preferences.write("assisted_culling", "group_node", "string", typed)
+            end
+            node = typed ~= "" and typed or M.newest_group_node(lists)
+            if node then key_of, multi = M.tag_group_keys(items, node) end
         end
-        local burst_of = M.cluster_by_time(time_items, gap)
+        local burst_of = M.number_groups(primary_ids, key_of)
+
+        local size_of, n_bursts, grouped = {}, 0, 0
+        for _, id in ipairs(primary_ids) do
+            if not size_of[burst_of[id]] then n_bursts = n_bursts + 1 end
+            size_of[burst_of[id]] = (size_of[burst_of[id]] or 0) + 1
+        end
+        for _, id in ipairs(primary_ids) do
+            if size_of[burst_of[id]] >= 2 then grouped = grouped + 1 end
+        end
+        local msg = string.format("group support %s: %d of %d photos in groups of 2+", mechanism, grouped, #primaries)
+        if mechanism == "tags" then
+            msg = msg .. string.format(", node %s", node or "(none found)")
+            if node and next(key_of) == nil then msg = msg .. " (matches no selected photo)" end
+            if #multi > 0 then msg = msg .. ", several children on ids " .. table.concat(multi, ",") end
+        end
+        log(msg)
 
         local overlap, fast_jpeg = false, true
         if dt.gui then
             overlap = dt.preferences.read("assisted_culling", "apply_while_scoring", "bool") and true or false
             fast_jpeg = dt.preferences.read("assisted_culling", "fast_jpeg_decode", "bool") and true or false
-        end
-
-        local burst_seen, n_bursts, n_untimed = {}, 0, 0
-        for _, it in ipairs(time_items) do
-            local b = burst_of[it.id]
-            if not burst_seen[b] then burst_seen[b] = true; n_bursts = n_bursts + 1 end
-            if not it.epoch then n_untimed = n_untimed + 1 end
         end
 
         pcall(os.remove, MANIFEST_PATH)
@@ -752,13 +840,10 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
 
         log(string.format("fast JPEG %s, apply while scoring %s, SAM model %s",
             tostring(fast_jpeg), tostring(overlap), tostring(sam_model or "none")))
-        say(string.format("Assisted Culling: scoring %d images in %d bursts (%s keepers, %s ranking, %ds burst gap)",
-            n_primary, n_bursts, pretty(keep_mode), pretty(rank_mode), gap))
+        say(string.format("Assisted Culling: scoring %d images in %d groups (%s keepers, %s ranking, %s grouping)",
+            n_primary, n_bursts, pretty(keep_mode), pretty(rank_mode), mechanism))
         if n_dups > 0 then
             say(string.format("Assisted Culling: %d duplicate(s) share a file with another image; each file is scored once and its result copied to all of them.", n_dups))
-        end
-        if n_untimed > 0 then
-            say(string.format("Assisted Culling: %d image(s) have no capture time, so each is scored as its own burst.", n_untimed))
         end
         if n_primary > 1000 then
             say(_("Assisted Culling: large selection, this can take several minutes. Click Cancel culling to stop at any time."))
@@ -1599,6 +1684,33 @@ local function install_panel()
         start_culling(true)
     end
 
+    local stored_support = dt.preferences.read("assisted_culling", "group_support", "string")
+    local support_index = 1
+    for i, g in ipairs(GROUP_SUPPORT) do
+        if g[1] == stored_support then support_index = i end
+    end
+    -- changed_callback is async and fires on every assignment to `selected`: write only on a real change
+    group_support_combo = dt.new_widget("combobox") {
+        label = _("Grouping support"),
+        tooltip = _("What groups photos before keepers are picked. Native groups: darktable's image groups. Grouping tags: the children of the tag node below. None: every photo is judged alone."),
+        changed_callback = function(self)
+            local key
+            for _, g in ipairs(GROUP_SUPPORT) do
+                if g[2] == self.value then key = g[1] end
+            end
+            if key and key ~= dt.preferences.read("assisted_culling", "group_support", "string") then
+                dt.preferences.write("assisted_culling", "group_support", "string", key)
+            end
+        end,
+        GROUP_SUPPORT[1][2], GROUP_SUPPORT[2][2], GROUP_SUPPORT[3][2],
+    }
+    group_support_combo.selected = support_index
+    group_node_entry = dt.new_widget("entry") {
+        placeholder = _("Grouping tag node (blank = newest run)"),
+        tooltip = _("Grouping tags only: the tag node whose children are the groups, e.g. Assisted Grouping|2026-01-01 12:00:00|Group. Blank uses the newest Assisted Grouping run on the selected photos."),
+        text = dt.preferences.read("assisted_culling", "group_node", "string") or "",
+    }
+
     run_tag_check = dt.new_widget("check_button") {
         label = _("Tag each run"),
         tooltip = _("Add a timestamp tag (Assisted Culling|Run|YYYY-MM-DD HH:MM) to every image a run writes, so the latest run's photos can be filtered apart from earlier ones. Stamps accumulate; remove old ones in darktable's tag manager. Clear culling marks leaves them."),
@@ -1705,6 +1817,8 @@ local function install_panel()
         exp_combo,
         keep_combo,
         non_keeper_combo,
+        group_support_combo,
+        group_node_entry,
         run_tag_check,
         action_button,
         why_button,

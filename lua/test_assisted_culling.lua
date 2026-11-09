@@ -26,27 +26,35 @@ local t1 = C.exif_time_to_epoch("2026:06:01 14:30:00")
 local t2 = C.exif_time_to_epoch("2026:06:01 14:30:01")
 check("consecutive seconds differ by 1", t2 - t1, 1)
 
--- cluster_by_time --------------------------------------------------------
--- Three shots one second apart (a burst), then a fourth shot 10 seconds
--- later (a separate moment), then one image with no EXIF time at all.
-local items = {
-    { id = 1, epoch = C.exif_time_to_epoch("2026:06:01 14:30:00") },
-    { id = 2, epoch = C.exif_time_to_epoch("2026:06:01 14:30:01") },
-    { id = 3, epoch = C.exif_time_to_epoch("2026:06:01 14:30:02") },
-    { id = 4, epoch = C.exif_time_to_epoch("2026:06:01 14:30:12") },
-    { id = 5, epoch = nil },
-}
-local bursts = C.cluster_by_time(items, 2)
+-- group keys ----------------------------------------------------------------
+local G10 = "Assisted Grouping|2026-11-09 10:00:00|Group"
+local G12 = "Assisted Grouping|2026-11-09 12:30:00|Group"
+check("newest_group_node picks the greatest stamp",
+    C.newest_group_node({ { G10 .. "|0001" }, { "F1|Ferrari", G12 .. "|0001" } }), G12)
+check("newest_group_node ignores other tags", C.newest_group_node({ { "F1|Ferrari" } }), nil)
+check("newest_group_node with empty input", C.newest_group_node({}), nil)
 
-check("burst: images 1,2,3 share a burst", bursts[1] == bursts[2] and bursts[2] == bursts[3], true)
-check("burst: image 4 is a separate burst from 1-3", bursts[4] ~= bursts[1], true)
-check("burst: untimed image 5 gets its own burst", bursts[5] ~= bursts[1] and bursts[5] ~= bursts[4], true)
+local gk = C.tag_group_keys({
+    { id = 1, tags = { [G12 .. "|0001"] = true, [G12 .. "|0001|x"] = true } },
+    { id = 2, tags = { [G12 .. "|0002"] = true } },
+}, G12)
+check("tag_group_keys reads immediate children only", gk[1] .. "/" .. gk[2], "0001/0002")
+local gk2, multi = C.tag_group_keys({
+    { id = 3, tags = { [G12 .. "|0002"] = true, [G12 .. "|0001"] = true } },
+}, G12)
+check("tag_group_keys takes the first child by name", gk2[3], "0001")
+check("tag_group_keys reports the photo", multi[1], 3)
+local gk3 = C.tag_group_keys({ { id = 4, tags = { [G10 .. "|0001"] = true } } }, G12)
+check("tag_group_keys leaves unmatched photos out", gk3[4], nil)
 
--- order shouldn't matter: shuffle the input and expect the same clustering
-local shuffled = { items[4], items[1], items[3], items[5], items[2] }
-local bursts2 = C.cluster_by_time(shuffled, 2)
-check("burst: clustering is order-independent",
-    (bursts2[1] == bursts2[2] and bursts2[2] == bursts2[3] and bursts2[4] ~= bursts2[1]), true)
+local nk = C.native_group_keys({ { id = 1, leader = 5 }, { id = 2, leader = 5 }, { id = 3 } })
+check("native_group_keys maps leaders", nk[1] .. nk[2] .. tostring(nk[3]), "55nil")
+
+local ng = C.number_groups({ 10, 11, 12, 13 }, { [10] = "a", [11] = "a", [13] = "b" })
+check("number_groups shares and separates",
+    table.concat({ ng[10], ng[11], ng[12], ng[13] }, ","), "1,1,2,3")
+local ng2 = C.number_groups({ 7, 8, 9 }, {})
+check("number_groups with no keys at all", ng2[7] .. ng2[8] .. ng2[9], "123")
 
 -- csv helpers ------------------------------------------------------------
 local line = C.csv_line({ 42, "/home/user/photo 01.NEF", 7 })

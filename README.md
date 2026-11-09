@@ -2,7 +2,7 @@
 
 A culling assistant for [darktable](https://www.darktable.org/). Select a batch of images in lighttable, click one button, and it will:
 
-- group your selection into **bursts** by capture time
+- group your selection into **bursts** using the groups you already made (darktable's own groups or [Assisted Grouping](../darktable-assisted-grouping/README.md) tags)
 - score every frame for **sharpness** and **exposure clipping**
 - pick the sharpest frame in each burst as the **keeper**
 - write the result back as a **star rating** plus **tags** under `Assisted Culling|…`
@@ -138,7 +138,7 @@ Re-running is safe: every tag is re-synced to the new result, so a frame that wa
 A few things a re-run doesn't touch:
 
 - **Frames that can't be read** (counted as "unreadable" in the done message) keep whatever an earlier run left on them, tags and stars included.
-- **Frames outside the selection** aren't re-scored. Bursts are grouped from the selected frames only, so re-running on part of a burst can leave a keeper from each run. Select whole bursts, or the whole shoot.
+- **Frames outside the selection** aren't re-scored. Groups are read from the selected frames only, so re-running on part of a burst can leave a keeper from each run. Select whole bursts, or the whole shoot.
 - **A cancelled run** keeps the changes it already made; the rest keep their old values.
 
 Tick **Tag each run** to also stamp every frame a run writes with `Assisted Culling|Run|YYYY-MM-DD HH:MM`, so you can filter darktable down to one run's frames. Stamps accumulate, and **Clear culling marks** leaves them; remove old ones in darktable's tag manager.
@@ -249,7 +249,8 @@ All under **preferences → lua options**.
 | Assisted Culling: plugin folder | empty (auto-detect) | This repo's folder; `python/`, `models/` and `.venv` are found inside it. Its `models/` detector enables the [vehicle detector](#vehicle-detector) in SAM mode |
 | Assisted Culling: apply ratings while scoring | off | Applies results as they arrive instead of all at the end. Faster on big batches, but darktable's UI shares the CPU with the scorer; turn off if it lags. |
 | Assisted Culling: fast JPEG decoding | on | Decodes JPEGs and raw previews at reduced size. Several times faster; scores shift slightly, which matters little since keepers are ranked within each burst. |
-| Assisted Culling: burst gap (seconds) | 2 | Photos taken closer together than this are one burst. 2 s suits continuous-drive bursts; for deliberate re-takes on a phone, 5 s fits better. |
+| Assisted Culling: grouping support | native | `native`, `tags` or `none`. Set from the panel's **Grouping support** control, see [Grouping support](#grouping-support) |
+| Assisted Culling: grouping tag node | empty (newest run) | The tag node whose children are the groups in `tags` mode. Set from the panel |
 | Assisted Culling: diagnostic tags | on | Tags how each frame was judged (`Subject`, `Technique`, `Scored`); see [What you get](#what-you-get). Each tag write reloads darktable's collection, so turn off to speed up applying results. |
 | Assisted Culling: *Tag* lowers stars | on, one per flag | Off = that flag is still tagged but never costs stars. See [Flags cost stars](#flags-cost-stars-never-the-keeper). |
 
@@ -259,7 +260,7 @@ All under **preferences → lua options**.
 you select images in lighttable
         |
         v
-assisted_culling.lua groups the selection into bursts by EXIF capture time
+assisted_culling.lua groups the selection by Grouping support (native, tags or none)
         |
         v
 assisted_culling.lua writes manifest.csv (id, filepath, burst_id, …, shutter, aperture) and runs score_images.py
@@ -271,15 +272,21 @@ score_images.py scores sharpness and exposure, picks the keepers per burst, writ
 assisted_culling.lua reads results.csv and applies ratings and tags
 ```
 
-Two small processes talking through CSV files. The Lua side is split into pure logic (time parsing, clustering, CSV) with no darktable dependency, and the darktable integration proper; only the second half needs darktable to run.
+Two small processes talking through CSV files. The Lua side is split into pure logic (time parsing, group keys, CSV) with no darktable dependency, and the darktable integration proper; only the second half needs darktable to run.
 
 ### Scoring
 
 Sharpness is the variance of the Laplacian of a downscaled grayscale copy, a standard and cheap focus proxy. Raw variance isn't comparable across cameras, lenses or ISOs, so frames are ranked against the rest of *this* batch and the percentile drives the star rating. Exposure is flagged when more than 2% of pixels are crushed or blown. Within a burst the highest sharpness wins; the others are tagged `Rejected` and rated per the non-keepers setting.
 
-### Why group by time
+### Grouping support
 
-An earlier version grouped frames by perceptual image hashing. That technique is built to spot near-identical copies of a file, which isn't the same problem as "different frames of the same burst", where subject or focus genuinely changed between shots, and the results were inconsistent. darktable already gives Lua scripts each image's `exif_datetime_taken`, and clustering on capture-time proximity (the same approach the community's `AutoGrouper.lua` uses) is simpler and far more reliable.
+Culling no longer clusters photos by capture time. Keepers are picked within groups that something else already made, and the panel's **Grouping support** combobox picks which:
+
+- **Native groups** (default): darktable's own image groups. A photo's group is its group leader; members share one group even when the leader isn't in the selection.
+- **Grouping tags**: the children of an [Assisted Grouping](../darktable-assisted-grouping/README.md) tag node, e.g. `Assisted Grouping|2026-01-01 12:00:00|Group|NNNN`. The **Grouping tag node (blank = newest run)** entry names the node; blank uses the newest Assisted Grouping run found on the selected photos. Assisted Grouping must have **Write group tags** on, or there is nothing to find. A photo with several children under the node takes the first by name (the log lists them); a photo tagged only by an older run is alone.
+- **None**: every photo is its own group and is judged alone.
+
+A photo with no group is its own group, and a selection with no groups at all still runs. Groups are not size-checked: a coarse group (Assisted Grouping's burst gap set high, or its Camera or Parent layers joining different cars) makes culling pick one keeper across all of them. That is your grouping settings at work: tighten the grouping, switch to **None**, or fix the group. The log records the mechanism, how many photos landed in groups of 2 or more, and in Grouping tags mode the node used (or that it matched no selected photo).
 
 ### How the SAM mode fits together
 
@@ -291,7 +298,7 @@ An earlier version grouped frames by perceptual image hashing. That technique is
 
 ### Score cache
 
-Decoding and scoring is the slow part of a run, so per-frame scores are saved in `assisted_culling/scores.sqlite` inside darktable's config directory (e.g. `~/.config/darktable` on Linux and macOS). Re-running the same shoot with only a different ranking mode, keeper count, non-keeper option, burst gap or "… lowers stars" preference then skips decoding and re-applies in seconds.
+Decoding and scoring is the slow part of a run, so per-frame scores are saved in `assisted_culling/scores.sqlite` inside darktable's config directory (e.g. `~/.config/darktable` on Linux and macOS). Re-running the same shoot with only a different ranking mode, keeper count, non-keeper option, grouping or "… lowers stars" preference then skips decoding and re-applies in seconds.
 
 A cached score is only reused when everything that produced it is the same:
 
@@ -299,11 +306,11 @@ A cached score is only reused when everything that produced it is the same:
 |-------------------------------|------------------------------|
 | the file itself (path, modified time, size) | ranking mode |
 | sharpness mode, as adjusted by [shooting intent](#shooting-intent-from-exif) | keepers, non-keepers |
-| exposure mode | burst gap |
+| exposure mode | grouping support |
 | fast JPEG decode | the per-flag "… lowers stars" preferences |
 | SAM mode: the mask model, the vehicle detector file, the prompt, and your last darktable edit of the frame | |
 
-In SAM mode, raising the keeper count or changing the burst gap can put new frames on a burst's shortlist; only those get a SAM pass. An edit in darktable (crop, rotate, lens correction) changes what SAM sees, so it re-runs SAM for that frame next time.
+In SAM mode, raising the keeper count or changing the grouping can put new frames on a burst's shortlist; only those get a SAM pass. An edit in darktable (crop, rotate, lens correction) changes what SAM sees, so it re-runs SAM for that frame next time.
 
 Entries not used for 90 days are deleted at the start of a run. To start over, delete the file.
 
@@ -313,7 +320,6 @@ EXIF can't supply the prompt instead: darktable exposes focus *distance*, not th
 
 Everything you'd change per shoot is a panel option or a preference. What's left is a named constant at the top of the file that uses it:
 
-- `assisted_culling.lua`: `BURST_GAP_SECONDS` (default 2) is the burst gap used when the preference isn't available, e.g. headless runs. On a 14-frame hand-held phone series (frames 4–50 s apart) 2 s grouped nothing, while 5 s clustered three pairs and picked the sharper frame each time.
 - `assisted_culling.lua`: `PROGRESS_ANALYSIS` (0.75) is the share of the progress bar for analysis; applying ratings fills the rest. In SAM mode, `PROGRESS_SUBJECTS` (0.15) and `PROGRESS_SAM` (0.45) mark where finding subjects and segmenting end.
 - `assisted_culling.lua`: `STAGE2_BATCH_WRITE_BUDGET` (60 tag writes) and `STAGE2_BATCH_LINES` (200 results) size each slice of the final apply step before it yields to the GUI. Lower them if darktable stutters while ratings apply.
 - `score_images.py`:
@@ -391,7 +397,6 @@ The darktable half can be exercised headlessly through `darktable-cli`, which in
 ```
 set DT_AI_CULL_FOLDER=C:/path/to/photos
 set DT_AI_CULL_REPORT=C:/path/to/report.tsv
-set DT_AI_CULL_GAP=5                     # optional BURST_GAP_SECONDS override
 darktable-cli.exe any.jpg out.jpg --core --library "%LOCALAPPDATA%\darktable\library.db" -d lua --luacmd "dofile([[C:/path/to/tools/e2e_cli.lua]])"
 ```
 
@@ -405,7 +410,7 @@ Things that cost time to find out, recorded so they don't again:
 - **Registering a lib straight from `luarc` is a startup race.** darktable can report lighttable as the current view before the view has finished initialising, and a lib registered in that window is silently never attached (`src/views/view.c` documents it; the lua-scripts hit it as #19197). The plugin installs its panel from the `view-changed` event into lighttable instead, which fires only once the view is fully up.
 - **`darktable-cli` never runs your `luarc`.** Since 5.6 the user `luarc` is loaded by `script_manager` (GUI only); before that the C code only loaded it when a GUI existed. `--luacmd` still runs, and it's the way to test headlessly. Anything GTK-wrapped (`register_lib`, `preferences.register`) blocks forever headless, so the plugin gates those on `dt.gui`.
 - **`dt.control.execute` releases the Lua lock** while the child runs. That keeps the GUI responsive, but headless it lets `darktable-cli` tear Lua down mid-run once its export finishes, so without a GUI the plugin uses plain `os.execute` and holds the lock.
-- **`group_with` first removes the image from its current group**, and removing a *leader* hands its group to another member. The plugin no longer stacks bursts with darktable's image grouping (bursts are a scoring concept only, tracked by capture time), but if that's ever added back: on a re-run over already-grouped images, attaching to a leader that still sits in an old group scatters the burst, so detach each keeper into a fresh group before attaching its burst-mates.
+- **`group_with` first removes the image from its current group**, and removing a *leader* hands its group to another member. The plugin no longer stacks bursts with darktable's image grouping (bursts are a scoring concept only, read from the groups you made), but if that's ever added back: on a re-run over already-grouped images, attaching to a leader that still sits in an old group scatters the burst, so detach each keeper into a fresh group before attaching its burst-mates.
 - **Windows shell-outs go through a `.bat` file**, following `lib/dtutils/system.lua` in darktable's lua-scripts: cmd.exe mangles a command line with more than one quoted item. In that file, write the exit code with the redirect first (`> "f" echo %ERRORLEVEL%`): `echo 0> "f"` reads as "redirect handle 0" and leaves `f` empty.
 - **Setting `img.rating` from Lua reloads the whole collection, once per image** (`src/lua/image.c`); tags and darktable's own rating action don't. So the final apply step sets ratings in batches: for each star value it selects that batch and fires the `views/thumbtable/rating` action, then restores your selection. The action rates darktable's *act-on* images (the hovered thumbnail, or the images shown in preview or culling layout), so the plugin checks `dt.gui.action_images` equals the batch first and rates one by one when it doesn't. "Apply ratings while scoring" keeps per-image writes, since changing the selection while you're working would get in the way.
 

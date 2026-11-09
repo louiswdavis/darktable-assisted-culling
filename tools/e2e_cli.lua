@@ -28,7 +28,6 @@ local dt = require "darktable"
 
 local FOLDER = assert(os.getenv("DT_AI_CULL_FOLDER"), "set DT_AI_CULL_FOLDER")
 local REPORT = assert(os.getenv("DT_AI_CULL_REPORT"), "set DT_AI_CULL_REPORT")
-local GAP = tonumber(os.getenv("DT_AI_CULL_GAP"))  -- optional BURST_GAP_SECONDS override
 
 local function log(s) dt.print_log("[e2e] " .. s) end
 
@@ -51,8 +50,7 @@ end
 
 local ok, err = pcall(function()
     local culling = require "contrib/assisted_culling"
-    if GAP then culling.BURST_GAP_SECONDS = GAP end
-    log("plugin loaded, gap = " .. culling.BURST_GAP_SECONDS .. ", gui = " .. tostring(dt.gui ~= nil))
+    log("plugin loaded, gui = " .. tostring(dt.gui ~= nil))
 
     local images = {}
     for _, name in ipairs(list_files(FOLDER)) do
