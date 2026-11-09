@@ -16,6 +16,7 @@ Everything runs locally: a Lua plugin inside darktable and a small Python/OpenCV
 - [Requirements](#requirements)
 - [Install](#install)
 - [Using it](#using-it)
+- [Presets](#presets)
 - [Panel options](#panel-options)
 - [Preferences](#preferences)
 - [How it works](#how-it-works)
@@ -91,7 +92,7 @@ Start darktable, open **preferences → lua options**, and set:
 - **Assisted Culling: python interpreter**: the venv's `python.exe` / `bin/python`. On Windows the plugin runs the `pythonw.exe` beside it through `python/launch.py`, so no console window opens and no `.vbs`/`.bat` is written (antivirus behaviour checks such as Bitdefender Advanced Threat Defense flag that chain). A venv or python.org install has both files.
 - **Assisted Culling: plugin folder**: this repo's folder. `python/score_images.py`, `models/` and `.venv` are found inside it, so the interpreter preference above is only needed if your Python lives elsewhere. A folder without `python/score_images.py` is an error.
 
-The other preferences are optional; see [Preferences](#preferences).
+Every other setting lives in the panel and is saved with its [preset](#presets).
 
 ## Using it
 
@@ -123,7 +124,7 @@ Frames are also tagged with how they were judged, so you can spot-check the scor
 
 #### Choosing which tags are written
 
-Every branch above has its own *"Assisted Culling: tag …"* switch in preferences → Lua options, all on by default. Turn off the ones you don't use to keep darktable's tag list short:
+Every branch above has its own switch under **tags written** in the panel, saved with the [preset](#presets) and all on in `template`. Each switch's tooltip names the tags it writes. Turn off the ones you don't use to keep darktable's tag list short:
 
 - **Off** = the next run stops writing that branch and removes it from the images it processes. A branch that was never written never shows up in the tag list.
 - **Stars and keeper picks don't change.** The tags only report the decision; flags still cost stars per *"… lowers stars"*.
@@ -139,7 +140,7 @@ Overexposed, Underexposed and Eyes Closed each take one star off. They never dec
 Two safeguards keep deliberate shots from being punished:
 
 - **Shared by the whole burst = no penalty.** If every frame in a burst is flagged the same way, it was most likely shot that way (a dark tunnel exit, say), so each frame keeps the tag but not the lost star.
-- **Per-flag switch.** For styles where a flag is the point (low-key, high-key), turn off *"Assisted Culling: … lowers stars"* for that flag in preferences → Lua options. Frames are still tagged (unless that flag's *tag* switch is off); the stars are left alone.
+- **Per-flag switch.** For styles where a flag is the point (low-key, high-key), turn off *… lowers stars* for that flag under **options** in the panel. Frames are still tagged (unless that flag's *tag* switch is off); the stars are left alone.
 
 ### Re-running and clearing
 
@@ -165,13 +166,26 @@ To protect a frame, tag it `Assisted Culling|Locked` yourself (create the tag in
 
 Older versions used red/yellow colour labels and a `Culled` tag. The tag comes off the next time an image is re-scored (or with **Clear culling marks**); the labels stay. To remove them once, collect by the `Assisted Culling` tag, select all, and toggle the labels off.
 
+## Presets
+
+The **preset** picker at the top of the panel saves every panel setting (everything but the buttons) under a name, so a shoot type is one click away.
+
+- **preset**: `template` first, then your presets by name. Picking one loads its values into the panel. The panel opens on the last one you picked.
+- **template**: the built-in defaults. It can't be updated, renamed or deleted; use it as the starting point for a new preset.
+- **☰** beside it: **update preset "<name>"** saves the panel into the selected preset; **store new preset…** asks for a name (type it, then **OK**) and saves the panel as a new preset; **rename preset…**; **delete preset** asks first. On `template` only **store new preset…** is offered.
+- **unsaved changes** shows under the picker when the panel differs from the saved preset. Switching presets drops them. Text fields have no change signal, so their edits show when **☰** is opened or a run starts.
+- Each preset is `assisted_culling/presets/<name>.json` in darktable's config folder. A name can't be `template` or use characters a Windows file name can't hold.
+- A setting missing from a file uses its default; **update preset** writes every setting, so older files fill in. A value that's no longer valid uses the default and logs one line naming the preset and setting.
+- A file that can't be read or parsed: the panel says so, names the file, and keeps its current values. The plugin never rewrites a broken file; fix or delete it.
+- A run reads the settings when it starts, so switching presets mid-run doesn't change it. Runs without the GUI (`--luacmd`) use the last picked preset, or the template defaults.
+
 ## Panel options
 
-### Preset
+### Genre
 
-*landscape*, *portrait*, *sport* and *macro* set four of the options below in one click. *custom* is selected automatically the moment you change any of them by hand. Presets never change *non-keepers*.
+*landscape*, *portrait*, *sport* and *macro* set four of the options below in one click. *custom* is selected automatically the moment you change any of them by hand. Genres never change *non-keepers*. A [preset](#presets) saves the genre along with everything else.
 
-| Preset | Ranking mode | Sharpness | Exposure | Keepers |
+| Genre | Ranking mode | Sharpness | Exposure | Keepers |
 |--------|--------------|-----------|----------|---------|
 | landscape | universal absolute | edge-to-edge uniformity | strict histogram | single best only |
 | portrait | universal absolute | face & eyes (OpenCV) | subject only (ignore sky) | portrait (1 or 2) |
@@ -249,22 +263,27 @@ How many frames per burst survive: *single best only*, *portrait (1 or 2)*, *dyn
 
 What happens to the frames that aren't kept: *leave alone*, *reject (-1)*, or a fixed star count from 0 to 5. They always get the `Rejected` tag regardless.
 
+### Grouping, run, options
+
+- **grouping support** (Native groups, Grouping tags, None; default Native groups). What groups photos before keepers are picked, see [Grouping support](#grouping-support).
+- **Grouping tag node (blank = newest run)**. The tag node whose children are the groups in Grouping tags mode.
+- **Tag each run** (default off). Stamps every frame a run writes with `Assisted Culling|Run|YYYY-MM-DD HH:MM`.
+- **Apply ratings while scoring** (default off). Applies results as they arrive instead of all at the end. Faster on big batches, but darktable's UI shares the CPU with the scorer; turn off if it lags.
+- **Fast JPEG decoding** (default on). Decodes JPEGs and raw previews at reduced size. Several times faster; scores shift slightly, which matters little since keepers are ranked within each burst.
+- ***Flag* lowers stars** (default on, one per flag). Off = that flag never costs stars; it's still tagged if its tag switch is on. See [Flags cost stars](#flags-cost-stars-never-the-keeper).
+
+### Tags written
+
+One switch per branch (default on): `Keeper`, `Rejected`, `Overexposed`, `Underexposed`, `Eyes Closed`, `Subject`, `Technique`, `Scored`. Off = runs stop writing that branch and remove it from the images they process; images outside the run keep it until **Clear culling marks**. Ratings and keeper picks don't change. Fewer tag writes also apply results faster. See [Choosing which tags are written](#choosing-which-tags-are-written).
+
 ## Preferences
 
-All under **preferences → lua options**.
+All under **preferences → lua options**. Everything else is a panel setting saved with its [preset](#presets).
 
 | Preference | Default | What it does |
 |------------|---------|--------------|
 | Assisted Culling: python interpreter | empty | Python with the requirements installed |
 | Assisted Culling: plugin folder | empty (auto-detect) | This repo's folder; `python/`, `models/` and `.venv` are found inside it. Its `models/` detector enables the [vehicle detector](#vehicle-detector) in SAM mode |
-| Assisted Culling: apply ratings while scoring | off | Applies results as they arrive instead of all at the end. Faster on big batches, but darktable's UI shares the CPU with the scorer; turn off if it lags. |
-| Assisted Culling: fast JPEG decoding | on | Decodes JPEGs and raw previews at reduced size. Several times faster; scores shift slightly, which matters little since keepers are ranked within each burst. |
-| Assisted Culling: grouping support | native | `native`, `tags` or `none`. Set from the panel's **grouping support** control, see [Grouping support](#grouping-support) |
-| Assisted Culling: grouping tag node | empty (newest run) | The tag node whose children are the groups in `tags` mode. Set from the panel |
-| Assisted Culling: tag *Branch* | on, one per branch | `Keeper`, `Rejected`, `Overexposed`, `Underexposed`, `Eyes Closed`, `Subject`, `Technique`, `Scored`. Off = runs stop writing that branch and remove it from the images they process; images outside the run keep it until **Clear culling marks**. Ratings and keeper picks don't change. Fewer tag writes also apply results faster. See [Choosing which tags are written](#choosing-which-tags-are-written). |
-| Assisted Culling: *Tag* lowers stars | on, one per flag | Off = that flag never costs stars (it's still tagged if its *tag* preference is on). See [Flags cost stars](#flags-cost-stars-never-the-keeper). |
-
-**Migration:** `diagnostic_tags` (one switch for `Subject`, `Technique` and `Scored`) was replaced by `tag_subject`, `tag_technique` and `tag_scored`. If it was off, the first start with this version turns those three off, once; the old key is then ignored.
 
 ## How it works
 
@@ -321,7 +340,7 @@ A cached score is only reused when everything that produced it is the same:
 | the file itself (path, modified time, size) | ranking mode |
 | sharpness mode, as adjusted by [shooting intent](#shooting-intent-from-exif) | keepers, non-keepers |
 | exposure mode | grouping support |
-| fast JPEG decode | the per-flag "… lowers stars" preferences |
+| fast JPEG decode | the per-flag *… lowers stars* options |
 | SAM mode: the mask model, the vehicle detector file, the prompt, and your last darktable edit of the frame | |
 
 In SAM mode, raising the keeper count or changing the grouping can put new frames on a burst's shortlist; only those get a SAM pass. An edit in darktable (crop, rotate, lens correction) changes what SAM sees, so it re-runs SAM for that frame next time.
@@ -390,7 +409,7 @@ Use a selection with at least two bursts of 3+ frames each.
 8. **Cancel.** Start a run on a large selection and click the button while it shows **Cancel culling**. *Expect:* the run stops; frames already done keep their changes. Repeat with the X on the job in darktable's job area. *Expect:* the button shows **Cancelling...** until the run has stopped, then **Cull selection** again; a new run started straight after works normally.
 9. **Why these ratings?** with nothing selected. *Expect:* "Assisted Culling: select some images first".
 10. **Clear culling marks** on the selection. *Expect:* the plugin's tags are gone; star ratings are unchanged.
-11. **Tag switches.** Cull a batch with every tag on and note the stars. In **preferences → lua options**, turn off *Assisted Culling: tag Subject* and *tag Rejected*, then cull the same batch again. *Expect:* the stars and keepers are the same as before; no image in the batch has an `Assisted Culling|Subject|…` or `Assisted Culling|Rejected` tag; `Keeper`, the flags, `Technique` and `Scored` are still there. No `LUA ERROR`.
+11. **Tag switches.** Cull a batch with every tag on and note the stars. Under **tags written** in the panel, turn off *Subject* and *Rejected*, then cull the same batch again. *Expect:* the stars and keepers are the same as before; no image in the batch has an `Assisted Culling|Subject|…` or `Assisted Culling|Rejected` tag; `Keeper`, the flags, `Technique` and `Scored` are still there. No `LUA ERROR`.
 
 ## Development
 

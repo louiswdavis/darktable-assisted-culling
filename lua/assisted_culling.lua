@@ -20,8 +20,6 @@ local is_clearing = false
 local queue = {}
 local run_next -- defined after start_culling; score_images calls it as a run finishes
 local clear_button = nil
-local run_tag_check = nil
-local group_support_combo, group_node_entry = nil, nil
 
 -- Copy of the group-key block in darktable-assisted-tagging/lua/assisted_tagging.lua; change both.
 local GROUP_PREFIX = "Assisted Grouping|"
@@ -520,6 +518,61 @@ function M.preset_order(names)
 end
 -- end preset block
 
+-- Panel choices as stored keys, in combobox order.
+local genre_opts = {"landscape", "portrait", "sport", "macro", "custom"}
+local rank_opts = {"universal", "binary", "relative"}
+local sharp_opts = {"center", "tiles_uniformity", "peak", "face_detect", "subject_focus", "sam_subject"}
+local exp_opts = {"whole_frame", "subject_only", "strict", "none"}
+local keep_opts = {"single_best", "portrait_mode", "dynamic_burst", "keep_all"}
+local nk_opts = {"leave", "reject", "0", "1", "2", "3", "4", "5"}
+local group_support_opts = {"native", "tags", "none"}
+M.CHOICES = { genre = genre_opts, rank_mode = rank_opts, sharp_mode = sharp_opts, exp_mode = exp_opts,
+    keep_mode = keep_opts, non_keeper = nk_opts, group_support = group_support_opts }
+
+-- The four modes each genre fills in. "custom" has none.
+M.GENRE_MODES = {
+    landscape = { rank_mode = "universal", sharp_mode = "tiles_uniformity", exp_mode = "strict", keep_mode = "single_best" },
+    portrait = { rank_mode = "universal", sharp_mode = "face_detect", exp_mode = "subject_only", keep_mode = "portrait_mode" },
+    sport = { rank_mode = "universal", sharp_mode = "subject_focus", exp_mode = "whole_frame", keep_mode = "dynamic_burst" },
+    macro = { rank_mode = "universal", sharp_mode = "peak", exp_mode = "whole_frame", keep_mode = "keep_all" },
+}
+
+-- True when s's four modes are the ones `genre` fills in.
+function M.genre_matches(genre, s)
+    local modes = M.GENRE_MODES[genre]
+    if not modes then return false end
+    for k, v in pairs(modes) do
+        if s[k] ~= v then return false end
+    end
+    return true
+end
+
+-- Every panel setting a preset stores, in panel order.
+M.PRESET_SCHEMA = {
+    { key = "genre", kind = "choice", choices = genre_opts, default = "landscape" },
+    { key = "rank_mode", kind = "choice", choices = rank_opts, default = "universal" },
+    { key = "sharp_mode", kind = "choice", choices = sharp_opts, default = "tiles_uniformity" },
+    { key = "exp_mode", kind = "choice", choices = exp_opts, default = "strict" },
+    { key = "keep_mode", kind = "choice", choices = keep_opts, default = "single_best" },
+    { key = "non_keeper", kind = "choice", choices = nk_opts, default = "leave" },
+    { key = "group_support", kind = "choice", choices = group_support_opts, default = "native" },
+    { key = "group_node", kind = "string", default = "" },
+    { key = "run_tag", kind = "bool", default = false },
+    { key = "apply_while_scoring", kind = "bool", default = false },
+    { key = "fast_jpeg_decode", kind = "bool", default = true },
+    { key = "penalise_overexposed", kind = "bool", default = true },
+    { key = "penalise_underexposed", kind = "bool", default = true },
+    { key = "penalise_eyes_closed", kind = "bool", default = true },
+    { key = "tag_keeper", kind = "bool", default = true },
+    { key = "tag_rejected", kind = "bool", default = true },
+    { key = "tag_overexposed", kind = "bool", default = true },
+    { key = "tag_underexposed", kind = "bool", default = true },
+    { key = "tag_eyes_closed", kind = "bool", default = true },
+    { key = "tag_subject", kind = "bool", default = true },
+    { key = "tag_technique", kind = "bool", default = true },
+    { key = "tag_scored", kind = "bool", default = true },
+}
+
 local ok, dt = pcall(require, "darktable")
 if not ok then return M end
 
@@ -600,44 +653,20 @@ if dt.gui then
         "Assisted Culling: plugin folder",
         "The darktable-assisted-culling folder (holds python/, models/ and .venv). Empty = auto-detect. Subject tracking (SAM) uses models/" .. DETECTOR_FILE .. " from it when present, to outline the most prominent car, motorcycle or truck for SAM",
         "")
-
-    -- Register UI State Preferences
-    dt.preferences.register("assisted_culling", "apply_while_scoring", "bool",
-        "Assisted Culling: apply ratings while scoring",
-        "Faster overall on big batches, but darktable's UI shares the CPU with the scorer; turn off if the UI lags",
-        false)
-    dt.preferences.register("assisted_culling", "fast_jpeg_decode", "bool",
-        "Assisted Culling: fast JPEG decoding",
-        "Decodes JPEGs and RAW previews at reduced size, several times faster. Sharpness scores shift slightly, but keepers are ranked within each burst, so picks rarely change.",
-        true)
-    dt.preferences.register("assisted_culling", "group_support", "string",
-        "Assisted Culling: grouping support",
-        "How photos are grouped before keepers are picked: native (darktable groups), tags (Assisted Grouping tags) or none. Set from the panel",
-        "native")
-    dt.preferences.register("assisted_culling", "group_node", "string",
-        "Assisted Culling: grouping tag node",
-        "Tag node whose children are the groups when grouping support is tags. Empty = the newest Assisted Grouping run. Set from the panel",
-        "")
 end
 
--- The panel's last combobox choices live in darktablerc but stay out of the
--- preferences dialog (unregistered), so an unset one reads as 0.
--- Also stores the result, so a combo's startup changed_callback (see store_choice) sees no change.
-local function read_choice(name, default, count)
-    local v = dt.preferences.read("assisted_culling", name, "integer")
-    if v < 1 or v > count then v = default end
-    dt.preferences.write("assisted_culling", name, "integer", v)
-    return v
+-- The settings a run reads: a copy of the panel's, taken when the run was clicked.
+-- Headless runs use the remembered preset (the template defaults when it is gone).
+local function remembered_settings()
+    local name = dt.preferences.read("assisted_culling", "preset", "string") or ""
+    local f = name ~= "" and name ~= "template"
+        and io.open(dt.configuration.config_dir .. "/assisted_culling/presets/" .. name .. ".json", "rb")
+    if not f then return M.preset_defaults(M.PRESET_SCHEMA) end
+    local text = f:read("a")
+    f:close()
+    return (M.preset_merge(M.PRESET_SCHEMA, M.preset_decode(text) or {}))
 end
-
--- Combobox changed_callbacks run asynchronously, after any guard flag is reset, and
--- every `selected` assignment fires one, even an unchanged one. A callback acts
--- only when this reports a real change from the stored value.
-local function store_choice(name, value)
-    if dt.preferences.read("assisted_culling", name, "integer") == value then return false end
-    dt.preferences.write("assisted_culling", name, "integer", value)
-    return true
-end
+local settings = remembered_settings()
 
 local function file_exists(name)
     local f = io.open(name, "r")
@@ -922,62 +951,37 @@ local FLAGS = {
 local ALL_TAGS = { TAG_KEEPER, TAG_REJECT, TAG_CULLED }
 for _, f in ipairs(FLAGS) do ALL_TAGS[#ALL_TAGS + 1] = f.tag end
 
-if dt.gui then
-    for _, f in ipairs(FLAGS) do
-        local label = f.tag:match("|(.+)$")
-        dt.preferences.register("assisted_culling", "penalise_" .. f.name, "bool",
-            "Assisted Culling: " .. label .. " lowers stars",
-            "On: " .. label .. " images get one star less. Off: they're still tagged " .. label .. " (if its tag preference is on)"
-                .. " but keep their rating (for shots where it's a style, not a mistake).",
-            true)
-    end
-end
-
--- One "tag_<key>" preference per branch under "Assisted Culling|". Off = runs
+-- One "tag_<key>" setting per branch under "Assisted Culling|". Off = runs
 -- stop writing it and detach it from the images they process; ratings and
 -- keeper picks are unchanged. Keys match FLAGS names for the flag branches.
 local TAG_TOGGLES = {
-    { key = "keeper", label = "Keeper" },
-    { key = "rejected", label = "Rejected" },
-    { key = "overexposed", label = "Overexposed" },
-    { key = "underexposed", label = "Underexposed" },
-    { key = "eyes_closed", label = "Eyes Closed" },
-    { key = "subject", label = "Subject", diag = true },
-    { key = "technique", label = "Technique", diag = true },
-    { key = "scored", label = "Scored", diag = true },
+    { key = "keeper", label = "Keeper", writes = { "Keeper" },
+      when = "the best frame (or frames) of its burst." },
+    { key = "rejected", label = "Rejected", writes = { "Rejected" },
+      when = "it lost to a sharper frame from the same burst. Its stars follow the non-keepers setting." },
+    { key = "overexposed", label = "Overexposed", writes = { "Overexposed" },
+      when = "blown highlights, judged by the exposure setting." },
+    { key = "underexposed", label = "Underexposed", writes = { "Underexposed" },
+      when = "crushed shadows, judged by the exposure setting." },
+    { key = "eyes_closed", label = "Eyes Closed", writes = { "Eyes Closed" },
+      when = "face & eyes sharpness only: a face big enough to judge shows no open eyes. Dark sunglasses trigger it too." },
+    { key = "subject", label = "Subject", diag = true, writes = { "Subject|Vehicle|Detected", "Subject|Vehicle|Guessed" },
+      when = "subject tracking (SAM) only. Detected: the vehicle detector found the car SAM was pointed at. Guessed: SAM got the guessed subject point instead." },
+    { key = "technique", label = "Technique", diag = true, writes = { "Technique|Panning", "Technique|Shallow DoF" },
+      when = "the burst's EXIF switched its sharpness mode: panning at 1/125 s or slower, shallow DoF at f/4 or wider." },
+    { key = "scored", label = "Scored", diag = true, writes = { "Scored|Masked", "Scored|Subject bias" },
+      when = "subject tracking (SAM) only. Masked: the burst was ranked on SAM masks. Subject bias: a shortlisted frame got no mask, so the burst fell back." },
 }
 
-if dt.gui then
-    for _, t in ipairs(TAG_TOGGLES) do
-        dt.preferences.register("assisted_culling", "tag_" .. t.key, "bool",
-            "Assisted Culling: tag " .. t.label,
-            "Write Assisted Culling|" .. t.label .. " tags. Off: the next run removes them from the images it"
-                .. " processes. Ratings and keeper picks are unchanged.",
-            true)
-    end
-    -- diagnostic_tags (one switch for Subject, Technique and Scored) was replaced
-    -- by tag_subject/tag_technique/tag_scored; carry an explicit "off" over once.
-    -- Read as a string so an unset key ("") isn't mistaken for off.
-    if not dt.preferences.read("assisted_culling", "tag_prefs_migrated", "bool") then
-        if dt.preferences.read("assisted_culling", "diagnostic_tags", "string") == "FALSE" then
-            for _, t in ipairs(TAG_TOGGLES) do
-                if t.diag then dt.preferences.write("assisted_culling", "tag_" .. t.key, "bool", false) end
-            end
-        end
-        dt.preferences.write("assisted_culling", "tag_prefs_migrated", "bool", true)
-    end
-end
-
--- Headless runs have no preferences dialog, so they write every tag.
 local function tag_enabled(key)
-    return not dt.gui or dt.preferences.read("assisted_culling", "tag_" .. key, "bool")
+    return settings["tag_" .. key]
 end
 
 -- Flags the user set to tag-only, as the scorer's --tag-only-flags value.
 local function tag_only_flags()
     local names = {}
     for _, f in ipairs(FLAGS) do
-        if not dt.preferences.read("assisted_culling", "penalise_" .. f.name, "bool") then
+        if not settings["penalise_" .. f.name] then
             names[#names + 1] = f.name
         end
     end
@@ -1028,20 +1032,6 @@ local function tags_of(img)
     local have = {}
     for _, t in ipairs(tags.get_tags(img)) do have[t.name] = true end
     return have
-end
-
-local GROUP_SUPPORT = { { "native", "Native groups" }, { "tags", "Grouping tags" }, { "none", "None" } }
-
-local function group_support_key()
-    local label = group_support_combo and group_support_combo.value
-    for _, g in ipairs(GROUP_SUPPORT) do
-        if g[2] == label then return g[1] end
-    end
-    local stored = dt.preferences.read("assisted_culling", "group_support", "string")
-    for _, g in ipairs(GROUP_SUPPORT) do
-        if g[1] == stored then return stored end
-    end
-    return "native"
 end
 
 -- Returns 1 if a write was needed (attach/detach), else 0. Creates the tag only
@@ -1116,7 +1106,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         -- A shot's group comes from any of its images, not just the lead: grouping may
         -- have seen only the RAWs (JPEGs hidden), or grouped the pair's RAW alone.
         local function members(img) return group_of[tonumber(img.id) or img.id] end
-        local mechanism = group_support_key()
+        local mechanism = settings.group_support
         local key_of, node, multi = {}, nil, {}
         if mechanism == "native" then
             local items = {}
@@ -1144,12 +1134,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                 for name in pairs(have) do names[#names + 1] = name end
                 lists[#lists + 1] = names
             end
-            local typed = group_node_entry and group_node_entry.text or dt.preferences.read("assisted_culling", "group_node", "string")
-            typed = (typed or ""):match("^%s*(.-)%s*$")
-            -- entry widgets have no change callback: save the typed node when a run reads it
-            if typed ~= (dt.preferences.read("assisted_culling", "group_node", "string") or "") then
-                dt.preferences.write("assisted_culling", "group_node", "string", typed)
-            end
+            local typed = (settings.group_node or ""):match("^%s*(.-)%s*$")
             node = typed ~= "" and typed or M.newest_group_node(lists)
             if node then key_of, multi = M.tag_group_keys(items, node) end
         end
@@ -1171,11 +1156,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         end
         log(msg)
 
-        local overlap, fast_jpeg = false, true
-        if dt.gui then
-            overlap = dt.preferences.read("assisted_culling", "apply_while_scoring", "bool") and true or false
-            fast_jpeg = dt.preferences.read("assisted_culling", "fast_jpeg_decode", "bool") and true or false
-        end
+        local overlap, fast_jpeg = settings.apply_while_scoring, settings.fast_jpeg_decode
 
         pcall(os.remove, MANIFEST_PATH)
         pcall(os.remove, RESULTS_PATH)
@@ -1406,7 +1387,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
 
         -- ---- result application (shared by "while scoring" and the final drain) ----
         -- one stamp per run; not in ALL_TAGS, so clearing marks and later runs leave earlier stamps alone
-        local run_stamp = run_tag_check and run_tag_check.value and os.date(TAG_RUN_FORMAT) or nil
+        local run_stamp = settings.run_tag and os.date(TAG_RUN_FORMAT) or nil
         local run_stamp_tag
 
         -- Reads are cheap; writes reload the lighttable collection / rewrite XMP, so skip no-ops.
@@ -1416,7 +1397,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         -- batches, since each img.rating write reloads the whole collection.
         local rating_batch = nil
 
-        -- read once per run, like the group prefs
+        -- read once per run
         local tag_on, diag_off = {}, {}
         for _, t in ipairs(TAG_TOGGLES) do
             tag_on[t.key] = tag_enabled(t.key)
@@ -1849,24 +1830,349 @@ function M.clear_marks(images)
         cleared, total, failed > 0 and (", " .. failed .. " couldn't be updated") or ""))
 end
 
-local rank_opts = {"universal", "binary", "relative"}
-local sharp_opts = {"center", "tiles_uniformity", "peak", "face_detect", "subject_focus", "sam_subject"}
-local exp_opts = {"whole_frame", "subject_only", "strict", "none"}
-local keep_opts = {"single_best", "portrait_mode", "dynamic_burst", "keep_all"}
-local nk_opts = {"leave", "reject", "0", "1", "2", "3", "4", "5"}
+-- Preset controls: drift-guarded copy in grouping, culling and tagging. Change all three.
+-- The preset picker and ☰ menu at the top of the panel. Lua panels can't use darktable's
+-- own presets (lualib.c leaves get_params/set_params NULL), so this builds its own.
+-- Combobox callbacks run later and fire on every `selected` assignment, so each one acts
+-- only when the widget's value differs from `current`.
 
-local genre_combo, rank_combo, sharp_combo, exp_combo, keep_combo, non_keeper_combo
+local PRESET_WHY = {
+    empty = "type a name first",
+    reserved = '"template" is the built-in preset',
+    ["bad character"] = 'a name can\'t hold / \\ : * ? " < > |',
+}
 
--- The panel's current choices, read when a job is clicked so a queued job keeps them.
-local function current_settings()
-    return {
-        rank_opts[rank_combo and rank_combo.selected or 1] or "universal",
-        sharp_opts[sharp_combo and sharp_combo.selected or 1] or "center",
-        exp_opts[exp_combo and exp_combo.selected or 1] or "whole_frame",
-        keep_opts[keep_combo and keep_combo.selected or 1] or "single_best",
-        nk_opts[non_keeper_combo and non_keeper_combo.selected or 1] or "leave",
-    }
+-- Presets as <dir>/<name>.json. The folder is made on first use.
+local function preset_file_store(dir)
+    local windows = dt.configuration.running_os == "windows"
+    local function quote(s)
+        if windows then return '"' .. s:gsub("/", "\\") .. '"' end
+        return "'" .. s:gsub("'", "'\\''") .. "'"
+    end
+    os.execute((windows and "mkdir " or "mkdir -p ") .. quote(dir) .. (windows and " 2>nul" or " 2>/dev/null"))
+    local store = {}
+    function store.path(name) return dir .. "/" .. name .. ".json" end
+    function store.list()
+        local names = {}
+        local p = io.popen(windows and ("dir /b " .. quote(dir .. "/*.json") .. " 2>nul")
+            or ("ls -1 " .. quote(dir) .. " 2>/dev/null"))
+        if not p then return names end
+        for line in p:lines() do
+            local name = line:gsub("\r$", ""):match("^(.+)%.json$")
+            if name then names[#names + 1] = name end
+        end
+        p:close()
+        return names
+    end
+    function store.read(name)
+        local f = io.open(store.path(name), "rb")
+        if not f then return nil end
+        local text = f:read("a")
+        f:close()
+        return text
+    end
+    -- Write a .tmp, then swap it in (Windows can't rename over an existing file).
+    function store.write(name, text)
+        local path = store.path(name)
+        local f = io.open(path .. ".tmp", "wb")
+        if not f then return false end
+        local ok = f:write(text)
+        f:close()
+        if not ok then os.remove(path .. ".tmp"); return false end
+        os.remove(path)
+        return os.rename(path .. ".tmp", path) and true or false
+    end
+    function store.rename(old, new)
+        local ok, err = os.rename(store.path(old), store.path(new))
+        return ok and true or false, err
+    end
+    function store.remove(name)
+        local ok, err = os.remove(store.path(name))
+        return ok and true or false, err
+    end
+    return store
 end
+
+-- o = { prefix, schema, store, read_panel = fn() -> settings | nil, why,
+--       show = fn(settings), remember = fn(name), initial = name, log = fn(msg),
+--       on_change = fn(name, is_template) | nil, can_switch = fn() -> ok, why | nil,
+--       allow_store_new = bool }
+-- Optional store.copy_note(from, to) -> confirm text | nil, why and store.copy(from, to) -> ok, err:
+-- store new then asks first, and copies the selected preset's store (e.g. a folder) before writing.
+-- Returns ctl: ctl.widget (the box to put first in the panel), ctl.widgets, ctl.select(name),
+-- ctl.refresh(), ctl.check_dirty(), ctl.name(), ctl.saved (settings last loaded or saved).
+local function make_preset_controls(o)
+    local ctl = { widgets = {} }
+    local names, current, menu_actions = { "template" }, nil, {}
+    local name_mode
+    local picker, menu, name_entry, name_box, confirm_label, confirm_box, dirty_label
+    local confirm_button, confirm_action, delete_clicked
+
+    local function say(msg) dt.print(o.prefix .. ": " .. msg) end
+
+    local function index_of(name)
+        for i, n in ipairs(names) do
+            if n == name then return i end
+        end
+    end
+
+    local function set_entries(combo, items)
+        for i = #combo, 1, -1 do combo[i] = nil end
+        for i, text in ipairs(items) do combo[i] = text end
+    end
+
+    local function show_picker(name)
+        local i = index_of(name)
+        if i and picker.selected ~= i then picker.selected = i end
+    end
+
+    -- Loads `name` into the panel. False (values untouched) when the file can't be used.
+    local function load(name)
+        local settings
+        if name == "template" then
+            settings = M.preset_defaults(o.schema)
+        else
+            local text = o.store.read(name)
+            local decoded, err
+            if text then decoded, err = M.preset_decode(text) else err = "can't be read" end
+            if not decoded then
+                local msg = string.format('preset "%s": %s %s, panel unchanged', name, o.store.path(name), err)
+                o.log(msg)
+                say(msg)
+                return false
+            end
+            local problems
+            settings, problems = M.preset_merge(o.schema, decoded)
+            for _, key in ipairs(problems) do
+                o.log(string.format('preset "%s": %s invalid, using default', name, key))
+            end
+            if #problems > 0 then
+                say(string.format('preset "%s": %d invalid value(s) set to the default (see the log)', name, #problems))
+            end
+        end
+        ctl.saved = settings
+        o.show(settings)
+        return true
+    end
+
+    local function hide_boxes()
+        name_box.visible = false
+        confirm_box.visible = false
+    end
+
+    local function ask_name(mode)
+        name_mode = mode
+        name_entry.text = mode == "rename" and current or ""
+        confirm_box.visible = false
+        name_box.visible = true
+    end
+
+    local function update()
+        local settings, why = o.read_panel()
+        if not settings then say(why); return end
+        if not o.store.write(current, M.preset_encode(o.schema, settings)) then
+            say("couldn't write " .. o.store.path(current))
+            return
+        end
+        ctl.saved = settings
+        say(string.format('preset "%s" updated', current))
+        ctl.check_dirty()
+    end
+
+    local function ask_confirm(text, button, action)
+        confirm_label.label = text
+        confirm_button.label = button
+        confirm_action = action
+        name_box.visible = false
+        confirm_box.visible = true
+    end
+
+    local function ask_delete()
+        ask_confirm(string.format('Delete preset "%s"?', current), "Delete", delete_clicked)
+    end
+
+    local function set_menu()
+        local items = { "☰" }
+        menu_actions = { false }
+        local function add(text, action)
+            items[#items + 1] = text
+            menu_actions[#menu_actions + 1] = action
+        end
+        if current ~= "template" then add(string.format('update preset "%s"', current), update) end
+        if o.allow_store_new then add("store new preset…", function() ask_name("store") end) end
+        if current ~= "template" then
+            add("rename preset…", function() ask_name("rename") end)
+            add("delete preset", ask_delete)
+        end
+        set_entries(menu, items)
+        menu.selected = 1
+    end
+
+    function ctl.name() return current end
+
+    -- "unsaved changes" when the panel differs from the file. Template has no file.
+    function ctl.check_dirty()
+        local dirty = false
+        if current ~= "template" and ctl.saved then
+            local settings = o.read_panel()
+            dirty = not settings or not M.preset_equal(o.schema, settings, ctl.saved)
+        end
+        dirty_label.visible = dirty
+        return dirty
+    end
+
+    function ctl.select(name)
+        if name ~= "template" and not index_of(name) then name = "template" end
+        if current and o.can_switch then
+            local ok, why = o.can_switch()
+            if not ok then say(why); show_picker(current); return false end
+        end
+        if not load(name) then
+            if current then show_picker(current) else ctl.select("template") end
+            return false
+        end
+        current = name
+        show_picker(name)
+        o.remember(name)
+        hide_boxes()
+        set_menu()
+        if o.on_change then o.on_change(name, name == "template") end
+        ctl.check_dirty()
+        return true
+    end
+
+    -- Rereads the preset list. A selected preset that has gone falls back to template.
+    function ctl.refresh()
+        names = M.preset_order(o.store.list())
+        set_entries(picker, names)
+        if current and not index_of(current) then
+            current = nil
+            ctl.select("template")
+        elseif current then
+            show_picker(current)
+        end
+    end
+
+    local function name_taken(name)
+        for _, n in ipairs(o.store.list()) do
+            if n:lower() == name:lower() and not (name_mode == "rename" and n == current) then return true end
+        end
+        return false
+    end
+
+    local function name_ok_clicked()
+        local name, why = M.preset_name_ok(name_entry.text)
+        if not name then say("preset name: " .. PRESET_WHY[why]); return end
+        if name_taken(name) then say(string.format('a preset called "%s" already exists', name)); return end
+        if name_mode == "store" then
+            local settings, bad = o.read_panel()
+            if not settings then say(bad); return end
+            local from = current
+            local function store_new()
+                if o.store.copy then
+                    local ok, err = o.store.copy(from, name)
+                    if not ok then say(string.format('couldn\'t copy "%s": %s', from, tostring(err))); return end
+                end
+                if not o.store.write(name, M.preset_encode(o.schema, settings)) then
+                    say("couldn't write " .. o.store.path(name))
+                    return
+                end
+                hide_boxes()
+                ctl.refresh()
+                ctl.select(name)
+            end
+            if o.store.copy_note then
+                local text, why = o.store.copy_note(from, name)
+                if not text then say(why); return end
+                ask_confirm(text, "Store", store_new)
+                return
+            end
+            store_new()
+        else
+            local ok, err = o.store.rename(current, name)
+            if not ok then say(string.format('couldn\'t rename "%s": %s', current, tostring(err))); return end
+            name_box.visible = false
+            current = name
+            ctl.refresh()
+            o.remember(name)
+            set_menu()
+        end
+    end
+
+    delete_clicked = function()
+        local ok, err = o.store.remove(current)
+        if not ok then say(string.format('couldn\'t delete "%s": %s', current, tostring(err))); return end
+        confirm_box.visible = false
+        say(string.format('preset "%s" deleted', current))
+        ctl.refresh()
+    end
+
+    picker = dt.new_widget("combobox") {
+        label = "preset",
+        tooltip = "Pick a saved set of panel settings. template = the defaults. Unsaved changes are dropped when you switch. Save with ☰ → update preset.",
+        changed_callback = function(self)
+            local name = self.value
+            if current and name and name ~= "" and name ~= current then ctl.select(name) end
+        end,
+        "template",
+    }
+    menu = dt.new_widget("combobox") {
+        tooltip = "Preset actions: update the selected preset with the panel's values, store the panel as a new preset, rename or delete.",
+        changed_callback = function(self)
+            local i = self.selected
+            if not i or i <= 1 then return end
+            local action = menu_actions[i]
+            self.selected = 1
+            if action then ctl.check_dirty(); action() end
+        end,
+        "☰",
+    }
+    dirty_label = dt.new_widget("label") { label = "unsaved changes", halign = "start", visible = false }
+    name_entry = dt.new_widget("entry") { placeholder = "preset name", text = "" }
+    name_box = dt.new_widget("box") {
+        orientation = "vertical",
+        visible = false,
+        name_entry,
+        dt.new_widget("box") {
+            orientation = "horizontal",
+            dt.new_widget("button") { label = "OK", clicked_callback = name_ok_clicked },
+            dt.new_widget("button") { label = "Cancel", clicked_callback = function() name_box.visible = false end },
+        },
+    }
+    confirm_label = dt.new_widget("label") { label = "", halign = "start" }
+    confirm_button = dt.new_widget("button") {
+        label = "Delete",
+        clicked_callback = function() if confirm_action then confirm_action() end end,
+    }
+    confirm_box = dt.new_widget("box") {
+        orientation = "vertical",
+        visible = false,
+        confirm_label,
+        dt.new_widget("box") {
+            orientation = "horizontal",
+            confirm_button,
+            dt.new_widget("button") { label = "Cancel", clicked_callback = function() confirm_box.visible = false end },
+        },
+    }
+    ctl.widgets = { picker = picker, menu = menu, dirty_label = dirty_label, name_box = name_box, confirm_box = confirm_box }
+    ctl.widget = dt.new_widget("box") {
+        orientation = "vertical",
+        dt.new_widget("box") { orientation = "horizontal", picker, menu },
+        dirty_label,
+        name_box,
+        confirm_box,
+    }
+
+    ctl.refresh()
+    ctl.select(o.initial or "template")
+    return ctl
+end
+-- end preset controls
+
+-- Panel -----------------------------------------------------------------------
+
+-- The panel's settings; set by install_panel. Read when a job is clicked, so a queued job keeps them.
+local read_panel
 
 -- dt.gui.action_images follows the live selection; a queued job needs the selection as it was.
 local function copy_images(images)
@@ -1878,8 +2184,9 @@ end
 local function launch_score(images, s)
     is_running = true
     M.cancel_requested = false
+    settings = s
     if action_button then action_button.label = _("Cancel culling") end
-    M.score_images(images, s[1], s[2], s[3], s[4], s[5])
+    M.score_images(images, s.rank_mode, s.sharp_mode, s.exp_mode, s.keep_mode, s.non_keeper)
 end
 
 local function clear_queue()
@@ -1920,119 +2227,93 @@ local function start_culling(allow_cancel)
             if action_button then action_button.label = _("Cancelling...") end
             dt.print(_("Assisted Culling: cancelling, finishing the current step..."))
         else
-            local images, settings = copy_images(dt.gui.action_images), current_settings()
-            if not queue_if_busy(_("Culling"), #images > 0, function() launch_score(images, settings) end) then
+            local images, s = copy_images(dt.gui.action_images), read_panel()
+            if not queue_if_busy(_("Culling"), #images > 0, function() launch_score(images, s) end) then
                 dt.print(_("Assisted Culling: already running. Click Cancel culling in the panel to stop it."))
             end
         end
         return
     end
-    launch_score(dt.gui.action_images, current_settings())
+    launch_score(dt.gui.action_images, read_panel())
 end
 
 local function install_panel()
     if M.module_installed then return end
     M.module_installed = true
 
-    local is_updating = false
-    
-    local preset_configs = {
-        {1, 2, 3, 1},
-        {1, 4, 2, 2},
-        {1, 5, 1, 3},
-        {1, 3, 1, 4},
-    }
-
-    local function trigger_custom_override()
-        if is_updating then return end
-        is_updating = true
-        if genre_combo then
-            dt.preferences.write("assisted_culling", "last_genre", "integer", 5)
-            genre_combo.selected = 5
-        end
-        is_updating = false
+    local ctl
+    local function changed()
+        if ctl then ctl.check_dirty() end
     end
 
-    genre_combo = dt.new_widget("combobox") {
-        label = _("preset"),
-        tooltip = _("Fills in the settings below for a photography genre. Changing any of them switches to custom."),
-        _("landscape"), _("portrait"), _("sport"), _("macro"), _("custom"),
-        selected = read_choice("last_genre", 1, 5),
-        changed_callback = function(widget)
-            if is_updating or not store_choice("last_genre", widget.selected) then return end
-            is_updating = true
+    -- The combo values last shown or picked, by schema key. Combobox callbacks run later
+    -- and fire on every `selected` assignment, so each acts only when its value differs.
+    local shown = M.preset_defaults(M.PRESET_SCHEMA)
+    local combos = {}
 
-            local conf = preset_configs[widget.selected]
-            if conf then
-                dt.preferences.write("assisted_culling", "last_rank_mode", "integer", conf[1])
-                dt.preferences.write("assisted_culling", "last_sharp_mode", "integer", conf[2])
-                dt.preferences.write("assisted_culling", "last_exp_mode", "integer", conf[3])
-                dt.preferences.write("assisted_culling", "last_keep_mode", "integer", conf[4])
+    local function index_of(list, key)
+        for i, v in ipairs(list) do
+            if v == key then return i end
+        end
+        return 1
+    end
 
-                if rank_combo then rank_combo.selected = conf[1] end
-                if sharp_combo then sharp_combo.selected = conf[2] end
-                if exp_combo then exp_combo.selected = conf[3] end
-                if keep_combo then keep_combo.selected = conf[4] end
+    local function show_choice(key, value)
+        shown[key] = value
+        local i = index_of(M.CHOICES[key], value)
+        if combos[key].selected ~= i then combos[key].selected = i end
+    end
+
+    local function on_choice(key)
+        return function(widget)
+            local value = M.CHOICES[key][widget.selected]
+            if not value or value == shown[key] then return end
+            shown[key] = value
+            if key == "genre" then
+                for k, v in pairs(M.GENRE_MODES[value] or {}) do show_choice(k, v) end
+            elseif M.GENRE_MODES[shown.genre] and M.GENRE_MODES[shown.genre][key]
+                and not M.genre_matches(shown.genre, shown) then
+                show_choice("genre", "custom")
             end
-            
-            is_updating = false
+            changed()
         end
-    }
+    end
 
-    rank_combo = dt.new_widget("combobox") {
-        label = _("ranking mode"),
-        tooltip = _("universal: keepers get stars from fixed sharpness tiers.\nbinary: keepers get top stars; only flags lower them.\nrelative: tiers scale to this selection, so its sharpest frames get 5 stars.\nIn every mode, the rest follow the non-keepers setting."),
-        _("universal absolute"), _("binary (keepers top)"), _("relative to selection"),
-        selected = read_choice("last_rank_mode", preset_configs[1][1], 3),
-        changed_callback = function(widget)
-            if is_updating or not store_choice("last_rank_mode", widget.selected) then return end
-            trigger_custom_override()
-        end
-    }
+    local function choice_combo(key, label, tooltip, labels)
+        local c = dt.new_widget("combobox") {
+            label = label,
+            tooltip = tooltip,
+            changed_callback = on_choice(key),
+            table.unpack(labels),
+        }
+        c.selected = index_of(M.CHOICES[key], shown[key])
+        combos[key] = c
+        return c
+    end
 
-    sharp_combo = dt.new_widget("combobox") {
-        label = _("sharpness"),
-        tooltip = _("How sharpness is measured.\nedge-to-edge: scores the softest areas of the frame (ignoring plain sky), so a soft corner costs a frame.\nface & eyes: falls back to subject bias when no face is found; tags a frame Eyes Closed (one star lower) when a clear face shows no open eyes.\nsubject tracking (SAM): outlines the subject with darktable's AI mask model before scoring; slower than the rest, since each burst's top few frames go through the model."),
-        _("center crop"), _("edge-to-edge uniformity"), _("absolute peak 1%"), _("face & eyes (OpenCV)"), _("subject bias (center-weighted)"), _("subject tracking (SAM)"),
-        selected = read_choice("last_sharp_mode", preset_configs[1][2], 6),
-        changed_callback = function(widget)
-            if is_updating or not store_choice("last_sharp_mode", widget.selected) then return end
-            trigger_custom_override()
-        end
-    }
+    local genre_combo = choice_combo("genre", _("genre"),
+        _("Fills in the four settings below for a photography genre. Changing any of them switches to custom."),
+        { _("landscape"), _("portrait"), _("sport"), _("macro"), _("custom") })
 
-    exp_combo = dt.new_widget("combobox") {
-        label = _("exposure"),
-        tooltip = _("Flags clipped shadows/highlights (Overexposed/Underexposed tag, one star lower; turn the penalty off in preferences → Lua options)."),
-        _("whole frame"), _("subject only (ignore sky)"), _("strict histogram"), _("ignore exposure"),
-        selected = read_choice("last_exp_mode", preset_configs[1][3], 4),
-        changed_callback = function(widget)
-            if is_updating or not store_choice("last_exp_mode", widget.selected) then return end
-            trigger_custom_override()
-        end
-    }
+    local rank_combo = choice_combo("rank_mode", _("ranking mode"),
+        _("universal: keepers get stars from fixed sharpness tiers.\nbinary: keepers get top stars; only flags lower them.\nrelative: tiers scale to this selection, so its sharpest frames get 5 stars.\nIn every mode, the rest follow the non-keepers setting."),
+        { _("universal absolute"), _("binary (keepers top)"), _("relative to selection") })
 
-    keep_combo = dt.new_widget("combobox") {
-        label = _("keepers"),
-        tooltip = _("How many of each burst are kept (the sharpest ones)."),
-        _("single best only"), _("portrait (1 or 2)"), _("dynamic (1 to 5)"), _("keep all (focus stack)"),
-        selected = read_choice("last_keep_mode", preset_configs[1][4], 4),
-        changed_callback = function(widget)
-            if is_updating or not store_choice("last_keep_mode", widget.selected) then return end
-            trigger_custom_override()
-        end
-    }
+    local sharp_combo = choice_combo("sharp_mode", _("sharpness"),
+        _("How sharpness is measured.\nedge-to-edge: scores the softest areas of the frame (ignoring plain sky), so a soft corner costs a frame.\nface & eyes: falls back to subject bias when no face is found; tags a frame Eyes Closed (one star lower) when a clear face shows no open eyes.\nsubject tracking (SAM): outlines the subject with darktable's AI mask model before scoring; slower than the rest, since each burst's top few frames go through the model."),
+        { _("center crop"), _("edge-to-edge uniformity"), _("absolute peak 1%"), _("face & eyes (OpenCV)"), _("subject bias (center-weighted)"), _("subject tracking (SAM)") })
 
-    non_keeper_combo = dt.new_widget("combobox") {
-        label = _("non-keepers"),
-        tooltip = _("What to do with images that are not kept. They get the Rejected tag unless its preference is off."),
-        _("leave alone"), _("reject (-1)"), _("0 stars"), _("1 star"), _("2 stars"), _("3 stars"), _("4 stars"), _("5 stars"),
-        selected = read_choice("last_nk_mode", 1, 8),
-        changed_callback = function(widget)
-            if is_updating or not store_choice("last_nk_mode", widget.selected) then return end
-            trigger_custom_override()
-        end
-    }
+    local exp_combo = choice_combo("exp_mode", _("exposure"),
+        _("Flags clipped shadows/highlights (Overexposed/Underexposed tag, one star lower; turn the penalty off under options below)."),
+        { _("whole frame"), _("subject only (ignore sky)"), _("strict histogram"), _("ignore exposure") })
+
+    local keep_combo = choice_combo("keep_mode", _("keepers"),
+        _("How many of each burst are kept (the sharpest ones)."),
+        { _("single best only"), _("portrait (1 or 2)"), _("dynamic (1 to 5)"), _("keep all (focus stack)") })
+
+    local non_keeper_combo = choice_combo("non_keeper", _("non-keepers"),
+        _("What to do with images that are not kept. They get the Rejected tag unless tags written → Rejected is off."),
+        { _("leave alone"), _("reject (-1)"), _("0 stars"), _("1 star"), _("2 stars"), _("3 stars"), _("4 stars"), _("5 stars") })
 
     action_button = dt.new_widget("button") {
         label = _("Cull selection"),
@@ -2040,41 +2321,69 @@ local function install_panel()
     }
 
     action_button.clicked_callback = function()
+        changed()
         start_culling(true)
     end
 
-    local stored_support = dt.preferences.read("assisted_culling", "group_support", "string")
-    local support_index = 1
-    for i, g in ipairs(GROUP_SUPPORT) do
-        if g[1] == stored_support then support_index = i end
-    end
-    -- changed_callback is async and fires on every assignment to `selected`: write only on a real change
-    group_support_combo = dt.new_widget("combobox") {
-        label = _("grouping support"),
-        tooltip = _("What groups photos before keepers are picked. Native groups: darktable's image groups. Grouping tags: the children of the tag node below. None: every photo is judged alone."),
-        changed_callback = function(self)
-            local key
-            for _, g in ipairs(GROUP_SUPPORT) do
-                if g[2] == self.value then key = g[1] end
-            end
-            if key and key ~= dt.preferences.read("assisted_culling", "group_support", "string") then
-                dt.preferences.write("assisted_culling", "group_support", "string", key)
-            end
-        end,
-        GROUP_SUPPORT[1][2], GROUP_SUPPORT[2][2], GROUP_SUPPORT[3][2],
-    }
-    group_support_combo.selected = support_index
-    group_node_entry = dt.new_widget("entry") {
+    local group_support_combo = choice_combo("group_support", _("grouping support"),
+        _("What groups photos before keepers are picked. Native groups: darktable's image groups. Grouping tags: the children of the tag node below. None: every photo is judged alone.\nDefault: native groups. Pick grouping tags after an Assisted Grouping run you have not applied as darktable groups."),
+        { _("Native groups"), _("Grouping tags"), _("None") })
+    local group_node_entry = dt.new_widget("entry") {
         placeholder = _("Grouping tag node (blank = newest run)"),
-        tooltip = _("Grouping tags only: the tag node whose children are the groups, e.g. Assisted Grouping|2026-01-01 12:00:00|Group. Blank uses the newest Assisted Grouping run on the selected photos."),
-        text = dt.preferences.read("assisted_culling", "group_node", "string") or "",
+        tooltip = _("Grouping tags only: the tag node whose children are the groups, e.g. Assisted Grouping|2026-01-01 12:00:00|Group. Blank uses the newest Assisted Grouping run on the selected photos.\nDefault: blank. Set it when the photos carry more than one grouping run."),
+        text = "",
     }
 
-    run_tag_check = dt.new_widget("check_button") {
-        label = _("Tag each run"),
-        tooltip = _("Add a timestamp tag (Assisted Culling|Run|YYYY-MM-DD HH:MM) to every image a run writes, so the latest run's photos can be filtered apart from earlier ones. Stamps accumulate; remove old ones in darktable's tag manager. Clear culling marks leaves them."),
-        value = false,
+    -- Check buttons by schema key, in panel order.
+    local checks, check_order = {}, {}
+    local function check(key, label, tooltip)
+        local c = dt.new_widget("check_button") {
+            label = label,
+            tooltip = tooltip,
+            value = shown[key],
+            clicked_callback = changed,
+        }
+        checks[key] = c
+        check_order[#check_order + 1] = key
+        return c
+    end
+
+    local run_tag_check = check("run_tag", _("Tag each run"),
+        _("Add a timestamp tag (Assisted Culling|Run|YYYY-MM-DD HH:MM) to every image a run writes, so the latest run's photos can be filtered apart from earlier ones. Stamps accumulate; remove old ones in darktable's tag manager. Clear culling marks leaves them.\nDefault: off. Turn on when re-running a shoot and you want to review only what changed."))
+
+    local option_checks = {
+        check("apply_while_scoring", _("Apply ratings while scoring"),
+            _("Faster overall on big batches, but darktable's UI shares the CPU with the scorer; turn off if the UI lags.\nDefault: off. Turn on for batches of several hundred frames.")),
+        check("fast_jpeg_decode", _("Fast JPEG decoding"),
+            _("Decodes JPEGs and RAW previews at reduced size, several times faster. Sharpness scores shift slightly, but keepers are ranked within each burst, so picks rarely change.\nDefault: on. Turn off when frames are close in sharpness and you want full-size scores.")),
     }
+    for _i, f in ipairs(FLAGS) do
+        local label = f.tag:match("|(.+)$")
+        option_checks[#option_checks + 1] = check("penalise_" .. f.name, string.format(_("%s lowers stars"), label),
+            string.format(_("On: %s images get one star less. Off: they're still tagged %s (if it's on under tags written) but keep their rating.\nDefault: on. Turn off for styles where it's the point (low-key, high-key)."), label, label))
+    end
+
+    local tag_checks = {}
+    for _i, t in ipairs(TAG_TOGGLES) do
+        tag_checks[#tag_checks + 1] = check("tag_" .. t.key, t.label,
+            string.format(_("Writes: %s\nWhen: %s\nOff: stops writing it and removes it from images on the next run. Ratings and keeper picks are unchanged."),
+                "Assisted Culling|" .. table.concat(t.writes, ", Assisted Culling|"), _(t.when)))
+    end
+
+    read_panel = function()
+        local s = {}
+        for key in pairs(combos) do s[key] = M.CHOICES[key][combos[key].selected] or shown[key] end
+        for _, key in ipairs(check_order) do s[key] = checks[key].value and true or false end
+        s.group_node = (group_node_entry.text or ""):match("^%s*(.-)%s*$")
+        return s
+    end
+
+    local function show_panel(s)
+        for k, v in pairs(s) do shown[k] = v end
+        for key in pairs(combos) do show_choice(key, s[key]) end
+        for _, key in ipairs(check_order) do checks[key].value = s[key] end
+        group_node_entry.text = s.group_node
+    end
 
     clear_button = dt.new_widget("button") {
         label = _("Clear culling marks"),
@@ -2150,27 +2459,27 @@ local function install_panel()
         end
     end
 
-    local panel_box = dt.new_widget("box") {
-        orientation = "vertical",
-        reset_callback = function()
-            if is_updating then return end
-            is_updating = true
-            local conf = preset_configs[1]
-            dt.preferences.write("assisted_culling", "last_genre", "integer", 1)
-            dt.preferences.write("assisted_culling", "last_rank_mode", "integer", conf[1])
-            dt.preferences.write("assisted_culling", "last_sharp_mode", "integer", conf[2])
-            dt.preferences.write("assisted_culling", "last_exp_mode", "integer", conf[3])
-            dt.preferences.write("assisted_culling", "last_keep_mode", "integer", conf[4])
-            dt.preferences.write("assisted_culling", "last_nk_mode", "integer", 1)
+    ctl = make_preset_controls({
+        prefix = "Assisted Culling",
+        schema = M.PRESET_SCHEMA,
+        store = preset_file_store(dt.configuration.config_dir .. "/assisted_culling/presets"),
+        read_panel = read_panel,
+        show = show_panel,
+        remember = function(name) dt.preferences.write("assisted_culling", "preset", "string", name) end,
+        initial = dt.preferences.read("assisted_culling", "preset", "string"),
+        -- a scorer may be appending to the log; its lines wait in the buffer until the run ends
+        log = function(msg) log(msg); if not is_running then flush_log() end end,
+        allow_store_new = true,
+    })
 
-            genre_combo.selected = 1
-            rank_combo.selected = conf[1]
-            sharp_combo.selected = conf[2]
-            exp_combo.selected = conf[3]
-            keep_combo.selected = conf[4]
-            non_keeper_combo.selected = 1
-            is_updating = false
+    local panel = {
+        orientation = "vertical",
+        -- shows the template defaults; nothing is saved
+        reset_callback = function()
+            show_panel(M.preset_defaults(M.PRESET_SCHEMA))
+            changed()
         end,
+        ctl.widget,
         dt.new_widget("section_label") { label = _("scoring") },
         genre_combo,
         rank_combo,
@@ -2185,8 +2494,13 @@ local function install_panel()
         action_button,
         why_button,
         report_button,
-        clear_button
+        clear_button,
+        dt.new_widget("section_label") { label = _("options") },
     }
+    for _, c in ipairs(option_checks) do panel[#panel + 1] = c end
+    panel[#panel + 1] = dt.new_widget("section_label") { label = _("tags written") }
+    for _, c in ipairs(tag_checks) do panel[#panel + 1] = c end
+    local panel_box = dt.new_widget("box")(panel)
 
     dt.register_lib(
         "assisted_culling", _("Assisted Culling"), true, true,

@@ -180,6 +180,28 @@ check("pythonw_of: other launcher is refused", C.pythonw_of("C:/Windows/py.exe")
 
 require("test_preset_block")(C, check)
 
+local cd = C.preset_defaults(C.PRESET_SCHEMA)
+check("preset schema: mode defaults", string.format("%s %s %s %s %s %s %s [%s]", cd.genre, cd.rank_mode, cd.sharp_mode,
+    cd.exp_mode, cd.keep_mode, cd.non_keeper, cd.group_support, cd.group_node),
+    "landscape universal tiles_uniformity strict single_best leave native []")
+check("preset schema: switch defaults", string.format("%s %s %s %s %s %s", cd.run_tag, cd.apply_while_scoring,
+    cd.fast_jpeg_decode, cd.penalise_overexposed, cd.penalise_underexposed, cd.penalise_eyes_closed),
+    "false false true true true true")
+local all_tags_on = true
+for _, k in ipairs({ "keeper", "rejected", "overexposed", "underexposed", "eyes_closed", "subject", "technique", "scored" }) do
+    if cd["tag_" .. k] ~= true then all_tags_on = false end
+end
+check("preset schema: every tag switch defaults on", all_tags_on, true)
+check("preset schema: 22 keys", #C.PRESET_SCHEMA, 22)
+check("genre modes: portrait sharpness", C.GENRE_MODES.portrait.sharp_mode, "face_detect")
+check("genre modes: macro keepers", C.GENRE_MODES.macro.keep_mode, "keep_all")
+check("genre modes: landscape defaults match", C.genre_matches("landscape", cd), true)
+check("genre modes: a changed mode no longer matches",
+    C.genre_matches("landscape", { rank_mode = "binary", sharp_mode = "tiles_uniformity", exp_mode = "strict", keep_mode = "single_best" }), false)
+check("genre modes: custom never matches", C.genre_matches("custom", cd), false)
+check("preset schema: a label for a choice falls back",
+    C.preset_merge(C.PRESET_SCHEMA, { sharp_mode = "face & eyes (OpenCV)" }).sharp_mode, "tiles_uniformity")
+
 print("")
 if failures == 0 then
     print("all tests passed")
