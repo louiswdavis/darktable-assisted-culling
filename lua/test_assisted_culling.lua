@@ -178,6 +178,8 @@ check("pythonw_of: case-insensitive", C.pythonw_of("C:\\Py\\Python.EXE"), "C:\\P
 check("pythonw_of: bare python on PATH", C.pythonw_of("python"), "pythonw")
 check("pythonw_of: other launcher is refused", C.pythonw_of("C:/Windows/py.exe"), nil)
 
+require("test_preset_block")(C, check)
+
 print("")
 if failures == 0 then
     print("all tests passed")

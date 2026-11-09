@@ -311,6 +311,215 @@ function M.pythonw_of(py)
     return nil
 end
 
+-- Preset block: drift-guarded copy in grouping, culling and tagging. Change all three
+-- (test_preset_block.lua is the matching tests). Presets are flat JSON objects: string,
+-- number and boolean values only, so a small codec does instead of a JSON library.
+-- Schema item: { key, kind = "bool"|"string"|"number"|"choice", default, choices }.
+
+local function utf8_char(cp)
+    if cp < 0x80 then return string.char(cp) end
+    if cp < 0x800 then return string.char(0xC0 + math.floor(cp / 0x40), 0x80 + cp % 0x40) end
+    if cp < 0x10000 then
+        return string.char(0xE0 + math.floor(cp / 0x1000), 0x80 + math.floor(cp / 0x40) % 0x40, 0x80 + cp % 0x40)
+    end
+    return string.char(0xF0 + math.floor(cp / 0x40000), 0x80 + math.floor(cp / 0x1000) % 0x40,
+        0x80 + math.floor(cp / 0x40) % 0x40, 0x80 + cp % 0x40)
+end
+
+local JSON_ESCAPES = { ['"'] = '"', ["\\"] = "\\", ["/"] = "/", b = "\b", f = "\f", n = "\n", r = "\r", t = "\t" }
+
+-- Returns the decoded flat object, or nil and why.
+function M.preset_decode(text)
+    if type(text) ~= "string" then return nil, "no text" end
+    local pos = 1
+    if text:sub(1, 3) == "\239\187\191" then pos = 4 end
+    local function skip() pos = text:find("[^ \t\r\n]", pos) or (#text + 1) end
+    local function fail(why) return nil, string.format("%s at character %d", why, pos) end
+    local function read_string()
+        pos = pos + 1 -- opening quote
+        local out = {}
+        while true do
+            local c = text:sub(pos, pos)
+            if c == "" then return nil end
+            if c == '"' then pos = pos + 1; return table.concat(out) end
+            if c == "\\" then
+                local e = text:sub(pos + 1, pos + 1)
+                if e == "u" then
+                    local cp = tonumber(text:sub(pos + 2, pos + 5), 16)
+                    if not cp or #text:sub(pos + 2, pos + 5) ~= 4 then return nil end
+                    pos = pos + 6
+                    if cp >= 0xD800 and cp <= 0xDBFF and text:sub(pos, pos + 1) == "\\u" then
+                        local lo = tonumber(text:sub(pos + 2, pos + 5), 16)
+                        if lo and lo >= 0xDC00 and lo <= 0xDFFF then
+                            cp = 0x10000 + (cp - 0xD800) * 0x400 + (lo - 0xDC00)
+                            pos = pos + 6
+                        end
+                    end
+                    out[#out + 1] = utf8_char(cp)
+                elseif JSON_ESCAPES[e] then
+                    out[#out + 1] = JSON_ESCAPES[e]
+                    pos = pos + 2
+                else
+                    return nil
+                end
+            else
+                local stop = text:find('["\\]', pos) or (#text + 1)
+                out[#out + 1] = text:sub(pos, stop - 1)
+                pos = stop
+            end
+        end
+    end
+
+    skip()
+    if text:sub(pos, pos) ~= "{" then return fail("expected {") end
+    pos = pos + 1
+    local obj = {}
+    skip()
+    if text:sub(pos, pos) == "}" then
+        pos = pos + 1
+    else
+        while true do
+            skip()
+            if text:sub(pos, pos) ~= '"' then return fail("expected a key") end
+            local key = read_string()
+            if not key then return fail("bad key") end
+            skip()
+            if text:sub(pos, pos) ~= ":" then return fail("expected :") end
+            pos = pos + 1
+            skip()
+            local c = text:sub(pos, pos)
+            if c == '"' then
+                local v = read_string()
+                if not v then return fail("bad string") end
+                obj[key] = v
+            elseif c == "t" and text:sub(pos, pos + 3) == "true" then
+                obj[key] = true; pos = pos + 4
+            elseif c == "f" and text:sub(pos, pos + 4) == "false" then
+                obj[key] = false; pos = pos + 5
+            elseif c == "n" and text:sub(pos, pos + 3) == "null" then
+                obj[key] = nil; pos = pos + 4
+            elseif c == "{" or c == "[" then
+                return fail("nested values aren't supported")
+            else
+                local num = text:match("^-?%d+%.?%d*[eE]?[-+]?%d*", pos)
+                local v = num and tonumber(num)
+                if not v then return fail("bad value") end
+                obj[key] = v
+                pos = pos + #num
+            end
+            skip()
+            local sep = text:sub(pos, pos)
+            pos = pos + 1
+            if sep == "}" then break end
+            if sep ~= "," then pos = pos - 1; return fail("expected , or }") end
+        end
+    end
+    skip()
+    if pos <= #text then return fail("unexpected text after }") end
+    return obj
+end
+
+local function json_string(s)
+    return '"' .. s:gsub('[%c"\\]', function(c)
+        if c == '"' then return '\\"' end
+        if c == "\\" then return "\\\\" end
+        if c == "\n" then return "\\n" end
+        if c == "\r" then return "\\r" end
+        if c == "\t" then return "\\t" end
+        return string.format("\\u%04x", c:byte())
+    end) .. '"'
+end
+
+local function json_number(n)
+    if n == math.floor(n) and math.abs(n) < 2 ^ 53 then return string.format("%d", n) end
+    return string.format("%.14g", n)
+end
+
+-- One key per line in schema order, "version" first.
+function M.preset_encode(schema, settings)
+    local lines = { '  "version": 1' }
+    for _, item in ipairs(schema) do
+        local v = settings[item.key]
+        if v == nil then v = item.default end
+        local text
+        if type(v) == "boolean" then text = tostring(v)
+        elseif type(v) == "number" then text = json_number(v)
+        else text = json_string(tostring(v)) end
+        lines[#lines + 1] = "  " .. json_string(item.key) .. ": " .. text
+    end
+    return "{\n" .. table.concat(lines, ",\n") .. "\n}\n"
+end
+
+local function preset_value_ok(item, v)
+    if item.kind == "bool" then return type(v) == "boolean" end
+    if item.kind == "number" then return type(v) == "number" end
+    if item.kind == "string" then return type(v) == "string" end
+    if type(v) ~= "string" then return false end
+    for _, c in ipairs(item.choices or {}) do
+        if c == v then return true end
+    end
+    return false
+end
+
+function M.preset_defaults(schema)
+    local out = {}
+    for _, item in ipairs(schema) do out[item.key] = item.default end
+    return out
+end
+
+-- Every schema key set: the decoded value when valid, else the default. Returns the
+-- settings and the keys whose stored value was unusable (missing keys aren't problems).
+function M.preset_merge(schema, decoded)
+    local out, problems = {}, {}
+    for _, item in ipairs(schema) do
+        local v = decoded and decoded[item.key]
+        if v == nil then
+            out[item.key] = item.default
+        elseif preset_value_ok(item, v) then
+            out[item.key] = v
+        else
+            out[item.key] = item.default
+            problems[#problems + 1] = item.key
+        end
+    end
+    return out, problems
+end
+
+function M.preset_equal(schema, a, b)
+    for _, item in ipairs(schema) do
+        if a[item.key] ~= b[item.key] then return false end
+    end
+    return true
+end
+
+-- Same characters as a folder name can't hold on Windows; "template" is the built-in preset.
+function M.preset_name_ok(raw)
+    local name = (raw or ""):gsub("^%s+", ""):gsub("%s+$", "")
+    if name == "" then return nil, "empty" end
+    if name:lower() == "template" then return nil, "reserved" end
+    if name:find('[/\\:*?"<>|]') then return nil, "bad character" end
+    return name
+end
+
+-- "template" first, then the names sorted case-insensitively, without duplicates.
+function M.preset_order(names)
+    local seen, rest = {}, {}
+    for _, n in ipairs(names) do
+        if n:lower() ~= "template" and not seen[n] then
+            seen[n] = true
+            rest[#rest + 1] = n
+        end
+    end
+    table.sort(rest, function(x, y)
+        local lx, ly = x:lower(), y:lower()
+        if lx == ly then return x < y end
+        return lx < ly
+    end)
+    table.insert(rest, 1, "template")
+    return rest
+end
+-- end preset block
+
 local ok, dt = pcall(require, "darktable")
 if not ok then return M end
 
