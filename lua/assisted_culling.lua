@@ -72,8 +72,14 @@ function M.native_group_keys(items)
     return key_of
 end
 
--- Same list as score_images.py RAW_EXTENSIONS.
-local RAW_EXT = { cr2 = true, cr3 = true, nef = true, arw = true, rw2 = true, dng = true, raf = true, orf = true }
+-- Same list as score_images.py RAW_EXTENSIONS: LibRaw's camera formats.
+local RAW_EXT = {}
+for ext in ("3fr ari arw bay cr2 cr3 crw dcr dcs dng erf fff iiq k25 kdc mdc mef mos mrw nef nrw "
+    .. "orf ori pef raf raw rw2 rwl sr2 srf srw x3f"):gmatch("%S+") do
+    RAW_EXT[ext] = true
+end
+-- Formats the scorer decodes at full size with Pillow.
+local FULL_SIZE_EXT = { jpg = true, jpeg = true, png = true, tif = true, tiff = true }
 
 -- "IMG_1.ARW" → "img_1": a RAW and its in-camera JPEG share it.
 function M.shot_stem(filename)
@@ -85,10 +91,18 @@ function M.is_raw(filename)
     return ext ~= nil and RAW_EXT[ext:lower()] == true
 end
 
+-- How well the scorer reads a file: 2 full size (JPEG, TIFF, PNG), 1 a RAW's
+-- embedded preview, 0 anything else (it may not decode at all).
+local function lead_rank(filename)
+    local ext = (filename:match("%.([^.]+)$") or ""):lower()
+    if FULL_SIZE_EXT[ext] then return 2 end
+    return RAW_EXT[ext] and 1 or 0
+end
+
 -- Images → the ones to score, and per scored id every image that takes its result.
 -- One shot = darktable duplicates of a file plus a RAW+JPEG pair (same folder and
--- stem), so the pair always gets the same stars. A shot is scored from its non-RAW
--- file when it has one: full size, where the RAW gives only its embedded preview.
+-- stem), so the pair always gets the same stars. A shot is scored from the member
+-- the scorer reads best: a JPEG at full size over the RAW's embedded preview.
 function M.collapse_shots(images)
     local primaries, group_of, lead_of = {}, {}, {}
     local function key_id(img) return tonumber(img.id) or img.id end
@@ -102,7 +116,7 @@ function M.collapse_shots(images)
         else
             local group = group_of[key_id(lead.img)]
             group[#group + 1] = img
-            if M.is_raw(lead.img.filename) and not M.is_raw(img.filename) then
+            if lead_rank(img.filename) > lead_rank(lead.img.filename) then
                 group_of[key_id(lead.img)] = nil
                 group_of[key_id(img)] = group
                 primaries[lead.slot] = img
@@ -149,6 +163,8 @@ end
 
 function M.parse_csv_line(line, n)
     local parts = {}
+    -- Python's csv.writer ends rows with \r\n; only Windows text mode strips the \r
+    line = line:gsub("\r$", "")
     for part in (line .. ","):gmatch("([^,]*),") do
         table.insert(parts, part)
     end
@@ -473,7 +489,8 @@ local function run_async_command(cmd, done_path)
         if not f then return end
         local win_done, win_tmp = done_path:gsub("/", "\\"), done_tmp:gsub("/", "\\")
         f:write("@echo off\r\nchcp 65001>nul\r\n")
-        f:write(cmd, " < NUL\r\n")
+        -- in a .bat, % starts a variable even inside quotes; %% is a literal % (a "50% off" folder)
+        f:write((cmd:gsub("%%", "%%%%")), " < NUL\r\n")
         -- redirect first: "echo 0> f" would redirect handle 0 and leave f empty
         f:write('> "', win_tmp, '" echo %ERRORLEVEL%\r\n')
         f:write('move /y "', win_tmp, '" "', win_done, '" >nul\r\n')
@@ -840,18 +857,32 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         local primary_ids = {}
         for _, img in ipairs(primaries) do table.insert(primary_ids, img.id) end
 
+        -- A shot's group comes from any of its images, not just the lead: grouping may
+        -- have seen only the RAWs (JPEGs hidden), or grouped the pair's RAW alone.
+        local function members(img) return group_of[tonumber(img.id) or img.id] end
         local mechanism = group_support_key()
         local key_of, node, multi = {}, nil, {}
         if mechanism == "native" then
             local items = {}
             for _, img in ipairs(primaries) do
-                items[#items + 1] = { id = img.id, leader = img.group_leader and img.group_leader.id }
+                local in_shot = {}
+                for _, m in ipairs(members(img)) do in_shot[tostring(m.id)] = true end
+                -- a leader outside the shot is a real group; one inside is just the pair
+                local leader = img.group_leader and img.group_leader.id
+                for _, m in ipairs(members(img)) do
+                    local l = m.group_leader and m.group_leader.id
+                    if l and not in_shot[tostring(l)] then leader = l; break end
+                end
+                items[#items + 1] = { id = img.id, leader = leader }
             end
             key_of = M.native_group_keys(items)
         elseif mechanism == "tags" then
             local items, lists = {}, {}
             for _, img in ipairs(primaries) do
-                local have = tags_of(img)
+                local have = {}
+                for _, m in ipairs(members(img)) do
+                    for name in pairs(tags_of(m)) do have[name] = true end
+                end
                 items[#items + 1] = { id = img.id, tags = have }
                 local names = {}
                 for name in pairs(have) do names[#names + 1] = name end

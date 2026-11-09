@@ -32,7 +32,10 @@ except ImportError as _e:
     )
     sys.exit(3)
 
-RAW_EXTENSIONS = {".cr2", ".cr3", ".nef", ".arw", ".rw2", ".dng", ".raf", ".orf"}
+# Same list as RAW_EXT in assisted_culling.lua: LibRaw's camera formats.
+RAW_EXTENSIONS = {"." + e for e in (
+    "3fr ari arw bay cr2 cr3 crw dcr dcs dng erf fff iiq k25 kdc mdc mef mos mrw nef nrw "
+    "orf ori pef raf raw rw2 rwl sr2 srf srw x3f").split()}
 MAX_DIM = 800
 SHADOW_CLIP = 5 / 255
 HIGHLIGHT_CLIP = 250 / 255
