@@ -645,10 +645,11 @@ local function stop_job(job)
     local cf = io.open(CANCEL_PATH, "w")
     if cf then cf:write("1"); cf:close() end
     job.valid = false
-    is_running = false
+    -- is_running stays set: the run still waits for the scorer and cleans up, and a
+    -- second run started now would share its temp files. score_images clears it.
     queue = {}
     if action_button then
-        action_button.label = _("Cull selection")
+        action_button.label = _("Cancelling...")
     end
 end
 
@@ -982,6 +983,11 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                 error("couldn't load the mask model '" .. sam_model
                     .. "'; check it's downloaded in preferences → AI (" .. (enc_err or dec_err) .. ")", 0)
             end
+            -- closes both models when this block exits, an error included, so a failed run can't leak them
+            local _models <close> = setmetatable({}, { __close = function()
+                pcall(function() encoder:close() end)
+                pcall(function() decoder:close() end)
+            end })
 
             -- Stage A: the scorer shortlists each burst's best frames by the fast heuristic
             -- and picks one prompt per shortlisted frame: a vehicle box or a salient point.
@@ -1092,8 +1098,6 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                         made, #points, why))
                 end
             end
-            encoder:close()
-            decoder:close()
 
             if not write_manifest(primaries, burst_of, mask_for_id, shortlisted, true) then
                 error("couldn't write the image list to darktable's tmp folder (disk full or no write access?)", 0)
