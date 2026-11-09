@@ -69,7 +69,7 @@ def run_tests():
     check("pick vehicle: none found", S.pick_vehicle([], 400, 300), None)
 
     # diagnostic tags ------------------------------------------------------------
-    check("subject tag: vehicle class", S.subject_tag(7), "Subject|Vehicle|Truck")
+    check("subject tag: vehicle found, class left out", S.subject_tag(3), "Subject|Vehicle|Detected")
     check("subject tag: no vehicle found", S.subject_tag(None), "Subject|Vehicle|Guessed")
     check("technique tag: pan", S.technique_tag("subject_peak"), "Technique|Panning")
     check("technique tag: wide aperture", S.technique_tag("subject_focus"), "Technique|Shallow DoF")

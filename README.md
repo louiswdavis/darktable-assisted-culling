@@ -113,7 +113,7 @@ Frames are also tagged with how they were judged, so you can spot-check the scor
 
 | Tag | Meaning |
 |-----|---------|
-| `Assisted Culling\|Subject\|Vehicle\|Car` (or `Motorcycle`, `Truck`) | *subject tracking (SAM)* with the [vehicle detector](#vehicle-detector): the vehicle SAM was pointed at |
+| `Assisted Culling\|Subject\|Vehicle\|Detected` | *subject tracking (SAM)* with the [vehicle detector](#vehicle-detector): the detector found a vehicle and SAM was pointed at it. The class (car, motorcycle, truck) is not tagged: the detector often calls a side-on car a motorcycle. Older runs wrote `Car`/`Motorcycle`/`Truck`; the next run replaces them on the frames it scores, and you can delete the leftover names in the tagging module's dictionary. |
 | `Assisted Culling\|Subject\|Vehicle\|Guessed` | The detector found no vehicle, so SAM was given the guessed subject point. Worth a look: the guess can land on a kerb or sponsor board. |
 | `Assisted Culling\|Scored\|Masked` | *subject tracking (SAM)*: the burst was ranked on SAM masks |
 | `Assisted Culling\|Scored\|Subject bias` | *subject tracking (SAM)*: a shortlisted frame got no mask, so the burst fell back to *subject bias* |

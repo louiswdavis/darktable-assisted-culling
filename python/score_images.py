@@ -231,8 +231,9 @@ def strongest_detections(raw: np.ndarray, scale: float, w: int, h: int) -> str:
 
 def subject_tag(coco) -> str:
     """The diagnostic tag (under "Assisted Culling|") for a detector result:
-    the vehicle's class, or Guessed when the detector found none."""
-    return "Subject|Vehicle|" + (COCO_NAMES[coco].capitalize() if coco is not None else "Guessed")
+    Detected when the detector found a vehicle, Guessed when it found none.
+    The class is left out: the small detector often calls a side-on car a motorcycle."""
+    return "Subject|Vehicle|" + ("Detected" if coco is not None else "Guessed")
 
 
 def vehicle_box(rgb: np.ndarray, model_path: str) -> tuple:
