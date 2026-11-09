@@ -301,6 +301,16 @@ function M.filter_diag(wanted, off)
     return table.concat(kept, ";")
 end
 
+-- python.exe → the pythonw.exe beside it (venvs and python.org installs ship both),
+-- which opens no console window. nil for any other name.
+function M.pythonw_of(py)
+    local dir, name = py:match("^(.-)([^/\\]*)$")
+    name = name:lower()
+    if name == "python.exe" then return dir .. "pythonw.exe" end
+    if name == "python" then return dir .. "pythonw" end
+    return nil
+end
+
 local ok, dt = pcall(require, "darktable")
 if not ok then return M end
 
@@ -503,34 +513,42 @@ local function shell_quote(s)
     return "'" .. s:gsub("'", "'\\''") .. "'"
 end
 
--- The exit code goes to a temp file renamed onto done_path, so done_path
--- never exists without its code in it.
-local function run_async_command(cmd, done_path)
-    local done_tmp = done_path .. ".tmp"
+-- "py -u argv..." quoted for the shell: the log line, and the launch off Windows.
+local function command_line(py, argv)
+    local parts = { shell_quote(py), "-u" }
+    for _, a in ipairs(argv) do parts[#parts + 1] = shell_quote(a) end
+    return table.concat(parts, " ")
+end
+
+-- Starts `py -u argv...` without waiting, stderr to err_path (appended when `append`).
+-- The exit code goes to a temp file renamed onto done_path, so done_path never exists
+-- without its code in it. On Windows python/launch.py runs it under pythonw.exe: no
+-- console window, no script host, nothing executable written to tmp (antivirus
+-- behaviour checks flag a hidden .vbs/.bat chain). Returns false plus why it didn't start.
+local function run_async_python(py, argv, err_path, append, done_path)
     if IS_WINDOWS then
-        -- named after the done file, so each launch (and each run) has its own
-        local bat = done_path .. ".bat"
-        local vbs = done_path .. ".vbs"
-        local f = io.open(bat, "w")
-        if not f then return end
-        local win_done, win_tmp = done_path:gsub("/", "\\"), done_tmp:gsub("/", "\\")
-        f:write("@echo off\r\nchcp 65001>nul\r\n")
-        -- in a .bat, % starts a variable even inside quotes; %% is a literal % (a "50% off" folder)
-        f:write((cmd:gsub("%%", "%%%%")), " < NUL\r\n")
-        -- redirect first: "echo 0> f" would redirect handle 0 and leave f empty
-        f:write('> "', win_tmp, '" echo %ERRORLEVEL%\r\n')
-        f:write('move /y "', win_tmp, '" "', win_done, '" >nul\r\n')
+        local pyw = M.pythonw_of(py)
+        if not pyw then return false, "the Python preference must point at a python.exe" end
+        if pyw:find("[/\\]") and not file_exists(pyw) then return false, pyw .. " is missing" end
+        local job = done_path .. ".job"
+        local f = io.open(job, "w")
+        if not f then return false, "no write access to darktable's tmp folder" end
+        f:write(done_path, "\n", err_path, "\n", append and "a" or "w", "\n", table.concat(argv, "\n"), "\n")
         f:close()
-        local f_vbs = io.open(vbs, "w")
-        if not f_vbs then return end
-        f_vbs:write('Set WshShell = CreateObject("WScript.Shell")\r\n')
-        f_vbs:write('WScript.Quit WshShell.Run(Chr(34) & "', bat:gsub("/", "\\"), '" & Chr(34), 0, False)\r\n')
-        f_vbs:close()
-        os.execute('wscript.exe "' .. vbs:gsub("/", "\\") .. '"')
-    else
-        os.execute('( ' .. cmd .. ' ; echo $? > ' .. shell_quote(done_tmp)
-            .. ' ; mv -f ' .. shell_quote(done_tmp) .. ' ' .. shell_quote(done_path) .. ' ) >/dev/null 2>&1 &')
+        local launcher = (argv[1]:match("^(.*)[/\\]") or ".") .. "/launch.py"
+        local ok = os.execute('start "" /B ' .. shell_quote((pyw:gsub("/", "\\")))
+            .. " " .. shell_quote((launcher:gsub("/", "\\"))) .. " " .. shell_quote((job:gsub("/", "\\"))))
+        if not ok then
+            pcall(os.remove, job)
+            return false, pyw .. " didn't start"
+        end
+        return true
     end
+    local done_tmp = done_path .. ".tmp"
+    os.execute('( ' .. command_line(py, argv) .. (append and " 2>> " or " 2> ") .. shell_quote(err_path)
+        .. ' ; echo $? > ' .. shell_quote(done_tmp)
+        .. ' ; mv -f ' .. shell_quote(done_tmp) .. ' ' .. shell_quote(done_path) .. ' ) >/dev/null 2>&1 &')
+    return true
 end
 
 -- SAM / SAM 2 conventions, mirroring darktable's src/common/ai/segmentation.c.
@@ -1021,22 +1039,21 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             -- and picks one prompt per shortlisted frame: a vehicle box or a salient point.
             local detector = plugin_root(sc_script) .. "/models/" .. DETECTOR_FILE
             if not file_exists(detector) then detector = "" end
-            local points_cmd = shell_quote(py_bin) .. " -u " .. shell_quote(sc_script)
-                .. " " .. shell_quote(MANIFEST_PATH)
-                .. " " .. shell_quote(POINTS_PATH)
-                .. " --emit-saliency-points"
-                .. (detector ~= "" and (" --detector " .. shell_quote(detector)) or "")
-                .. " --keep-mode " .. shell_quote(tostring(keep_mode))
-                .. " --exp-mode " .. shell_quote(tostring(exp_mode))
-                .. " --prescores " .. shell_quote(PRESCORE_PATH)
-                .. " --cache " .. shell_quote(CACHE_PATH)
-                .. " --sam-model " .. shell_quote(sam_model)
-                .. " --progress " .. shell_quote(PROGRESS_PATH)
-                .. (fast_jpeg and " --fast-jpeg" or "")
-                .. " 2>> " .. shell_quote(LOG_PATH)
-            log("finding subjects: " .. points_cmd)
+            local points_argv = { sc_script, MANIFEST_PATH, POINTS_PATH, "--emit-saliency-points" }
+            if detector ~= "" then table.move({ "--detector", detector }, 1, 2, #points_argv + 1, points_argv) end
+            table.move({
+                "--keep-mode", tostring(keep_mode),
+                "--exp-mode", tostring(exp_mode),
+                "--prescores", PRESCORE_PATH,
+                "--cache", CACHE_PATH,
+                "--sam-model", sam_model,
+                "--progress", PROGRESS_PATH,
+            }, 1, 12, #points_argv + 1, points_argv)
+            if fast_jpeg then points_argv[#points_argv + 1] = "--fast-jpeg" end
+            log("finding subjects: " .. command_line(py_bin, points_argv))
             flush_log()
-            run_async_command(points_cmd, POINTS_DONE_PATH)
+            local launched, why = run_async_python(py_bin, points_argv, LOG_PATH, true, POINTS_DONE_PATH)
+            if not launched then error("couldn't start the scorer: " .. why, 0) end
             while not file_exists(POINTS_DONE_PATH) and not cancelled() do
                 local pf = io.open(PROGRESS_PATH, "r")
                 local p = pf and pf:read("*a") or ""
@@ -1134,31 +1151,34 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             pcall(os.remove, PROGRESS_PATH)
         end
 
-        local cmd = shell_quote(py_bin) .. " -u " .. shell_quote(sc_script)
-            .. " " .. shell_quote(MANIFEST_PATH)
-            .. " " .. shell_quote(RESULTS_PATH)
-            .. " --progress " .. shell_quote(PROGRESS_PATH)
-            .. " --rank-mode " .. shell_quote(tostring(rank_mode))
-            .. " --sharp-mode " .. shell_quote(tostring(sharp_mode))
-            .. " --exp-mode " .. shell_quote(tostring(exp_mode))
-            .. " --keep-mode " .. shell_quote(tostring(keep_mode))
-            .. " --nk-mode " .. shell_quote(tostring(nk_mode))
-            .. " --tag-only-flags " .. shell_quote(tag_only_flags())
-            .. (fast_jpeg and " --fast-jpeg" or "")
-            .. (sam_model and (" --prescores " .. shell_quote(PRESCORE_PATH)
-                .. " --sam-model " .. shell_quote(sam_model)) or "")
-            .. " --cache " .. shell_quote(CACHE_PATH)
-            .. " --report " .. shell_quote(REPORT_PATH)
-            .. " --report-archive-dir " .. shell_quote(REPORT_ARCHIVE_DIR)
-            .. " 2>> " .. shell_quote(LOG_PATH)
+        local argv = {
+            sc_script, MANIFEST_PATH, RESULTS_PATH,
+            "--progress", PROGRESS_PATH,
+            "--rank-mode", tostring(rank_mode),
+            "--sharp-mode", tostring(sharp_mode),
+            "--exp-mode", tostring(exp_mode),
+            "--keep-mode", tostring(keep_mode),
+            "--nk-mode", tostring(nk_mode),
+            "--tag-only-flags", tag_only_flags(),
+        }
+        if fast_jpeg then argv[#argv + 1] = "--fast-jpeg" end
+        if sam_model then
+            table.move({ "--prescores", PRESCORE_PATH, "--sam-model", sam_model }, 1, 4, #argv + 1, argv)
+        end
+        table.move({
+            "--cache", CACHE_PATH,
+            "--report", REPORT_PATH,
+            "--report-archive-dir", REPORT_ARCHIVE_DIR,
+        }, 1, 6, #argv + 1, argv)
 
         if cancelled() then
             M.cancel_requested = true -- cancelled during the SAM stages: don't start scoring at all
             log("cancelled before scoring")
         else
-            log("scoring: " .. cmd)
+            log("scoring: " .. command_line(py_bin, argv))
             flush_log()
-            run_async_command(cmd, DONE_PATH)
+            local launched, why = run_async_python(py_bin, argv, LOG_PATH, true, DONE_PATH)
+            if not launched then error("couldn't start the scorer: " .. why, 0) end
             main_started = true
         end
 
@@ -1553,8 +1573,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         pcall(os.remove, CANCEL_PATH)
         for _, done in ipairs({ POINTS_DONE_PATH, DONE_PATH }) do
             pcall(os.remove, done)
-            pcall(os.remove, done .. ".bat")
-            pcall(os.remove, done .. ".vbs")
+            pcall(os.remove, done .. ".job")
         end
     end
     log("run finished")

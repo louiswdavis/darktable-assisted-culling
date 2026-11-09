@@ -88,7 +88,7 @@ Add-Content "$env:LOCALAPPDATA\darktable\luarc" 'require "contrib/assisted_culli
 
 Start darktable, open **preferences → lua options**, and set:
 
-- **Assisted Culling: python interpreter**: the venv's `python.exe` / `bin/python`
+- **Assisted Culling: python interpreter**: the venv's `python.exe` / `bin/python`. On Windows the plugin runs the `pythonw.exe` beside it through `python/launch.py`, so no console window opens and no `.vbs`/`.bat` is written (antivirus behaviour checks such as Bitdefender Advanced Threat Defense flag that chain). A venv or python.org install has both files.
 - **Assisted Culling: plugin folder**: this repo's folder. `python/score_images.py`, `models/` and `.venv` are found inside it, so the interpreter preference above is only needed if your Python lives elsewhere. A folder without `python/score_images.py` is an error.
 
 The other preferences are optional; see [Preferences](#preferences).

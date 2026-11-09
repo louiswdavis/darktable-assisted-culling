@@ -172,6 +172,12 @@ check("collapse_shots: a RAW leads over a format the scorer can't open full size
     shot_ids({ { id = 1, path = "/s", filename = "a.heic" }, { id = 2, path = "/s", filename = "a.ARW" } }),
     "2:1,2")
 
+-- pythonw_of (Windows launches through pythonw.exe beside the chosen python.exe)
+check("pythonw_of: venv python.exe", C.pythonw_of("C:/x/.venv/Scripts/python.exe"), "C:/x/.venv/Scripts/pythonw.exe")
+check("pythonw_of: case-insensitive", C.pythonw_of("C:\\Py\\Python.EXE"), "C:\\Py\\pythonw.exe")
+check("pythonw_of: bare python on PATH", C.pythonw_of("python"), "pythonw")
+check("pythonw_of: other launcher is refused", C.pythonw_of("C:/Windows/py.exe"), nil)
+
 print("")
 if failures == 0 then
     print("all tests passed")
