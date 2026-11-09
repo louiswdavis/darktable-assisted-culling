@@ -14,18 +14,6 @@ local function check(name, got, want)
     end
 end
 
--- exif_time_to_epoch ---------------------------------------------------
-check("parses a normal timestamp",
-    C.exif_time_to_epoch("2026:06:01 14:30:00") ~= nil, true)
-check("returns nil for missing timestamp",
-    C.exif_time_to_epoch(nil), nil)
-check("returns nil for garbage input",
-    C.exif_time_to_epoch("not a date"), nil)
-
-local t1 = C.exif_time_to_epoch("2026:06:01 14:30:00")
-local t2 = C.exif_time_to_epoch("2026:06:01 14:30:01")
-check("consecutive seconds differ by 1", t2 - t1, 1)
-
 -- group keys ----------------------------------------------------------------
 local G10 = "Assisted Grouping|2026-11-09 10:00:00|Group"
 local G12 = "Assisted Grouping|2026-11-09 12:30:00|Group"

@@ -23,17 +23,7 @@ local clear_button = nil
 local run_tag_check = nil
 local group_support_combo, group_node_entry = nil, nil
 
-function M.exif_time_to_epoch(s)
-    if not s then return nil end
-    local y, mo, d, h, mi, se = s:match("(%d+):(%d+):(%d+) (%d+):(%d+):(%d+)")
-    if not y then return nil end
-    return os.time({
-        year = tonumber(y), month = tonumber(mo), day = tonumber(d),
-        hour = tonumber(h), min = tonumber(mi), sec = tonumber(se),
-        isdst = false, -- constant offset, so a DST change can't split a burst
-    })
-end
-
+-- Copy of the group-key block in darktable-assisted-tagging/lua/assisted_tagging.lua; change both.
 local GROUP_PREFIX = "Assisted Grouping|"
 local GROUP_STAMP = "^%d%d%d%d%-%d%d%-%d%d %d%d:%d%d:%d%d$"
 
@@ -285,7 +275,7 @@ local DETECTOR_FILE = "object_detection_yolox_2022nov.onnx"
 if dt.gui then
     dt.preferences.register("assisted_culling", "python_bin", "file",
         "Assisted Culling: Python interpreter",
-        "Python executable with opencv-python-headless, numpy, Pillow and rawpy installed (e.g. .venv\\Scripts\\python.exe)",
+        "Python executable with opencv-python-headless, numpy, Pillow and rawpy installed (e.g. .venv\\Scripts\\python.exe). Empty = auto-detect the repo's .venv",
         "")
     dt.preferences.register("assisted_culling", "plugin_folder", "directory",
         "Assisted Culling: plugin folder",
@@ -586,7 +576,7 @@ local function stop_job(job)
     is_running = false
     queue = {}
     if action_button then
-        action_button.label = _("Start culling")
+        action_button.label = _("Cull selection")
     end
 end
 
@@ -721,7 +711,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         dt.print(n_locked > 0 and _("Assisted Culling: every selected image is tagged Assisted Culling|Locked, so there's nothing to cull. Remove that tag from images you want scored.")
             or _("Assisted Culling: select some images first"))
         is_running = false
-        if action_button then action_button.label = _("Start culling") end
+        if action_button then action_button.label = _("Cull selection") end
         run_next()
         return
     end
@@ -1396,7 +1386,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
 
     is_running = false
     if action_button then
-        action_button.label = _("Start culling")
+        action_button.label = _("Cull selection")
     end
 
     if not success then
@@ -1676,7 +1666,7 @@ local function install_panel()
     }
 
     action_button = dt.new_widget("button") {
-        label = _("Start culling"),
+        label = _("Cull selection"),
         tooltip = _("Score the selected images in bursts and rate/tag them. Click again to cancel."),
     }
 
@@ -1691,7 +1681,7 @@ local function install_panel()
     end
     -- changed_callback is async and fires on every assignment to `selected`: write only on a real change
     group_support_combo = dt.new_widget("combobox") {
-        label = _("Grouping support"),
+        label = _("grouping support"),
         tooltip = _("What groups photos before keepers are picked. Native groups: darktable's image groups. Grouping tags: the children of the tag node below. None: every photo is judged alone."),
         changed_callback = function(self)
             local key
@@ -1757,7 +1747,7 @@ local function install_panel()
             if not wanted[img.filename] then wanted[img.filename] = true; n = n + 1 end
         end
         if n == 0 then
-            dt.print(_("Assisted Culling: select images first."))
+            dt.print(_("Assisted Culling: select some images first"))
             return
         end
         local lines, missing = M.explain_report(text, wanted)
@@ -1811,12 +1801,14 @@ local function install_panel()
             non_keeper_combo.selected = 1
             is_updating = false
         end,
+        dt.new_widget("section_label") { label = _("scoring") },
         genre_combo,
         rank_combo,
         sharp_combo,
         exp_combo,
         keep_combo,
         non_keeper_combo,
+        dt.new_widget("section_label") { label = _("run") },
         group_support_combo,
         group_node_entry,
         run_tag_check,

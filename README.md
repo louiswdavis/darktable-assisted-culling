@@ -22,6 +22,7 @@ Everything runs locally: a Lua plugin inside darktable and a small Python/OpenCV
 - [Tuning](#tuning)
 - [Troubleshooting](#troubleshooting)
 - [Limitations](#limitations)
+- [Acceptance checklist](#acceptance-checklist)
 - [Development](#development)
 
 ## Requirements
@@ -48,7 +49,14 @@ python3 -m venv .venv
 .venv/bin/pip install -r python/requirements.txt
 ```
 
-### 2. darktable side
+### 2. Optional: models
+
+Only needed for the *subject tracking (SAM)* sharpness mode. Every other mode works without them.
+
+1. **SAM mask model** (needs darktable 5.6+). In darktable, open **preferences → AI**, then enable and download a SAM or SAM 2 mask model. darktable stores and manages it, and the plugin uses whichever mask model is enabled there. SegNext mask models aren't supported; if one is enabled, the run stops and says so.
+2. **Vehicle detector** (optional, for motorsport). Download [`object_detection_yolox_2022nov.onnx`](https://github.com/opencv/opencv_zoo/raw/main/models/object_detection_yolox/object_detection_yolox_2022nov.onnx) (36 MB, Apache-2.0), into the `models` folder in the repo; it's used automatically once it's there. See [Vehicle detector](#vehicle-detector) for what it does.
+
+### 3. darktable side
 
 darktable's config directory is `~/.config/darktable` on Linux/macOS and `%LOCALAPPDATA%\darktable` on Windows. Link the plugin into it and load it from `luarc`.
 
@@ -76,7 +84,7 @@ New-Item -ItemType SymbolicLink -Path "$env:LOCALAPPDATA\darktable\lua\contrib\a
 Add-Content "$env:LOCALAPPDATA\darktable\luarc" 'require "contrib/assisted_culling"'
 ```
 
-### 3. Point the plugin at Python
+### 4. Point the plugin at the repo
 
 Start darktable, open **preferences → lua options**, and set:
 
@@ -85,16 +93,9 @@ Start darktable, open **preferences → lua options**, and set:
 
 The other preferences are optional; see [Preferences](#preferences).
 
-### 4. Optional: AI models
-
-Only needed for the *subject tracking (SAM)* sharpness mode. Every other mode works without them.
-
-1. **SAM mask model** (needs darktable 5.6+). In darktable, open **preferences → AI**, then enable and download a SAM or SAM 2 mask model. darktable stores and manages it, and the plugin uses whichever mask model is enabled there. SegNext mask models aren't supported; if one is enabled, the run stops and says so.
-2. **Vehicle detector** (optional, for motorsport). Download [`object_detection_yolox_2022nov.onnx`](https://github.com/opencv/opencv_zoo/raw/main/models/object_detection_yolox/object_detection_yolox_2022nov.onnx) (36 MB, Apache-2.0), into the `models` folder in the repo; it's used automatically once it's there. See [Vehicle detector](#vehicle-detector) for what it does.
-
 ## Using it
 
-In lighttable, select a batch (a whole shoot or a single burst) and click **Start Culling** in the **Assisted Culling** panel on the right. Progress shows in darktable's message area; click the button again to cancel.
+In lighttable, select a batch (a whole shoot or a single burst) and click **Cull selection** in the **Assisted Culling** panel on the right. Progress shows in darktable's message area; click the button again to cancel.
 
 ### What you get
 
@@ -249,7 +250,7 @@ All under **preferences → lua options**.
 | Assisted Culling: plugin folder | empty (auto-detect) | This repo's folder; `python/`, `models/` and `.venv` are found inside it. Its `models/` detector enables the [vehicle detector](#vehicle-detector) in SAM mode |
 | Assisted Culling: apply ratings while scoring | off | Applies results as they arrive instead of all at the end. Faster on big batches, but darktable's UI shares the CPU with the scorer; turn off if it lags. |
 | Assisted Culling: fast JPEG decoding | on | Decodes JPEGs and raw previews at reduced size. Several times faster; scores shift slightly, which matters little since keepers are ranked within each burst. |
-| Assisted Culling: grouping support | native | `native`, `tags` or `none`. Set from the panel's **Grouping support** control, see [Grouping support](#grouping-support) |
+| Assisted Culling: grouping support | native | `native`, `tags` or `none`. Set from the panel's **grouping support** control, see [Grouping support](#grouping-support) |
 | Assisted Culling: grouping tag node | empty (newest run) | The tag node whose children are the groups in `tags` mode. Set from the panel |
 | Assisted Culling: diagnostic tags | on | Tags how each frame was judged (`Subject`, `Technique`, `Scored`); see [What you get](#what-you-get). Each tag write reloads darktable's collection, so turn off to speed up applying results. |
 | Assisted Culling: *Tag* lowers stars | on, one per flag | Off = that flag is still tagged but never costs stars. See [Flags cost stars](#flags-cost-stars-never-the-keeper). |
@@ -280,7 +281,7 @@ Sharpness is the variance of the Laplacian of a downscaled grayscale copy, a sta
 
 ### Grouping support
 
-Culling no longer clusters photos by capture time. Keepers are picked within groups that something else already made, and the panel's **Grouping support** combobox picks which:
+Culling no longer clusters photos by capture time. Keepers are picked within groups that something else already made, and the panel's **grouping support** combobox picks which:
 
 - **Native groups** (default): darktable's own image groups. A photo's group is its group leader; members share one group even when the leader isn't in the selection.
 - **Grouping tags**: the children of an [Assisted Grouping](../darktable-assisted-grouping/README.md) tag node, e.g. `Assisted Grouping|2026-01-01 12:00:00|Group|NNNN`. The **Grouping tag node (blank = newest run)** entry names the node; blank uses the newest Assisted Grouping run found on the selected photos. Assisted Grouping must have **Write group tags** on, or there is nothing to find. A photo with several children under the node takes the first by name (the log lists them); a photo tagged only by an older run is alone.
@@ -351,6 +352,31 @@ These are sensible starting points, not tuned defaults. Run a real shoot through
 - The SAM preprocessing (1024 px input, normalisation, prompt format) mirrors darktable's own `src/common/ai/segmentation.c` defaults, because `darktable.ai` doesn't expose a model's attributes to Lua. A mask model with a non-default input size would segment poorly; every image then falls back to *subject bias*, and the plugin reports how many did.
 - SAM sees each image through darktable's pipeline (rotated, cropped, lens-corrected), while the scorer reads the original file, turned upright from its EXIF orientation. A darkroom crop that changes the aspect ratio is detected and that image falls back; a crop that keeps the ratio isn't, so on cropped edits the mask can sit off the subject. Cull before you crop.
 - The vehicle detector sees the same downscaled copy as the scorer (800 px on the long side), so a very small, distant car can be missed. That frame then uses the point guess.
+
+## Acceptance checklist
+
+The grouping-support changes have not run in darktable yet. Work through these steps on Windows, in order, and note the result of each. Use a test collection, or a copy of your library, for the first pass.
+
+**Setup**
+
+1. **Install Python** as in [Install](#1-python-side). *Expect:* the requirements install with no errors.
+2. **Install the plugin** as in [Install](#3-darktable-side) and start darktable. *Expect:* an **Assisted Culling** panel on the right in lighttable, with sections *scoring* and *run*, and a **Cull selection** button. No `LUA ERROR` in the darktable log.
+3. **Set the plugin folder** in **preferences → lua options → Assisted Culling: plugin folder** to the repo folder, and leave the interpreter empty. *Expect:* runs find the repo's `.venv` without the interpreter preference.
+
+**One run per grouping mechanism**
+
+Use a selection with at least two bursts of 3+ frames each.
+
+4. **Native groups.** Group each burst in darktable (ctrl+g), set **grouping support** to *Native groups*, and click **Cull selection**. *Expect:* one `Keeper` per burst (more if *keepers* allows), the rest `Rejected` or rated per *non-keepers*. The log at `%LOCALAPPDATA%\darktable\assisted_culling.log` shows `run started`, the `settings:` line, `group support native: N of M photos in groups of 2+` and `run finished`.
+5. **Grouping tags, blank node.** Run Assisted Grouping with **Write group tags** on, then set **grouping support** to *Grouping tags*, leave the node blank, and cull. *Expect:* the same per-burst keepers as step 4. The `group support tags:` log line ends with `node Assisted Grouping|<stamp>|Group` (the newest run).
+6. **Grouping tags, wrong node.** Type a node that doesn't exist on these photos and cull. *Expect:* every photo is judged alone, and the `group support tags:` log line ends with `(matches no selected photo)`.
+7. **None.** Set **grouping support** to *None* and cull. *Expect:* every photo is judged alone; each frame can be a keeper.
+
+**Panel**
+
+8. **Cancel.** Start a run on a large selection and click the button while it shows **Cancel culling**. *Expect:* the run stops; frames already done keep their changes.
+9. **Why these ratings?** with nothing selected. *Expect:* "Assisted Culling: select some images first".
+10. **Clear culling marks** on the selection. *Expect:* the plugin's tags are gone; star ratings are unchanged.
 
 ## Development
 
