@@ -243,6 +243,15 @@ def run_tests():
     check("stage A: point prompts leave the box corner empty", {(len(r), r[3], r[4]) for r in point_rows},
           {(6, "", "")})
     check("stage A: no cache means nothing is marked cached", {r[5] for r in point_rows}, {"0"})
+    man_bad = os.path.join(tmp, "a_bad.csv")
+    with open(man_bad, "w", newline="") as f:
+        _csv.writer(f).writerows([["0", frames[0], "9"], ["7", os.path.join(tmp, "gone.jpg"), "9"]])
+    pre_bad = os.path.join(tmp, "pre_bad.csv")
+    S.main(Namespace(manifest=man_bad, results=os.path.join(tmp, "pts_bad.csv"), progress="",
+                     emit_saliency_points=True, keep_mode="single_best", exp_mode="whole_frame",
+                     fast_jpeg=False, prescores=pre_bad))
+    bad_scored, bad_failed = S.read_prescores(pre_bad)
+    check("stage A: an undecodable frame is recorded as failed", (sorted(bad_scored), bad_failed), (["0"], {"7"}))
     try:
         S.main(Namespace(manifest=man_a, results=points_p, progress="", emit_saliency_points=True,
                          keep_mode="single_best", exp_mode="whole_frame", fast_jpeg=False, prescores="",
@@ -407,6 +416,12 @@ def run_tests():
     check("report: a non-keeper lists its flags", rep[1][9],
           "not kept: rank 2 of 2, only 1 allowed or not eligible; flagged blur")
     check("report: diagnostic tags carry through", rep[0][8], "Subject|Car")
+    check("report: the folder is the last column", rep[0][10], os.path.dirname("/p/a.jpg"))
+    check("report: one column per header", len(rep[0]), len(S.REPORT_HEADER))
+    # frame 5 couldn't be read, so it has no result row; the allowance still counts it
+    unread_manifest = rep_manifest + [("5", "/p/e.jpg", "1", "", "", "", 0.0, 0.0)]
+    unread = S.report_rows(unread_manifest, rep_results, lambda n: n)
+    check("report: the allowance counts unreadable frames", unread[2][9], "kept: rank 1 of 1, 2 allowed")
 
     with tempfile.TemporaryDirectory() as arch_tmp:
         arch_src = os.path.join(arch_tmp, "last-run.csv")

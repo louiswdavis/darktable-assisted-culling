@@ -201,16 +201,26 @@ function M.parse_report_line(line)
     return fields
 end
 
--- last-run.csv text + { filename = true } → one "file: stars, why" line per frame of the run
--- that matches (a filename can match several rows when versions share a file), and the
--- filenames the run had no row for. A RAW+JPEG pair has one row, under the file that was
--- scored, so a filename also matches rows with the same stem.
+-- "dir\sub/a.jpg" → "dir/sub", "a.jpg"; a bare name has folder "".
+local function split_path(p)
+    p = p:gsub("\\", "/")
+    local dir, name = p:match("^(.*)/([^/]*)$")
+    if not dir then return "", p end
+    return dir, name
+end
+
+-- last-run.csv text + { "folder/filename" = true } → one "file: stars, why" line per frame of
+-- the run that matches (a file can match several rows when versions share it), and the
+-- paths the run had no row for. A RAW+JPEG pair has one row, under the file that was
+-- scored, so a file also matches rows with the same stem in the same folder. Reports
+-- without the folder column (older runs) match on the stem alone.
 function M.explain_report(text, wanted)
     local lines, seen, names_of = {}, {}, {}
-    for name in pairs(wanted) do
+    for path in pairs(wanted) do
+        local folder, name = split_path(path)
         local stem = M.shot_stem(name)
         names_of[stem] = names_of[stem] or {}
-        table.insert(names_of[stem], name)
+        table.insert(names_of[stem], { path = path, folder = folder })
     end
     local first = true
     for line in text:gmatch("[^\r\n]+") do
@@ -218,9 +228,13 @@ function M.explain_report(text, wanted)
             first = false -- header
         else
             local f = M.parse_report_line(line)
-            local names = #f == 10 and names_of[M.shot_stem(f[2])]
-            if names then
-                for _, name in ipairs(names) do seen[name] = true end
+            local names = (#f == 10 or #f == 11) and names_of[M.shot_stem(f[2])]
+            local row_folder = f[11] and (f[11]:gsub("\\", "/"))
+            local hit = false
+            for _, n in ipairs(names or {}) do
+                if not row_folder or n.folder == row_folder then seen[n.path] = true; hit = true end
+            end
+            if hit then
                 local stars = f[6] == "leave" and "left as it was" or (f[6] .. " stars")
                 lines[#lines + 1] = string.format("%s: %s, burst %s, score %s. %s", f[2], stars, f[1], f[5], f[10])
             end
@@ -494,8 +508,9 @@ end
 local function run_async_command(cmd, done_path)
     local done_tmp = done_path .. ".tmp"
     if IS_WINDOWS then
-        local bat = TMP_DIR .. "/dt_assisted_culling_run.bat"
-        local vbs = TMP_DIR .. "/dt_assisted_culling_run.vbs"
+        -- named after the done file, so each launch (and each run) has its own
+        local bat = done_path .. ".bat"
+        local vbs = done_path .. ".vbs"
         local f = io.open(bat, "w")
         if not f then return end
         local win_done, win_tmp = done_path:gsub("/", "\\"), done_tmp:gsub("/", "\\")
@@ -841,6 +856,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         return
     end
 
+    new_run_paths()
     flush_log() -- anything logged since the last run (e.g. a failed clear) belongs to its log
     pcall(os.remove, PREV_LOG_PATH)
     pcall(os.rename, LOG_PATH, PREV_LOG_PATH)
@@ -852,6 +868,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
     local culling_job = nil
     local sam_ids = {}
     local main_started = false
+    local stage_a_alive = false
 
     local success, run_err = pcall(function()
         local sam_model
@@ -1032,13 +1049,14 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                 dt.control.sleep(150)
             end
             if cancelled() then
-                -- let the stage-A process see the cancel and exit, so it can't write into a later run
+                -- give the stage-A process a moment to see the cancel and exit
                 local cf = io.open(CANCEL_PATH, "w")
                 if cf then cf:write("1"); cf:close() end
                 for _ = 1, 50 do
                     if file_exists(POINTS_DONE_PATH) then break end
                     dt.control.sleep(100)
                 end
+                stage_a_alive = not file_exists(POINTS_DONE_PATH)
             else
                 local dfh = io.open(POINTS_DONE_PATH, "r")
                 local code = dfh and tonumber((dfh:read("*a") or ""):match("%d+")) or nil
@@ -1520,30 +1538,27 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         notify_error(_("Assisted Culling: couldn't run. ") .. tostring(run_err))
     end
 
-    -- Keep the cancel flag if the scorer is still alive, so it can still see it.
-    local scorer_alive = M.cancel_requested and main_started and not file_exists(DONE_PATH)
+    -- A cancelled scorer that is still running keeps its cancel flag and launcher,
+    -- so it can still see the flag and finish. The next run uses other file names.
+    local scorer_alive = M.cancel_requested
+        and (stage_a_alive or (main_started and not file_exists(DONE_PATH)))
     pcall(os.remove, MANIFEST_PATH)
     pcall(os.remove, RESULTS_PATH)
     pcall(os.remove, RESULTS_PATH .. ".tmp")
     pcall(os.remove, POINTS_PATH)
-    pcall(os.remove, POINTS_DONE_PATH)
     pcall(os.remove, PRESCORE_PATH)
     for _, id in ipairs(sam_ids) do pcall(os.remove, mask_path_for(id)) end
     if not scorer_alive then
         pcall(os.remove, PROGRESS_PATH)
         pcall(os.remove, CANCEL_PATH)
-    end
-    pcall(os.remove, DONE_PATH)
-    if IS_WINDOWS then
-        pcall(os.remove, TMP_DIR .. "/dt_assisted_culling_run.bat")
-        pcall(os.remove, TMP_DIR .. "/dt_assisted_culling_run.vbs")
+        for _, done in ipairs({ POINTS_DONE_PATH, DONE_PATH }) do
+            pcall(os.remove, done)
+            pcall(os.remove, done .. ".bat")
+            pcall(os.remove, done .. ".vbs")
+        end
     end
     log("run finished")
     flush_log()
-    if scorer_alive and #queue > 0 then
-        dt.print(string.format(_("Assisted Culling: %d queued jobs dropped (the cancelled scorer is still stopping)."), #queue))
-        queue = {}
-    end
     run_next()
 end
 
@@ -1870,7 +1885,8 @@ local function install_panel()
         end
         local wanted, n = {}, 0
         for _, img in ipairs(dt.gui.action_images) do
-            if not wanted[img.filename] then wanted[img.filename] = true; n = n + 1 end
+            local path = img.path .. "/" .. img.filename
+            if not wanted[path] then wanted[path] = true; n = n + 1 end
         end
         if n == 0 then
             dt.print(_("Assisted Culling: select some images first"))

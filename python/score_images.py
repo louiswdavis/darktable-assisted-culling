@@ -672,14 +672,22 @@ def process_single_saliency(filepath: str, fast_jpeg: bool = False, exp_mode: st
         return filepath, None, None, None, str(e), "", ""
 
 
-def read_prescores(path: str) -> dict:
-    """id → (fallback sharpness, exposure status, prompt, subject tag) from a
-    stage-A prescore file."""
+PRESCORE_FAILED = "failed"
+
+
+def read_prescores(path: str) -> tuple:
+    """(id → (fallback sharpness, exposure status, prompt, subject tag), ids stage A
+    couldn't decode) from a stage-A prescore file."""
+    scored, failed = {}, set()
     if not path or not os.path.exists(path):
-        return {}
+        return scored, failed
     with open(path, newline="", encoding="utf-8") as f:
-        return {row[0]: (float(row[1]), row[2], [float(v) for v in row[3:7] if v], row[7])
-                for row in csv.reader(f) if len(row) == 8}
+        for row in csv.reader(f):
+            if len(row) == 8:
+                scored[row[0]] = (float(row[1]), row[2], [float(v) for v in row[3:7] if v], row[7])
+            elif len(row) == 2 and row[1] == PRESCORE_FAILED:
+                failed.add(row[0])
+    return scored, failed
 
 
 def emit_saliency_points(manifest, args, cache):
@@ -690,7 +698,8 @@ def emit_saliency_points(manifest, args, cache):
     darktable needn't run SAM on it.
     With args.prescores, also writes id,fallback_score,exposure,x0,y0,x1,y1,subject
     for every frame so the scoring pass needn't decode frames outside the
-    shortlist again. Images that fail to decode are left out and so can't be keepers."""
+    shortlist again. Images that fail to decode get an id,failed row instead, so the
+    scoring pass skips them without a second decode; they can't be keepers."""
     total = len(manifest)
     prescores = getattr(args, "prescores", "")
     exp_mode = getattr(args, "exp_mode", "whole_frame")
@@ -698,10 +707,11 @@ def emit_saliency_points(manifest, args, cache):
     if detector:
         _detector(detector)  # a missing or unreadable model fails the run, not each frame
     det_key = detector_key(detector)
-    for path in (args.results, prescores):
-        if path:
-            with open(path, "w", newline="", encoding="utf-8"):
-                pass
+    with open(args.results, "w", newline="", encoding="utf-8"):
+        pass
+    # opened once for the whole stage; darktable reads it only after the stage's done file
+    pre_file = open(prescores, "w", newline="", encoding="utf-8") if prescores else None
+    pre_writer = csv.writer(pre_file) if pre_file else None
     write_progress(args.progress, 0, total, 0, 0)
 
     row_of = {row[0]: row for row in manifest}
@@ -720,10 +730,10 @@ def emit_saliency_points(manifest, args, cache):
         if prompt is not None:
             prompt = [round(v, 4) for v in prompt]
             found[burst][image_id] = (prompt, heuristic)
-            if prescores:
-                with open(prescores, "a", newline="", encoding="utf-8") as f:
-                    csv.writer(f).writerow([image_id, heuristic, exposure] + prompt + [""] * (4 - len(prompt))
-                                           + [subject])
+            if pre_writer:
+                pre_writer.writerow([image_id, heuristic, exposure] + prompt + [""] * (4 - len(prompt)) + [subject])
+        elif pre_writer:
+            pre_writer.writerow([image_id, PRESCORE_FAILED])
         remaining[burst] -= 1
         if remaining[burst] == 0 and found[burst]:
             picks = shortlist({i: v[1] for i, v in found[burst].items()}, args.keep_mode)
@@ -761,6 +771,8 @@ def emit_saliency_points(manifest, args, cache):
         for future in concurrent.futures.as_completed(future_to_id):
             if cancel_requested(args.progress):
                 log("cancelled")
+                if pre_file:
+                    pre_file.close()
                 executor.shutdown(wait=False, cancel_futures=True)
                 sys.exit(130)
             image_id = future_to_id[future]
@@ -774,6 +786,8 @@ def emit_saliency_points(manifest, args, cache):
                 cache.put({"prompt": [float(v) for v in prompt], "heuristic": float(heuristic), "exposure": exposure,
                            "subject": subject, "note": note}, *stage_a_key(filepath))
             record(image_id, prompt, heuristic, exposure, subject)
+    if pre_file:
+        pre_file.close()
     log("finding subjects: done")
 
 
@@ -866,7 +880,7 @@ def relative_references(groups: dict) -> dict:
     return {g: float(np.percentile(v, RELATIVE_REFERENCE_PERCENTILE)) for g, v in groups.items() if v}
 
 
-REPORT_HEADER = ["burst", "file", "rank", "of", "score", "stars", "keeper", "flags", "tags", "why"]
+REPORT_HEADER = ["burst", "file", "rank", "of", "score", "stars", "keeper", "flags", "tags", "why", "folder"]
 
 
 def report_rows(manifest, result_rows, keepers_per_burst) -> list:
@@ -877,17 +891,23 @@ def report_rows(manifest, result_rows, keepers_per_burst) -> list:
     for row in result_rows:
         if len(row) >= 6:
             by_burst.setdefault(row[3], []).append(row)
+    # the keeper allowance comes from the whole burst, as in score_manifest, unreadable frames included
+    burst_size = {}
+    for row in manifest:
+        burst_size[row[2]] = burst_size.get(row[2], 0) + 1
     out = []
-    for burst_id in dict.fromkeys(row[2] for row in manifest):
+    for burst_id in burst_size:
         rows = sorted(by_burst.get(burst_id, []), key=lambda r: -float(r[1]))
-        allowed = keepers_per_burst(len(rows))
+        allowed = keepers_per_burst(burst_size[burst_id])
         for rank, (img_id, score, flags, _burst, keeper, stars, *rest) in enumerate(rows, 1):
             why = (f"kept: rank {rank} of {len(rows)}, {allowed} allowed" if keeper == "1"
                    else f"not kept: rank {rank} of {len(rows)}, only {allowed} allowed or not eligible")
             if flags:
                 why += f"; flagged {flags.replace(';', ', ')}"
-            out.append([burst_id, os.path.basename(file_of.get(img_id, img_id)), rank, len(rows),
-                        score, stars, "yes" if keeper == "1" else "no", flags, rest[0] if rest else "", why])
+            path = file_of.get(img_id, img_id)
+            out.append([burst_id, os.path.basename(path), rank, len(rows),
+                        score, stars, "yes" if keeper == "1" else "no", flags, rest[0] if rest else "", why,
+                        os.path.dirname(path)])
     return out
 
 
@@ -1040,7 +1060,7 @@ def score_manifest(manifest, args, cache):
     sam = args.sharp_mode == "sam_subject"
     # relative mode rates against the whole selection, so its bursts wait for the last one
     deferred, relative_scores = [], {}
-    prescored = read_prescores(getattr(args, "prescores", "")) if sam else {}
+    prescored, stage_a_failed = read_prescores(getattr(args, "prescores", "")) if sam else ({}, set())
 
     # keyed on the burst's effective mode, so the EXIF rules and their
     # thresholds are part of the key without storing shutter or aperture
@@ -1060,6 +1080,11 @@ def score_manifest(manifest, args, cache):
         for burst_id, items in burst_groups.items():
             for image_id, filepath, mask_path, shortlisted, edited in items:
                 known = None
+                if sam and not mask_path and image_id in stage_a_failed:
+                    # stage A couldn't decode it (logged there); a second decode would fail too
+                    processed_count += 1
+                    burst_completion[burst_id] += 1
+                    continue
                 if sam and not mask_path and image_id in prescored:
                     fallback, exp, prompt, _ = prescored[image_id]
                     hit = cache.get(*masked_key(filepath, args, prompt, edited)) if shortlisted == "1" else None

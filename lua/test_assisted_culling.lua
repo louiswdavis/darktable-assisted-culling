@@ -53,6 +53,8 @@ local parsed = C.parse_csv_line("42,/home/user/photo 01.NEF,7,ok,1,4", 6)
 check("parse_csv_line splits into 6 fields", #parsed, 6)
 check("parse_csv_line field 2 keeps spaces", parsed[2], "/home/user/photo 01.NEF")
 check("parse_csv_line rejects wrong field count", C.parse_csv_line("1,2,3", 6), nil)
+local crlf = C.parse_csv_line("7,1,2,3,4,1\r", 6)
+check("parse_csv_line drops csv.writer's trailing \\r", crlf and crlf[6], "1")
 
 local point = C.parse_prompt(C.parse_csv_line("124,0.5,0.25,,", 5))
 check("parse_prompt: empty corner is a point", point.x0 == 0.5 and point.y0 == 0.25 and point.x1 == nil, true)
@@ -115,6 +117,14 @@ check("explain_report: a RAW finds its pair's row", why_raw[1], why_a[1])
 check("explain_report: the RAW isn't reported missing", #why_raw_missing, 0)
 local why_both = C.explain_report(report_text, { ["a.ARW"] = true, ["a.jpg"] = true })
 check("explain_report: a selected pair gives one line", #why_both, 1)
+local report_folders = 'burst,file,rank,of,score,stars,keeper,flags,tags,why,folder\n'
+    .. '0,a.jpg,1,1,80.0,4,yes,,,kept,C:\\shoot\\cam1\n'
+    .. '1,a.jpg,1,1,30.0,1,yes,,,kept,C:\\shoot\\cam2\n'
+local why_cam2 = C.explain_report(report_folders, { ["C:\\shoot\\cam2/a.jpg"] = true })
+check("explain_report: a same-named file in another folder doesn't match", table.concat(why_cam2, "|"),
+    "a.jpg: 1 stars, burst 1, score 30.0. kept")
+local _, why_cam3 = C.explain_report(report_folders, { ["C:\\shoot\\cam3/a.jpg"] = true })
+check("explain_report: no row in its folder is missing", table.concat(why_cam3, "|"), "C:\\shoot\\cam3/a.jpg")
 
 -- shots ---------------------------------------------------------------------
 check("shot_stem drops the extension, any case", C.shot_stem("DSC01.ARW") .. "/" .. C.shot_stem("dsc01.JPG"), "dsc01/dsc01")
@@ -151,6 +161,16 @@ check("collapse_shots: the swapped lead keeps the shot's position",
     "2:1,2 5:5")
 local _, swapped = C.collapse_shots({ { id = 1, path = "/s", filename = "a.ARW" }, { id = 2, path = "/s", filename = "a.JPG" } })
 check("collapse_shots: the RAW is no longer a lead", swapped[1], nil)
+check("collapse_shots: a Pentax PEF pair is scored from the JPEG",
+    shot_ids({ { id = 1, path = "/s", filename = "IMGP1.PEF" }, { id = 2, path = "/s", filename = "IMGP1.JPG" } }),
+    "2:1,2")
+check("collapse_shots: RAW, JPEG and a duplicate are one shot led by the JPEG",
+    shot_ids({ { id = 1, path = "/s", filename = "a.NEF" }, { id = 3, path = "/s", filename = "a.NEF" },
+               { id = 2, path = "/s", filename = "a.jpg" } }),
+    "2:1,3,2")
+check("collapse_shots: a RAW leads over a format the scorer can't open full size",
+    shot_ids({ { id = 1, path = "/s", filename = "a.heic" }, { id = 2, path = "/s", filename = "a.ARW" } }),
+    "2:1,2")
 
 print("")
 if failures == 0 then

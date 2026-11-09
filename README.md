@@ -95,7 +95,7 @@ The other preferences are optional; see [Preferences](#preferences).
 
 ## Using it
 
-In lighttable, select a batch (a whole shoot or a single burst) and click **Cull selection** in the **Assisted Culling** panel on the right. Progress shows in darktable's message area; click the button again to cancel.
+In lighttable, select a batch (a whole shoot or a single burst) and click **Cull selection** in the **Assisted Culling** panel on the right. Progress shows in darktable's message area; click the button again, or the X on the job in darktable's job area, to cancel.
 
 ### What you get
 
@@ -153,7 +153,7 @@ A few things a re-run doesn't touch:
 
 Tick **Tag each run** to also stamp every frame a run writes with `Assisted Culling|Run|YYYY-MM-DD HH:MM`, so you can filter darktable down to one run's frames. Stamps accumulate, and **Clear culling marks** leaves them; remove old ones in darktable's tag manager.
 
-Each scoring run also writes `assisted_culling/last-run.csv` in darktable's config folder (the folder holding `assisted_culling.log`): one row per scored frame with its burst, rank in the burst, score, stars, keeper yes/no, flags, diagnostic tags and a `why` line ("kept: rank 1 of 4, 2 allowed", "not kept: rank 3 of 4, only 2 allowed or not eligible; flagged blur"). Open it in a spreadsheet to see why a frame lost, or to tune thresholds from evidence. It is overwritten by the next run, but each run's copy is also kept as `assisted_culling/reports/YYYYMMDD-HHMMSS.csv` (newest 20), so two runs can be compared.
+Each scoring run also writes `assisted_culling/last-run.csv` in darktable's config folder (the folder holding `assisted_culling.log`): one row per scored frame with its burst, rank in the burst, score, stars, keeper yes/no, flags, diagnostic tags, a `why` line ("kept: rank 1 of 4, 2 allowed", "not kept: rank 3 of 4, only 2 allowed or not eligible; flagged blur") and the file's folder. The allowance counts every frame of the burst, including frames that couldn't be read. Open it in a spreadsheet to see why a frame lost, or to tune thresholds from evidence. It is overwritten by the next run, but each run's copy is also kept as `assisted_culling/reports/YYYYMMDD-HHMMSS.csv` (newest 20), so two runs can be compared.
 
 While a run is going, **Clear culling marks** and the culling shortcut queue behind it instead of refusing. Each queued job keeps the selection and settings from when you clicked, and starts when the run before it finishes. Cancelling drops the queue. (The panel button turns into **Cancel culling** during a run, so a second culling run can only be queued with the shortcut.)
 
@@ -284,7 +284,7 @@ score_images.py scores sharpness and exposure, picks the keepers per burst, writ
 assisted_culling.lua reads results.csv and applies ratings and tags
 ```
 
-**One shot, one rating.** A RAW+JPEG pair (same folder and file name, e.g. `DSC01.ARW` + `DSC01.JPG`) and darktable duplicates of one file count as a single shot: it's scored once, and every image in it gets the same stars, tags and keeper decision. A pair is scored from the JPEG (full size; the RAW only offers its embedded preview). `last-run.csv` has one row per shot, under the scored file; **Why these ratings?** finds it from either file.
+**One shot, one rating.** A RAW+JPEG pair (same folder and file name, e.g. `DSC01.ARW` + `DSC01.JPG`) and darktable duplicates of one file count as a single shot: it's scored once, and every image in it gets the same stars, tags and keeper decision. A pair is scored from the JPEG, TIFF or PNG (full size; the RAW only offers its embedded preview). These count as RAW: 3FR, ARI, ARW, BAY, CR2, CR3, CRW, DCR, DCS, DNG, ERF, FFF, IIQ, K25, KDC, MDC, MEF, MOS, MRW, NEF, NRW, ORF, ORI, PEF, RAF, RAW, RW2, RWL, SR2, SRF, SRW and X3F. `last-run.csv` has one row per shot, under the scored file; **Why these ratings?** finds it from either file.
 
 Two small processes talking through CSV files. The Lua side is split into pure logic (time parsing, group keys, CSV) with no darktable dependency, and the darktable integration proper; only the second half needs darktable to run.
 
@@ -387,7 +387,7 @@ Use a selection with at least two bursts of 3+ frames each.
 
 **Panel**
 
-8. **Cancel.** Start a run on a large selection and click the button while it shows **Cancel culling**. *Expect:* the run stops; frames already done keep their changes.
+8. **Cancel.** Start a run on a large selection and click the button while it shows **Cancel culling**. *Expect:* the run stops; frames already done keep their changes. Repeat with the X on the job in darktable's job area. *Expect:* the button shows **Cancelling...** until the run has stopped, then **Cull selection** again; a new run started straight after works normally.
 9. **Why these ratings?** with nothing selected. *Expect:* "Assisted Culling: select some images first".
 10. **Clear culling marks** on the selection. *Expect:* the plugin's tags are gone; star ratings are unchanged.
 11. **Tag switches.** Cull a batch with every tag on and note the stars. In **preferences → lua options**, turn off *Assisted Culling: tag Subject* and *tag Rejected*, then cull the same batch again. *Expect:* the stars and keepers are the same as before; no image in the batch has an `Assisted Culling|Subject|…` or `Assisted Culling|Rejected` tag; `Keeper`, the flags, `Technique` and `Scored` are still there. No `LUA ERROR`.
