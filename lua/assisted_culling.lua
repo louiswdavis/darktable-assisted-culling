@@ -324,18 +324,29 @@ local IS_WINDOWS = dt.configuration.running_os == "windows"
 local THIS_DIR = (debug.getinfo(1, "S").source:sub(2):match("^(.*)[/\\]")) or "."
 
 local TMP_DIR = dt.configuration.tmp_dir
-local MANIFEST_PATH = TMP_DIR .. "/dt_assisted_culling_manifest.csv"
-local RESULTS_PATH = TMP_DIR .. "/dt_assisted_culling_results.csv"
 -- The run log: this plugin's lines plus the scorer's stderr. Kept in the
 -- config dir, which outlives tmp_dir; the run before it is kept as .prev.log.
 local LOG_PATH = dt.configuration.config_dir .. "/assisted_culling.log"
 local PREV_LOG_PATH = dt.configuration.config_dir .. "/assisted_culling.prev.log"
-local PROGRESS_PATH = TMP_DIR .. "/dt_assisted_culling_progress.txt"
-local CANCEL_PATH = PROGRESS_PATH .. ".cancel"
-local DONE_PATH = TMP_DIR .. "/dt_assisted_culling_done.txt"
-local POINTS_PATH = TMP_DIR .. "/dt_assisted_culling_points.csv"
-local POINTS_DONE_PATH = POINTS_PATH .. ".done"
-local PRESCORE_PATH = TMP_DIR .. "/dt_assisted_culling_prescores.csv"
+
+-- A run's temp files. Each run gets its own names, so a cancelled scorer that
+-- outlives the run's wait keeps its own cancel flag and can't write into the next run.
+local MANIFEST_PATH, RESULTS_PATH, PROGRESS_PATH, CANCEL_PATH, DONE_PATH
+local POINTS_PATH, POINTS_DONE_PATH, PRESCORE_PATH
+local run_seq = 0
+local function new_run_paths()
+    run_seq = run_seq + 1
+    local base = string.format("%s/dt_assisted_culling_%d_%d_", TMP_DIR, os.time(), run_seq)
+    MANIFEST_PATH = base .. "manifest.csv"
+    RESULTS_PATH = base .. "results.csv"
+    PROGRESS_PATH = base .. "progress.txt"
+    CANCEL_PATH = PROGRESS_PATH .. ".cancel"
+    DONE_PATH = base .. "done.txt"
+    POINTS_PATH = base .. "points.csv"
+    POINTS_DONE_PATH = POINTS_PATH .. ".done"
+    PRESCORE_PATH = base .. "prescores.csv"
+end
+new_run_paths()
 -- Per-frame scores reused across runs; tmp_dir is wiped, the config dir isn't.
 local CACHE_PATH = dt.configuration.config_dir .. "/assisted_culling/scores.sqlite"
 local REPORT_PATH = dt.configuration.config_dir .. "/assisted_culling/last-run.csv"
