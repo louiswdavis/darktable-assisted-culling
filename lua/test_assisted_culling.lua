@@ -110,6 +110,47 @@ check("explain_report: a left-alone non-keeper says so", why_lines[1],
 check("explain_report: names frames the run had no row for", table.concat(why_missing, ","), "z.jpg")
 local why_a = C.explain_report(report_text, { ["a.jpg"] = true })
 check("explain_report: a keeper shows its stars", why_a[1], "a.jpg: 4 stars, burst 0, score 80.0. kept: rank 1 of 2, 1 allowed")
+local why_raw, why_raw_missing = C.explain_report(report_text, { ["A.ARW"] = true })
+check("explain_report: a RAW finds its pair's row", why_raw[1], why_a[1])
+check("explain_report: the RAW isn't reported missing", #why_raw_missing, 0)
+local why_both = C.explain_report(report_text, { ["a.ARW"] = true, ["a.jpg"] = true })
+check("explain_report: a selected pair gives one line", #why_both, 1)
+
+-- shots ---------------------------------------------------------------------
+check("shot_stem drops the extension, any case", C.shot_stem("DSC01.ARW") .. "/" .. C.shot_stem("dsc01.JPG"), "dsc01/dsc01")
+check("shot_stem keeps inner dots", C.shot_stem("a.b.jpg"), "a.b")
+check("shot_stem with no extension", C.shot_stem("README"), "readme")
+check("is_raw on ARW", C.is_raw("X.ARW"), true)
+check("is_raw on JPG", C.is_raw("x.jpg"), false)
+
+local function shot_ids(images)
+    local primaries, group_of = C.collapse_shots(images)
+    local out = {}
+    for _, p in ipairs(primaries) do
+        local members = {}
+        for _, img in ipairs(group_of[p.id]) do members[#members + 1] = img.id end
+        out[#out + 1] = p.id .. ":" .. table.concat(members, ",")
+    end
+    return table.concat(out, " ")
+end
+check("collapse_shots: RAW+JPEG pair is one shot, scored from the JPEG",
+    shot_ids({ { id = 1, path = "/s", filename = "DSC01.ARW" }, { id = 2, path = "/s", filename = "DSC01.JPG" } }),
+    "2:1,2")
+check("collapse_shots: JPEG first keeps it as lead",
+    shot_ids({ { id = 2, path = "/s", filename = "DSC01.JPG" }, { id = 1, path = "/s", filename = "DSC01.ARW" } }),
+    "2:2,1")
+check("collapse_shots: duplicates of one file are one shot",
+    shot_ids({ { id = 1, path = "/s", filename = "a.jpg" }, { id = 3, path = "/s", filename = "a.jpg" } }),
+    "1:1,3")
+check("collapse_shots: same stem in another folder stays separate",
+    shot_ids({ { id = 1, path = "/s", filename = "a.ARW" }, { id = 2, path = "/t", filename = "a.JPG" } }),
+    "1:1 2:2")
+check("collapse_shots: the swapped lead keeps the shot's position",
+    shot_ids({ { id = 1, path = "/s", filename = "a.ARW" }, { id = 5, path = "/s", filename = "b.ARW" },
+               { id = 2, path = "/s", filename = "a.JPG" } }),
+    "2:1,2 5:5")
+local _, swapped = C.collapse_shots({ { id = 1, path = "/s", filename = "a.ARW" }, { id = 2, path = "/s", filename = "a.JPG" } })
+check("collapse_shots: the RAW is no longer a lead", swapped[1], nil)
 
 print("")
 if failures == 0 then

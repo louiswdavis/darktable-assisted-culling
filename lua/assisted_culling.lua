@@ -72,6 +72,47 @@ function M.native_group_keys(items)
     return key_of
 end
 
+-- Same list as score_images.py RAW_EXTENSIONS.
+local RAW_EXT = { cr2 = true, cr3 = true, nef = true, arw = true, rw2 = true, dng = true, raf = true, orf = true }
+
+-- "IMG_1.ARW" → "img_1": a RAW and its in-camera JPEG share it.
+function M.shot_stem(filename)
+    return (filename:match("^(.+)%.[^.]*$") or filename):lower()
+end
+
+function M.is_raw(filename)
+    local ext = filename:match("%.([^.]+)$")
+    return ext ~= nil and RAW_EXT[ext:lower()] == true
+end
+
+-- Images → the ones to score, and per scored id every image that takes its result.
+-- One shot = darktable duplicates of a file plus a RAW+JPEG pair (same folder and
+-- stem), so the pair always gets the same stars. A shot is scored from its non-RAW
+-- file when it has one: full size, where the RAW gives only its embedded preview.
+function M.collapse_shots(images)
+    local primaries, group_of, lead_of = {}, {}, {}
+    local function key_id(img) return tonumber(img.id) or img.id end
+    for _, img in ipairs(images) do
+        local key = img.path .. "/" .. M.shot_stem(img.filename)
+        local lead = lead_of[key]
+        if not lead then
+            primaries[#primaries + 1] = img
+            lead_of[key] = { img = img, slot = #primaries }
+            group_of[key_id(img)] = { img }
+        else
+            local group = group_of[key_id(lead.img)]
+            group[#group + 1] = img
+            if M.is_raw(lead.img.filename) and not M.is_raw(img.filename) then
+                group_of[key_id(lead.img)] = nil
+                group_of[key_id(img)] = group
+                primaries[lead.slot] = img
+                lead.img = img
+            end
+        end
+    end
+    return primaries, group_of
+end
+
 -- Dense integers from 1 by first appearance; an id with no key gets its own.
 function M.number_groups(ids, key_of)
     local group_of, by_key, n = {}, {}, 0
@@ -146,17 +187,24 @@ end
 
 -- last-run.csv text + { filename = true } → one "file: stars, why" line per frame of the run
 -- that matches (a filename can match several rows when versions share a file), and the
--- filenames the run had no row for.
+-- filenames the run had no row for. A RAW+JPEG pair has one row, under the file that was
+-- scored, so a filename also matches rows with the same stem.
 function M.explain_report(text, wanted)
-    local lines, seen = {}, {}
+    local lines, seen, names_of = {}, {}, {}
+    for name in pairs(wanted) do
+        local stem = M.shot_stem(name)
+        names_of[stem] = names_of[stem] or {}
+        table.insert(names_of[stem], name)
+    end
     local first = true
     for line in text:gmatch("[^\r\n]+") do
         if first then
             first = false -- header
         else
             local f = M.parse_report_line(line)
-            if #f == 10 and wanted[f[2]] then
-                seen[f[2]] = true
+            local names = #f == 10 and names_of[M.shot_stem(f[2])]
+            if names then
+                for _, name in ipairs(names) do seen[name] = true end
                 local stars = f[6] == "leave" and "left as it was" or (f[6] .. " stars")
                 lines[#lines + 1] = string.format("%s: %s, burst %s, score %s. %s", f[2], stars, f[1], f[5], f[10])
             end
@@ -784,19 +832,8 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             if not sam_model then error("subject tracking (SAM) can't run: " .. why, 0) end
         end
 
-        -- Duplicates (same file) are scored once; the result is applied to all of them.
-        local primaries, group_of, seen = {}, {}, {}
-        for _, img in ipairs(images) do
-            local key = img.path .. "/" .. img.filename
-            local lead = seen[key]
-            if lead then
-                table.insert(group_of[tonumber(lead.id) or lead.id], img)
-            else
-                seen[key] = img
-                group_of[tonumber(img.id) or img.id] = { img }
-                table.insert(primaries, img)
-            end
-        end
+        -- Each shot (duplicates, RAW+JPEG pair) is scored once; the result is applied to all of it.
+        local primaries, group_of = M.collapse_shots(images)
         local n_primary = #primaries
         local n_dups = #images - n_primary
 
@@ -881,7 +918,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         say(string.format("Assisted Culling: scoring %d images in %d groups (%s keepers, %s ranking, %s grouping)",
             n_primary, n_bursts, pretty(keep_mode), pretty(rank_mode), mechanism))
         if n_dups > 0 then
-            say(string.format("Assisted Culling: %d duplicate(s) share a file with another image; each file is scored once and its result copied to all of them.", n_dups))
+            say(string.format("Assisted Culling: %d image(s) share a shot with another (a duplicate, or the RAW of a RAW+JPEG pair); each shot is scored once and its result copied to all of it.", n_dups))
         end
         if n_primary > 1000 then
             say(_("Assisted Culling: large selection, this can take several minutes. Click Cancel culling to stop at any time."))

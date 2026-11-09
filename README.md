@@ -284,6 +284,8 @@ score_images.py scores sharpness and exposure, picks the keepers per burst, writ
 assisted_culling.lua reads results.csv and applies ratings and tags
 ```
 
+**One shot, one rating.** A RAW+JPEG pair (same folder and file name, e.g. `DSC01.ARW` + `DSC01.JPG`) and darktable duplicates of one file count as a single shot: it's scored once, and every image in it gets the same stars, tags and keeper decision. A pair is scored from the JPEG (full size; the RAW only offers its embedded preview). `last-run.csv` has one row per shot, under the scored file; **Why these ratings?** finds it from either file.
+
 Two small processes talking through CSV files. The Lua side is split into pure logic (time parsing, group keys, CSV) with no darktable dependency, and the darktable integration proper; only the second half needs darktable to run.
 
 ### Scoring
