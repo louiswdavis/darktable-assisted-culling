@@ -79,6 +79,17 @@ attach = C.diag_tag_changes({}, "Keeper;Subject|Animal|Bird")
 check("diag tags: only diagnostic folders can be written; new subject kinds need no code",
     table.concat(attach, ","), "Assisted Culling|Subject|Animal|Bird")
 
+check("filter_diag: drops the branches turned off",
+    C.filter_diag("Subject|Vehicle|Car;Scored|Masked;Technique|Panning", { Subject = true, Technique = true }),
+    "Scored|Masked")
+check("filter_diag: nothing off keeps the column", C.filter_diag("Subject|Vehicle|Car;Scored|Masked", {}),
+    "Subject|Vehicle|Car;Scored|Masked")
+check("filter_diag: matches the branch name, not a prefix of it",
+    C.filter_diag("Scored|Masked", { Score = true }), "Scored|Masked")
+attach, detach = C.diag_tag_changes(have, C.filter_diag("Subject|Vehicle|Car;Scored|Masked", { Subject = true }))
+check("filter_diag + diag_tag_changes: an off branch is detached, not attached",
+    table.concat(attach, ",") .. "/" .. table.concat(detach, ","), "/Assisted Culling|Subject|Vehicle|Guessed")
+
 local flags = C.parse_flags("overexposed;eyes_closed")
 check("parse_flags reads every flag", tostring(flags.overexposed and flags.eyes_closed), "true")
 check("parse_flags: empty field is no flags", next(C.parse_flags("")), nil)

@@ -212,6 +212,17 @@ function M.diag_tag_changes(have, wanted)
     return attach, detach
 end
 
+-- wanted: the scorer's ";"-joined column 7; off: branch names turned off
+-- (e.g. { Subject = true }). Returns column 7 without those branches, so
+-- diag_tag_changes detaches them.
+function M.filter_diag(wanted, off)
+    local kept = {}
+    for rel in wanted:gmatch("[^;]+") do
+        if not off[rel:match("^[^|]+")] then kept[#kept + 1] = rel end
+    end
+    return table.concat(kept, ";")
+end
+
 local ok, dt = pcall(require, "darktable")
 if not ok then return M end
 
@@ -299,10 +310,6 @@ if dt.gui then
         "Assisted Culling: grouping tag node",
         "Tag node whose children are the groups when grouping support is tags. Empty = the newest Assisted Grouping run. Set from the panel",
         "")
-    dt.preferences.register("assisted_culling", "diagnostic_tags", "bool",
-        "Assisted Culling: diagnostic tags",
-        "Tag how each frame was judged (Assisted Culling|Subject, |Technique, |Scored) for filtering and spot-checks; off removes them on the next run",
-        true)
 end
 
 -- The panel's last combobox choices live in darktablerc but stay out of the
@@ -601,10 +608,50 @@ if dt.gui then
         local label = f.tag:match("|(.+)$")
         dt.preferences.register("assisted_culling", "penalise_" .. f.name, "bool",
             "Assisted Culling: " .. label .. " lowers stars",
-            "On: " .. label .. " images get one star less. Off: they're still tagged " .. label
+            "On: " .. label .. " images get one star less. Off: they're still tagged " .. label .. " (if its tag preference is on)"
                 .. " but keep their rating (for shots where it's a style, not a mistake).",
             true)
     end
+end
+
+-- One "tag_<key>" preference per branch under "Assisted Culling|". Off = runs
+-- stop writing it and detach it from the images they process; ratings and
+-- keeper picks are unchanged. Keys match FLAGS names for the flag branches.
+local TAG_TOGGLES = {
+    { key = "keeper", label = "Keeper" },
+    { key = "rejected", label = "Rejected" },
+    { key = "overexposed", label = "Overexposed" },
+    { key = "underexposed", label = "Underexposed" },
+    { key = "eyes_closed", label = "Eyes Closed" },
+    { key = "subject", label = "Subject", diag = true },
+    { key = "technique", label = "Technique", diag = true },
+    { key = "scored", label = "Scored", diag = true },
+}
+
+if dt.gui then
+    for _, t in ipairs(TAG_TOGGLES) do
+        dt.preferences.register("assisted_culling", "tag_" .. t.key, "bool",
+            "Assisted Culling: tag " .. t.label,
+            "Write Assisted Culling|" .. t.label .. " tags. Off: the next run removes them from the images it"
+                .. " processes. Ratings and keeper picks are unchanged.",
+            true)
+    end
+    -- diagnostic_tags (one switch for Subject, Technique and Scored) was replaced
+    -- by tag_subject/tag_technique/tag_scored; carry an explicit "off" over once.
+    -- Read as a string so an unset key ("") isn't mistaken for off.
+    if not dt.preferences.read("assisted_culling", "tag_prefs_migrated", "bool") then
+        if dt.preferences.read("assisted_culling", "diagnostic_tags", "string") == "FALSE" then
+            for _, t in ipairs(TAG_TOGGLES) do
+                if t.diag then dt.preferences.write("assisted_culling", "tag_" .. t.key, "bool", false) end
+            end
+        end
+        dt.preferences.write("assisted_culling", "tag_prefs_migrated", "bool", true)
+    end
+end
+
+-- Headless runs have no preferences dialog, so they write every tag.
+local function tag_enabled(key)
+    return not dt.gui or dt.preferences.read("assisted_culling", "tag_" .. key, "bool")
 end
 
 -- Flags the user set to tag-only, as the scorer's --tag-only-flags value.
@@ -678,12 +725,13 @@ local function group_support_key()
     return "native"
 end
 
--- Returns 1 if a write was needed (attach/detach), else 0.
-local function sync_tag(img, have, tag, name, wanted)
+-- Returns 1 if a write was needed (attach/detach), else 0. Creates the tag only
+-- to attach it, so a branch that is turned off never appears in the tag list.
+local function sync_tag(img, have, name, wanted)
     if wanted and not have[name] then
-        tags.attach(tag, img); return 1
+        tags.attach(tags.create(name), img); return 1
     elseif not wanted and have[name] then
-        tags.detach(tag, img); return 1
+        tags.detach(tags.find(name), img); return 1
     end
     return 0
 end
@@ -1027,18 +1075,9 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         for _, f in ipairs(FLAGS) do stats.flagged[f.name] = 0 end
 
         -- ---- result application (shared by "while scoring" and the final drain) ----
-        local keeper_tag, reject_tag
-        local flag_tags = {}
         -- one stamp per run; not in ALL_TAGS, so clearing marks and later runs leave earlier stamps alone
         local run_stamp = run_tag_check and run_tag_check.value and os.date(TAG_RUN_FORMAT) or nil
         local run_stamp_tag
-        local function ensure_tags()
-            if not keeper_tag then
-                keeper_tag = tags.create(TAG_KEEPER)
-                reject_tag = tags.create(TAG_REJECT)
-                for i, f in ipairs(FLAGS) do flag_tags[i] = tags.create(f.tag) end
-            end
-        end
 
         -- Reads are cheap; writes reload the lighttable collection / rewrite XMP, so skip no-ops.
         -- Every mark is a tag, never a colour label, so a re-run or "clear" can undo exactly
@@ -1047,11 +1086,15 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         -- batches, since each img.rating write reloads the whole collection.
         local rating_batch = nil
 
-        local diag_on = not dt.gui or dt.preferences.read("assisted_culling", "diagnostic_tags", "bool")
+        -- read once per run, like the group prefs
+        local tag_on, diag_off = {}, {}
+        for _, t in ipairs(TAG_TOGGLES) do
+            tag_on[t.key] = tag_enabled(t.key)
+            if t.diag and not tag_on[t.key] then diag_off[t.label] = true end
+        end
         local diag_tag_objs = {}
 
         local function apply_to_image(img, want_rating, is_keeper, flags, diag)
-            ensure_tags()
             local writes = 0
             local have = tags_of(img)
 
@@ -1065,10 +1108,10 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                 end
             end
 
-            writes = writes + sync_tag(img, have, keeper_tag, TAG_KEEPER, is_keeper)
-            writes = writes + sync_tag(img, have, reject_tag, TAG_REJECT, not is_keeper)
-            for i, f in ipairs(FLAGS) do
-                writes = writes + sync_tag(img, have, flag_tags[i], f.tag, flags[f.name] == true)
+            writes = writes + sync_tag(img, have, TAG_KEEPER, is_keeper and tag_on.keeper)
+            writes = writes + sync_tag(img, have, TAG_REJECT, not is_keeper and tag_on.rejected)
+            for _, f in ipairs(FLAGS) do
+                writes = writes + sync_tag(img, have, f.tag, flags[f.name] == true and tag_on[f.name])
             end
             if run_stamp and not have[run_stamp] then
                 run_stamp_tag = run_stamp_tag or tags.create(run_stamp)
@@ -1114,7 +1157,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             local writes = 0
             for _, img in ipairs(group) do
                 local ok_apply, res = pcall(apply_to_image, img, want_rating, is_keeper, flags,
-                    diag_on and parts[7] or "")
+                    M.filter_diag(parts[7], diag_off))
                 if ok_apply then
                     applied_total = applied_total + 1
                     writes = writes + res
@@ -1656,7 +1699,7 @@ local function install_panel()
 
     non_keeper_combo = dt.new_widget("combobox") {
         label = _("non-keepers"),
-        tooltip = _("What to do with images that are not kept. They always get the Rejected tag."),
+        tooltip = _("What to do with images that are not kept. They get the Rejected tag unless its preference is off."),
         _("leave alone"), _("reject (-1)"), _("0 stars"), _("1 star"), _("2 stars"), _("3 stars"), _("4 stars"), _("5 stars"),
         selected = read_choice("last_nk_mode", 1, 8),
         changed_callback = function(widget)

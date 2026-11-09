@@ -109,7 +109,7 @@ Each frame gets a star rating, which ranks it against the rest of the batch, plu
 | `Assisted Culling\|Underexposed` | Crushed shadows |
 | `Assisted Culling\|Eyes Closed` | *face & eyes* mode only: a face big enough to judge, with no open eyes found. Dark sunglasses trigger it too. |
 
-With the *diagnostic tags* preference on (the default), frames are also tagged with how they were judged, so you can spot-check the scorer:
+Frames are also tagged with how they were judged, so you can spot-check the scorer:
 
 | Tag | Meaning |
 |-----|---------|
@@ -119,7 +119,16 @@ With the *diagnostic tags* preference on (the default), frames are also tagged w
 | `Assisted Culling\|Scored\|Subject bias` | *subject tracking (SAM)*: a shortlisted frame got no mask, so the burst fell back to *subject bias* |
 | `Assisted Culling\|Technique\|Panning` / `…\|Shallow DoF` | The burst's EXIF switched its sharpness mode (see [shooting intent](#shooting-intent-from-exif)) |
 
-`Subject` is grouped by kind (`Vehicle` today), leaving room for other detectors later. Turning the preference off removes these tags on the next run.
+`Subject` is grouped by kind (`Vehicle` today), leaving room for other detectors later.
+
+#### Choosing which tags are written
+
+Every branch above has its own *"Assisted Culling: tag …"* switch in preferences → Lua options, all on by default. Turn off the ones you don't use to keep darktable's tag list short:
+
+- **Off** = the next run stops writing that branch and removes it from the images it processes. A branch that was never written never shows up in the tag list.
+- **Stars and keeper picks don't change.** The tags only report the decision; flags still cost stars per *"… lowers stars"*.
+- Images outside the run keep their old tags; select them and use **Clear culling marks**. darktable keeps tag names nobody uses any more in its tag list; delete them in the tagging module's dictionary.
+- `Locked` is yours and has no switch. The `Run` stamp stays the panel checkbox.
 
 Filter on these in darktable's **collections** module (tag → Assisted Culling) to step through just the keepers, or just the rejects. The parent `Assisted Culling` tag collects everything the plugin has scored.
 
@@ -130,7 +139,7 @@ Overexposed, Underexposed and Eyes Closed each take one star off. They never dec
 Two safeguards keep deliberate shots from being punished:
 
 - **Shared by the whole burst = no penalty.** If every frame in a burst is flagged the same way, it was most likely shot that way (a dark tunnel exit, say), so each frame keeps the tag but not the lost star.
-- **Per-flag switch.** For styles where a flag is the point (low-key, high-key), turn off *"Assisted Culling: … lowers stars"* for that flag in preferences → Lua options. Frames are still tagged; the stars are left alone.
+- **Per-flag switch.** For styles where a flag is the point (low-key, high-key), turn off *"Assisted Culling: … lowers stars"* for that flag in preferences → Lua options. Frames are still tagged (unless that flag's *tag* switch is off); the stars are left alone.
 
 ### Re-running and clearing
 
@@ -252,8 +261,10 @@ All under **preferences → lua options**.
 | Assisted Culling: fast JPEG decoding | on | Decodes JPEGs and raw previews at reduced size. Several times faster; scores shift slightly, which matters little since keepers are ranked within each burst. |
 | Assisted Culling: grouping support | native | `native`, `tags` or `none`. Set from the panel's **grouping support** control, see [Grouping support](#grouping-support) |
 | Assisted Culling: grouping tag node | empty (newest run) | The tag node whose children are the groups in `tags` mode. Set from the panel |
-| Assisted Culling: diagnostic tags | on | Tags how each frame was judged (`Subject`, `Technique`, `Scored`); see [What you get](#what-you-get). Each tag write reloads darktable's collection, so turn off to speed up applying results. |
-| Assisted Culling: *Tag* lowers stars | on, one per flag | Off = that flag is still tagged but never costs stars. See [Flags cost stars](#flags-cost-stars-never-the-keeper). |
+| Assisted Culling: tag *Branch* | on, one per branch | `Keeper`, `Rejected`, `Overexposed`, `Underexposed`, `Eyes Closed`, `Subject`, `Technique`, `Scored`. Off = runs stop writing that branch and remove it from the images they process; images outside the run keep it until **Clear culling marks**. Ratings and keeper picks don't change. Fewer tag writes also apply results faster. See [Choosing which tags are written](#choosing-which-tags-are-written). |
+| Assisted Culling: *Tag* lowers stars | on, one per flag | Off = that flag never costs stars (it's still tagged if its *tag* preference is on). See [Flags cost stars](#flags-cost-stars-never-the-keeper). |
+
+**Migration:** `diagnostic_tags` (one switch for `Subject`, `Technique` and `Scored`) was replaced by `tag_subject`, `tag_technique` and `tag_scored`. If it was off, the first start with this version turns those three off, once; the old key is then ignored.
 
 ## How it works
 
@@ -377,6 +388,7 @@ Use a selection with at least two bursts of 3+ frames each.
 8. **Cancel.** Start a run on a large selection and click the button while it shows **Cancel culling**. *Expect:* the run stops; frames already done keep their changes.
 9. **Why these ratings?** with nothing selected. *Expect:* "Assisted Culling: select some images first".
 10. **Clear culling marks** on the selection. *Expect:* the plugin's tags are gone; star ratings are unchanged.
+11. **Tag switches.** Cull a batch with every tag on and note the stars. In **preferences → lua options**, turn off *Assisted Culling: tag Subject* and *tag Rejected*, then cull the same batch again. *Expect:* the stars and keepers are the same as before; no image in the batch has an `Assisted Culling|Subject|…` or `Assisted Culling|Rejected` tag; `Keeper`, the flags, `Technique` and `Scored` are still there. No `LUA ERROR`.
 
 ## Development
 
