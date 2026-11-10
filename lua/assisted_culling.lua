@@ -2169,6 +2169,39 @@ local function make_preset_controls(o)
 end
 -- end preset controls
 
+-- Section block: drift-guarded copy in grouping, culling and tagging. Change all three.
+-- A collapsible panel section: the header button toggles the body box. While collapsed
+-- the header shows o.summary() in brackets, so its settings can be checked unopened.
+-- visible = false also stops darktable's show-all from unhiding a collapsed body.
+local function make_section(o)
+    local s = { open = o.open ~= false }
+    local body = { orientation = "vertical" }
+    for i = 1, #o.widgets do body[#body + 1] = o.widgets[i] end
+    s.body = dt.new_widget("box")(body)
+    s.header = dt.new_widget("button") { label = o.title }
+    function s.refresh()
+        local text = (o.number and (o.number .. "  ") or "") .. (s.open and "▾ " or "▸ ") .. o.title
+        local extra = (not s.open and o.summary) and o.summary() or ""
+        if extra ~= "" then text = text .. "  (" .. extra .. ")" end
+        s.header.label = text
+    end
+    s.header.clicked_callback = function()
+        s.open = not s.open
+        s.body.visible = s.open
+        s.refresh()
+    end
+    s.body.visible = s.open
+    s.refresh()
+    s.widget = dt.new_widget("box") { orientation = "vertical", s.header, s.body }
+    return s
+end
+
+-- Plain numbered heading for a section that never collapses (the run step).
+local function step_label(number, title)
+    return dt.new_widget("section_label") { label = number .. "  " .. title }
+end
+-- end section block
+
 -- Panel -----------------------------------------------------------------------
 
 -- The panel's settings; set by install_panel. Read when a job is clicked, so a queued job keeps them.
@@ -2242,8 +2275,13 @@ local function install_panel()
     M.module_installed = true
 
     local ctl
+    local sections = {}
+    local function refresh_sections()
+        for i = 1, #sections do sections[i].refresh() end
+    end
     local function changed()
         if ctl then ctl.check_dirty() end
+        refresh_sections()
     end
 
     -- The combo values last shown or picked, by schema key. Combobox callbacks run later
@@ -2304,7 +2342,7 @@ local function install_panel()
         { _("center crop"), _("edge-to-edge uniformity"), _("absolute peak 1%"), _("face & eyes (OpenCV)"), _("subject bias (center-weighted)"), _("subject tracking (SAM)") })
 
     local exp_combo = choice_combo("exp_mode", _("exposure"),
-        _("Flags clipped shadows/highlights (Overexposed/Underexposed tag, one star lower; turn the penalty off under options below)."),
+        _("Flags clipped shadows/highlights (Overexposed/Underexposed tag, one star lower; turn the penalty off under penalties & speed below)."),
         { _("whole frame"), _("subject only (ignore sky)"), _("strict histogram"), _("ignore exposure") })
 
     local keep_combo = choice_combo("keep_mode", _("keepers"),
@@ -2383,6 +2421,7 @@ local function install_panel()
         for key in pairs(combos) do show_choice(key, s[key]) end
         for _, key in ipairs(check_order) do checks[key].value = s[key] end
         group_node_entry.text = s.group_node
+        refresh_sections()
     end
 
     clear_button = dt.new_widget("button") {
@@ -2472,7 +2511,38 @@ local function install_panel()
         allow_store_new = true,
     })
 
-    local panel = {
+    local function count_on(list)
+        local n = 0
+        for i = 1, #list do if list[i].value then n = n + 1 end end
+        return n
+    end
+    local scoring_section = make_section {
+        number = 1, title = _("scoring"),
+        widgets = { genre_combo, rank_combo, sharp_combo, exp_combo, keep_combo, non_keeper_combo },
+        summary = function() return string.format(_("genre %s"), genre_combo.value or "") end,
+    }
+    local bursts_section = make_section {
+        number = 2, title = _("bursts"),
+        widgets = { group_support_combo, group_node_entry },
+        summary = function() return group_support_combo.value or "" end,
+    }
+    local options_section = make_section {
+        number = 3, title = _("penalties & speed"), open = false,
+        widgets = option_checks,
+        summary = function() return string.format(_("%d on"), count_on(option_checks)) end,
+    }
+    local tags_section = make_section {
+        number = 4, title = _("tags written"), open = false,
+        widgets = tag_checks,
+        summary = function() return string.format(_("%d of %d"), count_on(tag_checks), #tag_checks) end,
+    }
+    local tools_section = make_section {
+        title = _("tools"), open = false,
+        widgets = { why_button, report_button, clear_button },
+    }
+    sections = { scoring_section, bursts_section, options_section, tags_section, tools_section }
+
+    local panel_box = dt.new_widget("box") {
         orientation = "vertical",
         -- shows the template defaults; nothing is saved
         reset_callback = function()
@@ -2480,27 +2550,15 @@ local function install_panel()
             changed()
         end,
         ctl.widget,
-        dt.new_widget("section_label") { label = _("scoring") },
-        genre_combo,
-        rank_combo,
-        sharp_combo,
-        exp_combo,
-        keep_combo,
-        non_keeper_combo,
-        dt.new_widget("section_label") { label = _("run") },
-        group_support_combo,
-        group_node_entry,
+        scoring_section.widget,
+        bursts_section.widget,
+        options_section.widget,
+        tags_section.widget,
+        step_label(5, _("run")),
         run_tag_check,
         action_button,
-        why_button,
-        report_button,
-        clear_button,
-        dt.new_widget("section_label") { label = _("options") },
+        tools_section.widget,
     }
-    for _, c in ipairs(option_checks) do panel[#panel + 1] = c end
-    panel[#panel + 1] = dt.new_widget("section_label") { label = _("tags written") }
-    for _, c in ipairs(tag_checks) do panel[#panel + 1] = c end
-    local panel_box = dt.new_widget("box")(panel)
 
     dt.register_lib(
         "assisted_culling", _("Assisted Culling"), true, true,

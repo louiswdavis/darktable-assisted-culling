@@ -140,7 +140,7 @@ Overexposed, Underexposed and Eyes Closed each take one star off. They never dec
 Two safeguards keep deliberate shots from being punished:
 
 - **Shared by the whole burst = no penalty.** If every frame in a burst is flagged the same way, it was most likely shot that way (a dark tunnel exit, say), so each frame keeps the tag but not the lost star.
-- **Per-flag switch.** For styles where a flag is the point (low-key, high-key), turn off *… lowers stars* for that flag under **options** in the panel. Frames are still tagged (unless that flag's *tag* switch is off); the stars are left alone.
+- **Per-flag switch.** For styles where a flag is the point (low-key, high-key), turn off *… lowers stars* for that flag under **penalties & speed** in the panel. Frames are still tagged (unless that flag's *tag* switch is off); the stars are left alone.
 
 ### Re-running and clearing
 
@@ -180,6 +180,8 @@ The **preset** picker at the top of the panel saves every panel setting (everyth
 - A run reads the settings when it starts, so switching presets mid-run doesn't change it. Runs without the GUI (`--luacmd`) use the last picked preset, or the template defaults.
 
 ## Panel options
+
+Below the [preset](#presets) picker the panel runs top to bottom in the order you'd check it: **1 scoring** (genre to non-keepers, below), **2 bursts**, **3 penalties & speed**, **4 tags written**, **5 run**, then **tools**. Click a section's header to fold it; a folded header shows a short summary of its settings in brackets, e.g. `4 ▸ tags written (6 of 8)`. Sections 3, 4 and **tools** start folded. darktable's reset button (↺ in the panel header) puts every setting back to the template defaults; nothing is saved until you update a preset.
 
 ### Genre
 
@@ -263,18 +265,31 @@ How many frames per burst survive: *single best only*, *portrait (1 or 2)*, *dyn
 
 What happens to the frames that aren't kept: *leave alone*, *reject (-1)*, or a fixed star count from 0 to 5. They always get the `Rejected` tag regardless.
 
-### Grouping, run, options
+### 2 bursts
 
 - **grouping support** (Native groups, Grouping tags, None; default Native groups). What groups photos before keepers are picked, see [Grouping support](#grouping-support).
 - **Grouping tag node (blank = newest run)**. The tag node whose children are the groups in Grouping tags mode.
-- **Tag each run** (default off). Stamps every frame a run writes with `Assisted Culling|Run|YYYY-MM-DD HH:MM`.
+
+### 3 penalties & speed
+
 - **Apply ratings while scoring** (default off). Applies results as they arrive instead of all at the end. Faster on big batches, but darktable's UI shares the CPU with the scorer; turn off if it lags.
 - **Fast JPEG decoding** (default on). Decodes JPEGs and raw previews at reduced size. Several times faster; scores shift slightly, which matters little since keepers are ranked within each burst.
 - ***Flag* lowers stars** (default on, one per flag). Off = that flag never costs stars; it's still tagged if its tag switch is on. See [Flags cost stars](#flags-cost-stars-never-the-keeper).
 
-### Tags written
+### 4 tags written
 
 One switch per branch (default on): `Keeper`, `Rejected`, `Overexposed`, `Underexposed`, `Eyes Closed`, `Subject`, `Technique`, `Scored`. Off = runs stop writing that branch and remove it from the images they process; images outside the run keep it until **Clear culling marks**. Ratings and keeper picks don't change. Fewer tag writes also apply results faster. See [Choosing which tags are written](#choosing-which-tags-are-written).
+
+### 5 run
+
+- **Tag each run** (default off). Stamps every frame a run writes with `Assisted Culling|Run|YYYY-MM-DD HH:MM`.
+- **Cull selection.** Scores the selected images and rates/tags them. Click again to cancel.
+
+### tools
+
+- **Why these ratings?** Explains the selected images from the last run's report. Changes nothing.
+- **Open last report.** Opens `last-run.csv` in your spreadsheet app.
+- **Clear culling marks.** Removes the plugin's tags from the selected images (see [Re-running and clearing](#re-running-and-clearing)).
 
 ## Preferences
 
@@ -392,7 +407,7 @@ The grouping-support changes have not run in darktable yet. Work through these s
 **Setup**
 
 1. **Install Python** as in [Install](#1-python-side). *Expect:* the requirements install with no errors.
-2. **Install the plugin** as in [Install](#3-darktable-side) and start darktable. *Expect:* an **Assisted Culling** panel on the right in lighttable, with sections *scoring* and *run*, and a **Cull selection** button. No `LUA ERROR` in the darktable log.
+2. **Install the plugin** as in [Install](#3-darktable-side) and start darktable. *Expect:* an **Assisted Culling** panel on the right in lighttable, with sections *1 scoring* and *2 bursts* open, *3 penalties & speed* and *4 tags written* folded with a count in brackets, *5 run* with a **Cull selection** button, and a folded *tools* section. No `LUA ERROR` in the darktable log.
 3. **Set the plugin folder** in **preferences → lua options → Assisted Culling: plugin folder** to the repo folder, and leave the interpreter empty. *Expect:* runs find the repo's `.venv` without the interpreter preference.
 
 **One run per grouping mechanism**
