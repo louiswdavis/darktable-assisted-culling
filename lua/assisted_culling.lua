@@ -2496,7 +2496,11 @@ local function install_panel()
         ctl.widget,
         make_section(1, _("scoring"),
             { genre_combo, rank_combo, sharp_combo, exp_combo, keep_combo, non_keeper_combo }),
-        make_section(2, _("bursts"), { group_support_combo, group_node_entry }),
+        make_section(2, _("bursts"), {
+            group_support_combo,
+            dt.new_widget("label") { label = _("grouping tag node"), halign = "start" },
+            group_node_entry,
+        }),
         make_section(3, _("penalties & speed"), option_checks),
         make_section(4, _("tags written"), tag_checks),
         step_label(5, _("run")),
