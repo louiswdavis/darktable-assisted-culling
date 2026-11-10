@@ -2170,35 +2170,16 @@ end
 -- end preset controls
 
 -- Section block: drift-guarded copy in grouping, culling and tagging. Change all three.
--- A collapsible panel section: the header button toggles the body box. While collapsed
--- the header shows o.summary() in brackets, so its settings can be checked unopened.
--- visible = false also stops darktable's show-all from unhiding a collapsed body.
-local function make_section(o)
-    local s = { open = o.open ~= false }
-    local body = { orientation = "vertical" }
-    for i = 1, #o.widgets do body[#body + 1] = o.widgets[i] end
-    s.body = dt.new_widget("box")(body)
-    s.header = dt.new_widget("button") { label = o.title }
-    function s.refresh()
-        local text = (o.number and (o.number .. "  ") or "") .. (s.open and "▾ " or "▸ ") .. o.title
-        local extra = (not s.open and o.summary) and o.summary() or ""
-        if extra ~= "" then text = text .. "  (" .. extra .. ")" end
-        s.header.label = text
-    end
-    s.header.clicked_callback = function()
-        s.open = not s.open
-        s.body.visible = s.open
-        s.refresh()
-    end
-    s.body.visible = s.open
-    s.refresh()
-    s.widget = dt.new_widget("box") { orientation = "vertical", s.header, s.body }
-    return s
+-- A panel section is a section_label heading ("1  title"; number optional) above its widgets.
+-- Sections don't fold: Lua has no clickable heading widget, and a button header looks like a button.
+local function step_label(number, title)
+    return dt.new_widget("section_label") { label = (number and (number .. "  ") or "") .. title }
 end
 
--- Plain numbered heading for a section that never collapses (the run step).
-local function step_label(number, title)
-    return dt.new_widget("section_label") { label = number .. "  " .. title }
+local function make_section(number, title, widgets)
+    local body = { orientation = "vertical", step_label(number, title) }
+    for i = 1, #widgets do body[#body + 1] = widgets[i] end
+    return dt.new_widget("box")(body)
 end
 -- end section block
 
@@ -2275,13 +2256,8 @@ local function install_panel()
     M.module_installed = true
 
     local ctl
-    local sections = {}
-    local function refresh_sections()
-        for i = 1, #sections do sections[i].refresh() end
-    end
     local function changed()
         if ctl then ctl.check_dirty() end
-        refresh_sections()
     end
 
     -- The combo values last shown or picked, by schema key. Combobox callbacks run later
@@ -2421,7 +2397,6 @@ local function install_panel()
         for key in pairs(combos) do show_choice(key, s[key]) end
         for _, key in ipairs(check_order) do checks[key].value = s[key] end
         group_node_entry.text = s.group_node
-        refresh_sections()
     end
 
     clear_button = dt.new_widget("button") {
@@ -2511,37 +2486,6 @@ local function install_panel()
         allow_store_new = true,
     })
 
-    local function count_on(list)
-        local n = 0
-        for i = 1, #list do if list[i].value then n = n + 1 end end
-        return n
-    end
-    local scoring_section = make_section {
-        number = 1, title = _("scoring"),
-        widgets = { genre_combo, rank_combo, sharp_combo, exp_combo, keep_combo, non_keeper_combo },
-        summary = function() return string.format(_("genre %s"), genre_combo.value or "") end,
-    }
-    local bursts_section = make_section {
-        number = 2, title = _("bursts"),
-        widgets = { group_support_combo, group_node_entry },
-        summary = function() return group_support_combo.value or "" end,
-    }
-    local options_section = make_section {
-        number = 3, title = _("penalties & speed"), open = false,
-        widgets = option_checks,
-        summary = function() return string.format(_("%d on"), count_on(option_checks)) end,
-    }
-    local tags_section = make_section {
-        number = 4, title = _("tags written"), open = false,
-        widgets = tag_checks,
-        summary = function() return string.format(_("%d of %d"), count_on(tag_checks), #tag_checks) end,
-    }
-    local tools_section = make_section {
-        title = _("tools"), open = false,
-        widgets = { why_button, report_button, clear_button },
-    }
-    sections = { scoring_section, bursts_section, options_section, tags_section, tools_section }
-
     local panel_box = dt.new_widget("box") {
         orientation = "vertical",
         -- shows the template defaults; nothing is saved
@@ -2550,14 +2494,15 @@ local function install_panel()
             changed()
         end,
         ctl.widget,
-        scoring_section.widget,
-        bursts_section.widget,
-        options_section.widget,
-        tags_section.widget,
+        make_section(1, _("scoring"),
+            { genre_combo, rank_combo, sharp_combo, exp_combo, keep_combo, non_keeper_combo }),
+        make_section(2, _("bursts"), { group_support_combo, group_node_entry }),
+        make_section(3, _("penalties & speed"), option_checks),
+        make_section(4, _("tags written"), tag_checks),
         step_label(5, _("run")),
         run_tag_check,
         action_button,
-        tools_section.widget,
+        make_section(nil, _("tools"), { why_button, report_button, clear_button }),
     }
 
     dt.register_lib(

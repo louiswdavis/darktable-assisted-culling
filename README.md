@@ -181,7 +181,7 @@ The **preset** picker at the top of the panel saves every panel setting (everyth
 
 ## Panel options
 
-Below the [preset](#presets) picker the panel runs top to bottom in the order you'd check it: **1 scoring** (genre to non-keepers, below), **2 bursts**, **3 penalties & speed**, **4 tags written**, **5 run**, then **tools**. Click a section's header to fold it; a folded header shows a short summary of its settings in brackets, e.g. `4 ▸ tags written (6 of 8)`. Sections 3, 4 and **tools** start folded. darktable's reset button (↺ in the panel header) puts every setting back to the template defaults; nothing is saved until you update a preset.
+Below the [preset](#presets) picker the panel runs top to bottom in the order you'd check it: **1 scoring** (genre to non-keepers, below), **2 bursts**, **3 penalties & speed**, **4 tags written**, **5 run**, then **tools**. Each section has its own heading; all sections stay open. darktable's reset button (↺ in the panel header) puts every setting back to the template defaults; nothing is saved until you update a preset.
 
 ### Genre
 
@@ -407,7 +407,7 @@ The grouping-support changes have not run in darktable yet. Work through these s
 **Setup**
 
 1. **Install Python** as in [Install](#1-python-side). *Expect:* the requirements install with no errors.
-2. **Install the plugin** as in [Install](#3-darktable-side) and start darktable. *Expect:* an **Assisted Culling** panel on the right in lighttable, with sections *1 scoring* and *2 bursts* open, *3 penalties & speed* and *4 tags written* folded with a count in brackets, *5 run* with a **Cull selection** button, and a folded *tools* section. No `LUA ERROR` in the darktable log.
+2. **Install the plugin** as in [Install](#3-darktable-side) and start darktable. *Expect:* an **Assisted Culling** panel on the right in lighttable, with sections *1 scoring*, *2 bursts*, *3 penalties & speed*, *4 tags written*, *5 run* (with a **Cull selection** button) and *tools*, each under its own heading. No `LUA ERROR` in the darktable log.
 3. **Set the plugin folder** in **preferences → lua options → Assisted Culling: plugin folder** to the repo folder, and leave the interpreter empty. *Expect:* runs find the repo's `.venv` without the interpreter preference.
 
 **One run per grouping mechanism**
