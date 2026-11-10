@@ -172,8 +172,8 @@ The **preset** picker at the top of the panel saves every panel setting (everyth
 
 - **preset**: `template` first, then your presets by name. Picking one loads its values into the panel. The panel opens on the last one you picked.
 - **template**: the built-in defaults. It can't be updated, renamed or deleted; use it as the starting point for a new preset.
-- **☰** beside it: **update preset "<name>"** saves the panel into the selected preset; **store new preset…** asks for a name (type it, then **OK**) and saves the panel as a new preset; **rename preset…**; **delete preset** asks first. On `template` only **store new preset…** is offered.
-- **unsaved changes** shows under the picker when the panel differs from the saved preset. Switching presets drops them. Text fields have no change signal, so their edits show when **☰** is opened or a run starts.
+- **actions** beside it: **update preset "<name>"** saves the panel into the selected preset; **store new preset…** asks for a name (type it, then **OK**) and saves the panel as a new preset; **rename preset…**; **delete preset** asks first. On `template` only **store new preset…** is offered.
+- **unsaved changes** shows under the picker when the panel differs from the saved preset. Switching presets drops them. Text fields have no change signal, so their edits show when **actions** is opened or a run starts.
 - Each preset is `assisted_culling/presets/<name>.json` in darktable's config folder. A name can't be `template` or use characters a Windows file name can't hold.
 - A setting missing from a file uses its default; **update preset** writes every setting, so older files fill in. A value that's no longer valid uses the default and logs one line naming the preset and setting.
 - A file that can't be read or parsed: the panel says so, names the file, and keeps its current values. The plugin never rewrites a broken file; fix or delete it.

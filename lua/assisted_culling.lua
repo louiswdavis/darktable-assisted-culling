@@ -1831,7 +1831,7 @@ function M.clear_marks(images)
 end
 
 -- Preset controls: drift-guarded copy in grouping, culling and tagging. Change all three.
--- The preset picker and ☰ menu at the top of the panel. Lua panels can't use darktable's
+-- The preset picker and actions menu at the top of the panel. Lua panels can't use darktable's
 -- own presets (lualib.c leaves get_params/set_params NULL), so this builds its own.
 -- Combobox callbacks run later and fire on every `selected` assignment, so each one acts
 -- only when the widget's value differs from `current`.
@@ -1992,7 +1992,7 @@ local function make_preset_controls(o)
     end
 
     local function set_menu()
-        local items = { "☰" }
+        local items = { "choose…" }
         menu_actions = { false }
         local function add(text, action)
             items[#items + 1] = text
@@ -2109,7 +2109,7 @@ local function make_preset_controls(o)
 
     picker = dt.new_widget("combobox") {
         label = "preset",
-        tooltip = "Pick a saved set of panel settings. template = the defaults. Unsaved changes are dropped when you switch. Save with ☰ → update preset.",
+        tooltip = "Pick a saved set of panel settings. template = the defaults. Unsaved changes are dropped when you switch. Save with actions → update preset.",
         changed_callback = function(self)
             local name = self.value
             if current and name and name ~= "" and name ~= current then ctl.select(name) end
@@ -2117,6 +2117,7 @@ local function make_preset_controls(o)
         "template",
     }
     menu = dt.new_widget("combobox") {
+        label = "actions",
         tooltip = "Preset actions: update the selected preset with the panel's values, store the panel as a new preset, rename or delete.",
         changed_callback = function(self)
             local i = self.selected
@@ -2125,7 +2126,7 @@ local function make_preset_controls(o)
             self.selected = 1
             if action then ctl.check_dirty(); action() end
         end,
-        "☰",
+        "choose…",
     }
     dirty_label = dt.new_widget("label") { label = "unsaved changes", halign = "start", visible = false }
     name_entry = dt.new_widget("entry") { placeholder = "preset name", text = "" }
