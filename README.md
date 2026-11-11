@@ -449,7 +449,7 @@ The grouping-support changes have not run in darktable yet. Work through these s
 **Setup**
 
 1. **Install Python** as in [Install](#1-python-side). *Expect:* the requirements install with no errors.
-2. **Install the plugin** as in [Install](#3-darktable-side) and start darktable. *Expect:* an **Assisted Culling** panel on the right in lighttable, with sections *1 scoring*, *2 bursts*, *3 penalties & speed*, *4 tags written*, *5 run* (with a **Cull selection** button) and *tools*, each under its own heading. No `LUA ERROR` in the darktable log.
+2. **Install the plugin** as in [Install](#3-darktable-side) and start darktable. *Expect:* an **Assisted Culling** panel on the right in lighttable, with a **page** combobox showing one of *1 scoring* to *4 tags written*, then *5 run* (with a **Cull selection** button) and *tools*. No `LUA ERROR` in the darktable log.
 3. **Set the plugins folder** in **preferences → lua options → plugins folder (holds the three assisted-* folders)** to the folder holding the repo, and leave the interpreter empty. *Expect:* runs find the repo's `.venv` without the interpreter preference.
 
 **One run per grouping mechanism**
