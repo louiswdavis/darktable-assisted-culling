@@ -6,6 +6,27 @@
 ]]
 
 local M = {}
+local THIS_DIR = (debug.getinfo(1, "S").source:sub(2):match("^(.*)[/\\]")) or "."
+
+-- plugin_common.lua lives beside this file; when this file was copied into lua/contrib by
+-- hand it is found through the plugin folder preference instead.
+local function load_common()
+    local dirs, tried = { THIS_DIR }, {}
+    local ok_dt, dt0 = pcall(require, "darktable")
+    if ok_dt then
+        local ok_p, folder = pcall(dt0.preferences.read, "assisted_culling", "plugin_folder", "directory")
+        if ok_p and folder and folder ~= "" then dirs[#dirs + 1] = folder .. "/lua" end
+    end
+    for _, dir in ipairs(dirs) do
+        local path = dir .. "/plugin_common.lua"
+        local chunk = loadfile(path)
+        if chunk then return chunk() end
+        tried[#tried + 1] = path
+    end
+    error("assisted_culling: plugin_common.lua not found (tried " .. table.concat(tried, ", ")
+        .. "). Copy it next to assisted_culling.lua, or set the plugin folder preference.")
+end
+local C = load_common()
 
 M.cancel_requested = false
 M.module_installed = false
@@ -21,81 +42,16 @@ local queue = {}
 local run_next -- defined after start_culling; score_images calls it as a run finishes
 local clear_button = nil
 
--- Copy of the group-key block in darktable-assisted-tagging/lua/assisted_tagging.lua; change both.
-local GROUP_PREFIX = "Assisted Grouping|"
-local GROUP_STAMP = "^%d%d%d%d%-%d%d%-%d%d %d%d:%d%d:%d%d$"
-
--- Greatest-stamp "Assisted Grouping|<stamp>|Group" among the tag names, or nil.
-function M.newest_group_node(tag_lists)
-    local best
-    for _, tags in ipairs(tag_lists) do
-        for _, name in ipairs(tags) do
-            if name:sub(1, #GROUP_PREFIX) == GROUP_PREFIX then
-                local stamp, rest = name:sub(#GROUP_PREFIX + 1):match("^([^|]+)|(.*)$")
-                if stamp and stamp:match(GROUP_STAMP) and (rest == "Group" or rest:sub(1, 6) == "Group|") then
-                    if not best or stamp > best then best = stamp end
-                end
-            end
-        end
-    end
-    return best and (GROUP_PREFIX .. best .. "|Group") or nil
+-- Shared with the other two plugins (plugin_common.lua); re-exported for the tests.
+M.newest_group_node, M.tag_group_keys, M.native_group_keys, M.number_groups =
+    C.newest_group_node, C.tag_group_keys, C.native_group_keys, C.number_groups
+M.shot_stem, M.is_raw, M.csv_line, M.parse_csv_line, M.parse_report_line, M.pythonw_of =
+    C.shot_stem, C.is_raw, C.csv_line, C.parse_csv_line, C.parse_csv_fields, C.pythonw_of
+local lead_rank = C.lead_rank
+for name, fn in pairs(C) do
+    if type(name) == "string" and name:match("^preset_") then M[name] = fn end
 end
 
--- id -> child name under node (first by name); second return lists ids with several children.
-function M.tag_group_keys(items, node)
-    local prefix = node .. "|"
-    local key_of, multi = {}, {}
-    for _, item in ipairs(items) do
-        local children = {}
-        for name in pairs(item.tags) do
-            if name:sub(1, #prefix) == prefix then
-                local child = name:sub(#prefix + 1)
-                if child ~= "" and not child:find("|", 1, true) then children[#children + 1] = child end
-            end
-        end
-        if #children > 0 then
-            table.sort(children)
-            key_of[item.id] = children[1]
-            if #children > 1 then multi[#multi + 1] = item.id end
-        end
-    end
-    return key_of, multi
-end
-
-function M.native_group_keys(items)
-    local key_of = {}
-    for _, item in ipairs(items) do
-        if item.leader then key_of[item.id] = tostring(item.leader) end
-    end
-    return key_of
-end
-
--- Same list as score_images.py RAW_EXTENSIONS: LibRaw's camera formats.
-local RAW_EXT = {}
-for ext in ("3fr ari arw bay cr2 cr3 crw dcr dcs dng erf fff iiq k25 kdc mdc mef mos mrw nef nrw "
-    .. "orf ori pef raf raw rw2 rwl sr2 srf srw x3f"):gmatch("%S+") do
-    RAW_EXT[ext] = true
-end
--- Formats the scorer decodes at full size with Pillow.
-local FULL_SIZE_EXT = { jpg = true, jpeg = true, png = true, tif = true, tiff = true }
-
--- "IMG_1.ARW" → "img_1": a RAW and its in-camera JPEG share it.
-function M.shot_stem(filename)
-    return (filename:match("^(.+)%.[^.]*$") or filename):lower()
-end
-
-function M.is_raw(filename)
-    local ext = filename:match("%.([^.]+)$")
-    return ext ~= nil and RAW_EXT[ext:lower()] == true
-end
-
--- How well the scorer reads a file: 2 full size (JPEG, TIFF, PNG), 1 a RAW's
--- embedded preview, 0 anything else (it may not decode at all).
-local function lead_rank(filename)
-    local ext = (filename:match("%.([^.]+)$") or ""):lower()
-    if FULL_SIZE_EXT[ext] then return 2 end
-    return RAW_EXT[ext] and 1 or 0
-end
 
 -- Images → the ones to score, and per scored id every image that takes its result.
 -- One shot = darktable duplicates of a file plus a RAW+JPEG pair (same folder and
@@ -125,32 +81,7 @@ function M.collapse_shots(images)
     return primaries, group_of
 end
 
--- Dense integers from 1 by first appearance; an id with no key gets its own.
-function M.number_groups(ids, key_of)
-    local group_of, by_key, n = {}, {}, 0
-    for _, id in ipairs(ids) do
-        local key = key_of[id]
-        if key == nil then
-            n = n + 1
-            group_of[id] = n
-        else
-            if not by_key[key] then
-                n = n + 1
-                by_key[key] = n
-            end
-            group_of[id] = by_key[key]
-        end
-    end
-    return group_of
-end
 
-function M.csv_line(fields)
-    local out = {}
-    for i, v in ipairs(fields) do
-        out[i] = '"' .. tostring(v):gsub('"', '""') .. '"'
-    end
-    return table.concat(out, ",")
-end
 
 -- "overexposed;eyes_closed" → { overexposed = true, eyes_closed = true }; "" → {}.
 function M.parse_flags(s)
@@ -159,45 +90,6 @@ function M.parse_flags(s)
     return set
 end
 
-function M.parse_csv_line(line, n)
-    local parts = {}
-    -- Python's csv.writer ends rows with \r\n; only Windows text mode strips the \r
-    line = line:gsub("\r$", "")
-    for part in (line .. ","):gmatch("([^,]*),") do
-        table.insert(parts, part)
-    end
-    if #parts ~= n then return nil end
-    return parts
-end
-
--- One line of last-run.csv → its fields, honouring "quoted, fields" and "" escapes.
-function M.parse_report_line(line)
-    local fields, i, n = {}, 1, #line
-    while i <= n + 1 do
-        local value
-        if line:sub(i, i) == '"' then
-            local j = i + 1
-            local buf = {}
-            while j <= n do
-                local c = line:sub(j, j)
-                if c == '"' then
-                    if line:sub(j + 1, j + 1) == '"' then buf[#buf + 1] = '"'; j = j + 2
-                    else break end
-                else
-                    buf[#buf + 1] = c; j = j + 1
-                end
-            end
-            value = table.concat(buf)
-            i = j + 2
-        else
-            local j = line:find(",", i, true) or (n + 1)
-            value = line:sub(i, j - 1)
-            i = j + 1
-        end
-        fields[#fields + 1] = value
-    end
-    return fields
-end
 
 -- "dir\sub/a.jpg" → "dir/sub", "a.jpg"; a bare name has folder "".
 local function split_path(p)
@@ -226,7 +118,7 @@ function M.explain_report(text, wanted)
             first = false -- header
         else
             local f = M.parse_report_line(line)
-            local names = (#f == 10 or #f == 11) and names_of[M.shot_stem(f[2])]
+            local names = (#f >= 10 and #f <= 12) and names_of[M.shot_stem(f[2])]
             local row_folder = f[11] and (f[11]:gsub("\\", "/"))
             local hit = false
             for _, n in ipairs(names or {}) do
@@ -234,7 +126,8 @@ function M.explain_report(text, wanted)
             end
             if hit then
                 local stars = f[6] == "leave" and "left as it was" or (f[6] .. " stars")
-                lines[#lines + 1] = string.format("%s: %s, burst %s, score %s. %s", f[2], stars, f[1], f[5], f[10])
+                local reason = f[12] and f[12] ~= "" and (" Why: " .. f[12] .. ".") or ""
+                lines[#lines + 1] = string.format("%s: %s, burst %s, score %s. %s%s", f[2], stars, f[1], f[5], f[10], reason)
             end
         end
     end
@@ -260,7 +153,8 @@ end
 -- Diagnostic tags the scorer lists in results column 7, relative to
 -- "Assisted Culling|". Synced by prefix, so a new kind (Subject|Animal|…)
 -- needs no change here.
-M.DIAG_PREFIXES = { "Assisted Culling|Subject|", "Assisted Culling|Technique|", "Assisted Culling|Scored|" }
+M.DIAG_PREFIXES = { "Assisted Culling|Subject|", "Assisted Culling|Technique|", "Assisted Culling|Scored|",
+    "Assisted Culling|Why|" }
 
 function M.is_diag_tag(name)
     for _, p in ipairs(M.DIAG_PREFIXES) do
@@ -299,224 +193,6 @@ function M.filter_diag(wanted, off)
     return table.concat(kept, ";")
 end
 
--- python.exe → the pythonw.exe beside it (venvs and python.org installs ship both),
--- which opens no console window. nil for any other name.
-function M.pythonw_of(py)
-    local dir, name = py:match("^(.-)([^/\\]*)$")
-    name = name:lower()
-    if name == "python.exe" then return dir .. "pythonw.exe" end
-    if name == "python" then return dir .. "pythonw" end
-    return nil
-end
-
--- Preset block: drift-guarded copy in grouping, culling and tagging. Change all three
--- (test_preset_block.lua is the matching tests). Presets are flat JSON objects: string,
--- number and boolean values only, so a small codec does instead of a JSON library.
--- Schema item: { key, kind = "bool"|"string"|"number"|"choice", default, choices }.
-
-local function utf8_char(cp)
-    if cp < 0x80 then return string.char(cp) end
-    if cp < 0x800 then return string.char(0xC0 + math.floor(cp / 0x40), 0x80 + cp % 0x40) end
-    if cp < 0x10000 then
-        return string.char(0xE0 + math.floor(cp / 0x1000), 0x80 + math.floor(cp / 0x40) % 0x40, 0x80 + cp % 0x40)
-    end
-    return string.char(0xF0 + math.floor(cp / 0x40000), 0x80 + math.floor(cp / 0x1000) % 0x40,
-        0x80 + math.floor(cp / 0x40) % 0x40, 0x80 + cp % 0x40)
-end
-
-local JSON_ESCAPES = { ['"'] = '"', ["\\"] = "\\", ["/"] = "/", b = "\b", f = "\f", n = "\n", r = "\r", t = "\t" }
-
--- Returns the decoded flat object, or nil and why.
-function M.preset_decode(text)
-    if type(text) ~= "string" then return nil, "no text" end
-    local pos = 1
-    if text:sub(1, 3) == "\239\187\191" then pos = 4 end
-    local function skip() pos = text:find("[^ \t\r\n]", pos) or (#text + 1) end
-    local function fail(why) return nil, string.format("%s at character %d", why, pos) end
-    local function read_string()
-        pos = pos + 1 -- opening quote
-        local out = {}
-        while true do
-            local c = text:sub(pos, pos)
-            if c == "" then return nil end
-            if c == '"' then pos = pos + 1; return table.concat(out) end
-            if c == "\\" then
-                local e = text:sub(pos + 1, pos + 1)
-                if e == "u" then
-                    local cp = tonumber(text:sub(pos + 2, pos + 5), 16)
-                    if not cp or #text:sub(pos + 2, pos + 5) ~= 4 then return nil end
-                    pos = pos + 6
-                    if cp >= 0xD800 and cp <= 0xDBFF and text:sub(pos, pos + 1) == "\\u" then
-                        local lo = tonumber(text:sub(pos + 2, pos + 5), 16)
-                        if lo and lo >= 0xDC00 and lo <= 0xDFFF then
-                            cp = 0x10000 + (cp - 0xD800) * 0x400 + (lo - 0xDC00)
-                            pos = pos + 6
-                        end
-                    end
-                    out[#out + 1] = utf8_char(cp)
-                elseif JSON_ESCAPES[e] then
-                    out[#out + 1] = JSON_ESCAPES[e]
-                    pos = pos + 2
-                else
-                    return nil
-                end
-            else
-                local stop = text:find('["\\]', pos) or (#text + 1)
-                out[#out + 1] = text:sub(pos, stop - 1)
-                pos = stop
-            end
-        end
-    end
-
-    skip()
-    if text:sub(pos, pos) ~= "{" then return fail("expected {") end
-    pos = pos + 1
-    local obj = {}
-    skip()
-    if text:sub(pos, pos) == "}" then
-        pos = pos + 1
-    else
-        while true do
-            skip()
-            if text:sub(pos, pos) ~= '"' then return fail("expected a key") end
-            local key = read_string()
-            if not key then return fail("bad key") end
-            skip()
-            if text:sub(pos, pos) ~= ":" then return fail("expected :") end
-            pos = pos + 1
-            skip()
-            local c = text:sub(pos, pos)
-            if c == '"' then
-                local v = read_string()
-                if not v then return fail("bad string") end
-                obj[key] = v
-            elseif c == "t" and text:sub(pos, pos + 3) == "true" then
-                obj[key] = true; pos = pos + 4
-            elseif c == "f" and text:sub(pos, pos + 4) == "false" then
-                obj[key] = false; pos = pos + 5
-            elseif c == "n" and text:sub(pos, pos + 3) == "null" then
-                obj[key] = nil; pos = pos + 4
-            elseif c == "{" or c == "[" then
-                return fail("nested values aren't supported")
-            else
-                local num = text:match("^-?%d+%.?%d*[eE]?[-+]?%d*", pos)
-                local v = num and tonumber(num)
-                if not v then return fail("bad value") end
-                obj[key] = v
-                pos = pos + #num
-            end
-            skip()
-            local sep = text:sub(pos, pos)
-            pos = pos + 1
-            if sep == "}" then break end
-            if sep ~= "," then pos = pos - 1; return fail("expected , or }") end
-        end
-    end
-    skip()
-    if pos <= #text then return fail("unexpected text after }") end
-    return obj
-end
-
-local function json_string(s)
-    return '"' .. s:gsub('[%c"\\]', function(c)
-        if c == '"' then return '\\"' end
-        if c == "\\" then return "\\\\" end
-        if c == "\n" then return "\\n" end
-        if c == "\r" then return "\\r" end
-        if c == "\t" then return "\\t" end
-        return string.format("\\u%04x", c:byte())
-    end) .. '"'
-end
-
-local function json_number(n)
-    if n == math.floor(n) and math.abs(n) < 2 ^ 53 then return string.format("%d", n) end
-    return string.format("%.14g", n)
-end
-
--- One key per line in schema order, "version" first.
-function M.preset_encode(schema, settings)
-    local lines = { '  "version": 1' }
-    for _, item in ipairs(schema) do
-        local v = settings[item.key]
-        if v == nil then v = item.default end
-        local text
-        if type(v) == "boolean" then text = tostring(v)
-        elseif type(v) == "number" then text = json_number(v)
-        else text = json_string(tostring(v)) end
-        lines[#lines + 1] = "  " .. json_string(item.key) .. ": " .. text
-    end
-    return "{\n" .. table.concat(lines, ",\n") .. "\n}\n"
-end
-
-local function preset_value_ok(item, v)
-    if item.kind == "bool" then return type(v) == "boolean" end
-    if item.kind == "number" then return type(v) == "number" end
-    if item.kind == "string" then return type(v) == "string" end
-    if type(v) ~= "string" then return false end
-    for _, c in ipairs(item.choices or {}) do
-        if c == v then return true end
-    end
-    return false
-end
-
-function M.preset_defaults(schema)
-    local out = {}
-    for _, item in ipairs(schema) do out[item.key] = item.default end
-    return out
-end
-
--- Every schema key set: the decoded value when valid, else the default. Returns the
--- settings and the keys whose stored value was unusable (missing keys aren't problems).
-function M.preset_merge(schema, decoded)
-    local out, problems = {}, {}
-    for _, item in ipairs(schema) do
-        local v = decoded and decoded[item.key]
-        if v == nil then
-            out[item.key] = item.default
-        elseif preset_value_ok(item, v) then
-            out[item.key] = v
-        else
-            out[item.key] = item.default
-            problems[#problems + 1] = item.key
-        end
-    end
-    return out, problems
-end
-
-function M.preset_equal(schema, a, b)
-    for _, item in ipairs(schema) do
-        if a[item.key] ~= b[item.key] then return false end
-    end
-    return true
-end
-
--- Same characters as a folder name can't hold on Windows; "template" is the built-in preset.
-function M.preset_name_ok(raw)
-    local name = (raw or ""):gsub("^%s+", ""):gsub("%s+$", "")
-    if name == "" then return nil, "empty" end
-    if name:lower() == "template" then return nil, "reserved" end
-    if name:find('[/\\:*?"<>|]') then return nil, "bad character" end
-    return name
-end
-
--- "template" first, then the names sorted case-insensitively, without duplicates.
-function M.preset_order(names)
-    local seen, rest = {}, {}
-    for _, n in ipairs(names) do
-        if n:lower() ~= "template" and not seen[n] then
-            seen[n] = true
-            rest[#rest + 1] = n
-        end
-    end
-    table.sort(rest, function(x, y)
-        local lx, ly = x:lower(), y:lower()
-        if lx == ly then return x < y end
-        return lx < ly
-    end)
-    table.insert(rest, 1, "template")
-    return rest
-end
--- end preset block
 
 -- Panel choices as stored keys, in combobox order.
 local genre_opts = {"landscape", "portrait", "sport", "macro", "custom"}
@@ -577,6 +253,7 @@ M.PRESET_SCHEMA = {
     { key = "tag_subject", kind = "bool", default = true },
     { key = "tag_technique", kind = "bool", default = true },
     { key = "tag_scored", kind = "bool", default = true },
+    { key = "tag_why", kind = "bool", default = true },
 }
 
 local ok, dt = pcall(require, "darktable")
@@ -612,10 +289,11 @@ local STAGE2_BATCH_LINES = 200   -- results per batched slice
 -- darktable's "views/thumbtable/rating" action elements, by star value
 local RATING_ELEMENTS = { [-1] = "reject", [0] = "zero", "one", "two", "three", "four", "five" }
 
-local IS_WINDOWS = dt.configuration.running_os == "windows"
-local THIS_DIR = (debug.getinfo(1, "S").source:sub(2):match("^(.*)[/\\]")) or "."
+local IS_WINDOWS = C.IS_WINDOWS
 
 local TMP_DIR = dt.configuration.tmp_dir
+-- Leftovers of a darktable that crashed or was killed mid-run; a day old is surely not live.
+C.sweep_temp(TMP_DIR, "dt_assisted_culling_", 86400)
 -- The run log: this plugin's lines plus the scorer's stderr. Kept in the
 -- config dir, which outlives tmp_dir; the run before it is kept as .prev.log.
 local LOG_PATH = dt.configuration.config_dir .. "/assisted_culling.log"
@@ -625,10 +303,8 @@ local PREV_LOG_PATH = dt.configuration.config_dir .. "/assisted_culling.prev.log
 -- outlives the run's wait keeps its own cancel flag and can't write into the next run.
 local MANIFEST_PATH, RESULTS_PATH, PROGRESS_PATH, CANCEL_PATH, DONE_PATH
 local POINTS_PATH, POINTS_DONE_PATH, PRESCORE_PATH
-local run_seq = 0
 local function new_run_paths()
-    run_seq = run_seq + 1
-    local base = string.format("%s/dt_assisted_culling_%d_%d_", TMP_DIR, os.time(), run_seq)
+    local base = C.temp_base(TMP_DIR, "dt_assisted_culling_")
     MANIFEST_PATH = base .. "manifest.csv"
     RESULTS_PATH = base .. "results.csv"
     PROGRESS_PATH = base .. "progress.txt"
@@ -644,8 +320,11 @@ local CACHE_PATH = dt.configuration.config_dir .. "/assisted_culling/scores.sqli
 local REPORT_PATH = dt.configuration.config_dir .. "/assisted_culling/last-run.csv"
 local REPORT_ARCHIVE_DIR = dt.configuration.config_dir .. "/assisted_culling/reports"
 
+-- Masks are per darktable instance (not per run) so a scorer finishing after a cancel
+-- can't overwrite a live run's, and they share the sweep's naming.
+local MASK_BASE = C.temp_base(TMP_DIR, "dt_assisted_culling_")
 local function mask_path_for(id)
-    return TMP_DIR .. "/dt_assisted_culling_mask_" .. tostring(id) .. ".png"
+    return MASK_BASE .. "mask_" .. tostring(id) .. ".png"
 end
 
 local DETECTOR_FILE = "object_detection_yolox_2022nov.onnx"
@@ -674,27 +353,7 @@ local function remembered_settings()
 end
 local settings = remembered_settings()
 
-local function file_exists(name)
-    local f = io.open(name, "r")
-    if f ~= nil then f:close(); return true else return false end
-end
-
-local function read_file(name)
-    local f = io.open(name, "rb")
-    if not f then return nil end
-    local text = f:read("*a")
-    f:close()
-    return text
-end
-
-local function first_existing(paths)
-    for _, p in ipairs(paths) do
-        if p and p ~= "" and (df.test_file(p, "e") or file_exists(p)) then
-            return p
-        end
-    end
-    return nil
-end
+local file_exists, read_file, first_existing = C.file_exists, C.read_file, C.first_existing
 
 local function plugin_folder_pref()
     local folder = (dt.preferences.read("assisted_culling", "plugin_folder", "directory") or ""):gsub("[/\\]+$", "")
@@ -748,48 +407,7 @@ local function python_bin(script)
     return v
 end
 
-local function shell_quote(s)
-    if IS_WINDOWS then return '"' .. s .. '"' end
-    return "'" .. s:gsub("'", "'\\''") .. "'"
-end
-
--- "py -u argv..." quoted for the shell: the log line, and the launch off Windows.
-local function command_line(py, argv)
-    local parts = { shell_quote(py), "-u" }
-    for _, a in ipairs(argv) do parts[#parts + 1] = shell_quote(a) end
-    return table.concat(parts, " ")
-end
-
--- Starts `py -u argv...` without waiting, stderr to err_path (appended when `append`).
--- The exit code goes to a temp file renamed onto done_path, so done_path never exists
--- without its code in it. On Windows python/launch.py runs it under pythonw.exe: no
--- console window, no script host, nothing executable written to tmp (antivirus
--- behaviour checks flag a hidden .vbs/.bat chain). Returns false plus why it didn't start.
-local function run_async_python(py, argv, err_path, append, done_path)
-    if IS_WINDOWS then
-        local pyw = M.pythonw_of(py)
-        if not pyw then return false, "the Python preference must point at a python.exe" end
-        if pyw:find("[/\\]") and not file_exists(pyw) then return false, pyw .. " is missing" end
-        local job = done_path .. ".job"
-        local f = io.open(job, "w")
-        if not f then return false, "no write access to darktable's tmp folder" end
-        f:write(done_path, "\n", err_path, "\n", append and "a" or "w", "\n", table.concat(argv, "\n"), "\n")
-        f:close()
-        local launcher = (argv[1]:match("^(.*)[/\\]") or ".") .. "/launch.py"
-        local ok = os.execute('start "" /B ' .. shell_quote((pyw:gsub("/", "\\")))
-            .. " " .. shell_quote((launcher:gsub("/", "\\"))) .. " " .. shell_quote((job:gsub("/", "\\"))))
-        if not ok then
-            pcall(os.remove, job)
-            return false, pyw .. " didn't start"
-        end
-        return true
-    end
-    local done_tmp = done_path .. ".tmp"
-    os.execute('( ' .. command_line(py, argv) .. (append and " 2>> " or " 2> ") .. shell_quote(err_path)
-        .. ' ; echo $? > ' .. shell_quote(done_tmp)
-        .. ' ; mv -f ' .. shell_quote(done_tmp) .. ' ' .. shell_quote(done_path) .. ' ) >/dev/null 2>&1 &')
-    return true
-end
+local shell_quote, command_line, run_async_python = C.shell_quote, C.command_line, C.run_async_python
 
 -- SAM / SAM 2 conventions, mirroring darktable's src/common/ai/segmentation.c.
 -- darktable.ai exposes no model attributes to Lua, so these are the defaults
@@ -974,6 +592,9 @@ local TAG_TOGGLES = {
       when = "the burst's EXIF switched its sharpness mode: panning at 1/125 s or slower, shallow DoF at f/4 or wider. Motorsport mode tags each frame instead: Panning (car sharp, background streaked), Motion Blur (whole frame blurred in one line), Missed Pan (car blurred across the pan)." },
     { key = "scored", label = "Scored", diag = true, writes = { "Scored|Masked", "Scored|Subject bias" },
       when = "subject tracking (SAM) only. Masked: the burst was ranked on SAM masks. Subject bias: a shortlisted frame got no mask, so the burst fell back." },
+    { key = "why", label = "Why", diag = true,
+      writes = { "Why|Keeper", "Why|Keeper by margin", "Why|Outranked", "Why|Graded", "Why|Not shortlisted" },
+      when = "every scored frame, saying how it was decided. Keeper: kept by rank. Keeper by margin: kept by the keeper margin. Outranked: lost to a sharper frame (left or rejected). Graded: lost and rated by burst. Not shortlisted: subject tracking (SAM) left it out of the shortlist. Filter on one to step through, say, every frame that lost to the margin." },
 }
 
 local function tag_enabled(key)
@@ -1839,359 +1460,9 @@ function M.clear_marks(images)
         cleared, total, failed > 0 and (", " .. failed .. " couldn't be updated") or ""))
 end
 
--- Preset controls: drift-guarded copy in grouping, culling and tagging. Change all three.
--- The preset picker and actions menu at the top of the panel. Lua panels can't use darktable's
--- own presets (lualib.c leaves get_params/set_params NULL), so this builds its own.
--- Combobox callbacks run later and fire on every `selected` assignment, so each one acts
--- only when the widget's value differs from `current`.
+local preset_file_store, make_preset_controls = C.preset_file_store, C.make_preset_controls
 
-local PRESET_WHY = {
-    empty = "type a name first",
-    reserved = '"template" is the built-in preset',
-    ["bad character"] = 'a name can\'t hold / \\ : * ? " < > |',
-}
-
--- Presets as <dir>/<name>.json. The folder is made on first use.
-local function preset_file_store(dir)
-    local windows = dt.configuration.running_os == "windows"
-    local function quote(s)
-        if windows then return '"' .. s:gsub("/", "\\") .. '"' end
-        return "'" .. s:gsub("'", "'\\''") .. "'"
-    end
-    os.execute((windows and "mkdir " or "mkdir -p ") .. quote(dir) .. (windows and " 2>nul" or " 2>/dev/null"))
-    local store = {}
-    function store.path(name) return dir .. "/" .. name .. ".json" end
-    function store.list()
-        local names = {}
-        local p = io.popen(windows and ("dir /b " .. quote(dir .. "/*.json") .. " 2>nul")
-            or ("ls -1 " .. quote(dir) .. " 2>/dev/null"))
-        if not p then return names end
-        for line in p:lines() do
-            local name = line:gsub("\r$", ""):match("^(.+)%.json$")
-            if name then names[#names + 1] = name end
-        end
-        p:close()
-        return names
-    end
-    function store.read(name)
-        local f = io.open(store.path(name), "rb")
-        if not f then return nil end
-        local text = f:read("a")
-        f:close()
-        return text
-    end
-    -- Write a .tmp, then swap it in (Windows can't rename over an existing file).
-    function store.write(name, text)
-        local path = store.path(name)
-        local f = io.open(path .. ".tmp", "wb")
-        if not f then return false end
-        local ok = f:write(text)
-        f:close()
-        if not ok then os.remove(path .. ".tmp"); return false end
-        os.remove(path)
-        return os.rename(path .. ".tmp", path) and true or false
-    end
-    function store.rename(old, new)
-        local ok, err = os.rename(store.path(old), store.path(new))
-        return ok and true or false, err
-    end
-    function store.remove(name)
-        local ok, err = os.remove(store.path(name))
-        return ok and true or false, err
-    end
-    return store
-end
-
--- o = { prefix, schema, store, read_panel = fn() -> settings | nil, why,
---       show = fn(settings), remember = fn(name), initial = name, log = fn(msg),
---       on_change = fn(name, is_template) | nil, can_switch = fn() -> ok, why | nil,
---       allow_store_new = bool }
--- Optional store.copy_note(from, to) -> confirm text | nil, why and store.copy(from, to) -> ok, err:
--- store new then asks first, and copies the selected preset's store (e.g. a folder) before writing.
--- Returns ctl: ctl.widget (the box to put first in the panel), ctl.widgets, ctl.select(name),
--- ctl.refresh(), ctl.check_dirty(), ctl.name(), ctl.saved (settings last loaded or saved).
-local function make_preset_controls(o)
-    local ctl = { widgets = {} }
-    local names, current, menu_actions = { "template" }, nil, {}
-    local name_mode
-    local picker, menu, name_entry, name_box, confirm_label, confirm_box, dirty_label
-    local confirm_button, confirm_action, delete_clicked
-
-    local function say(msg) dt.print(o.prefix .. ": " .. msg) end
-
-    local function index_of(name)
-        for i, n in ipairs(names) do
-            if n == name then return i end
-        end
-    end
-
-    local function set_entries(combo, items)
-        for i = #combo, 1, -1 do combo[i] = nil end
-        for i, text in ipairs(items) do combo[i] = text end
-    end
-
-    local function show_picker(name)
-        local i = index_of(name)
-        if i and picker.selected ~= i then picker.selected = i end
-    end
-
-    -- Loads `name` into the panel. False (values untouched) when the file can't be used.
-    local function load(name)
-        local settings
-        if name == "template" then
-            settings = M.preset_defaults(o.schema)
-        else
-            local text = o.store.read(name)
-            local decoded, err
-            if text then decoded, err = M.preset_decode(text) else err = "can't be read" end
-            if not decoded then
-                local msg = string.format('preset "%s": %s %s, panel unchanged', name, o.store.path(name), err)
-                o.log(msg)
-                say(msg)
-                return false
-            end
-            local problems
-            settings, problems = M.preset_merge(o.schema, decoded)
-            for _, key in ipairs(problems) do
-                o.log(string.format('preset "%s": %s invalid, using default', name, key))
-            end
-            if #problems > 0 then
-                say(string.format('preset "%s": %d invalid value(s) set to the default (see the log)', name, #problems))
-            end
-        end
-        ctl.saved = settings
-        o.show(settings)
-        return true
-    end
-
-    local function hide_boxes()
-        name_box.visible = false
-        confirm_box.visible = false
-    end
-
-    local function ask_name(mode)
-        name_mode = mode
-        name_entry.text = mode == "rename" and current or ""
-        confirm_box.visible = false
-        name_box.visible = true
-    end
-
-    local function update()
-        local settings, why = o.read_panel()
-        if not settings then say(why); return end
-        if not o.store.write(current, M.preset_encode(o.schema, settings)) then
-            say("couldn't write " .. o.store.path(current))
-            return
-        end
-        ctl.saved = settings
-        say(string.format('preset "%s" updated', current))
-        ctl.check_dirty()
-    end
-
-    local function ask_confirm(text, button, action)
-        confirm_label.label = text
-        confirm_button.label = button
-        confirm_action = action
-        name_box.visible = false
-        confirm_box.visible = true
-    end
-
-    local function ask_delete()
-        ask_confirm(string.format('Delete preset "%s"?', current), "Delete", delete_clicked)
-    end
-
-    local function set_menu()
-        local items = { "choose…" }
-        menu_actions = { false }
-        local function add(text, action)
-            items[#items + 1] = text
-            menu_actions[#menu_actions + 1] = action
-        end
-        if current ~= "template" then add(string.format('update preset "%s"', current), update) end
-        if o.allow_store_new then add("store new preset…", function() ask_name("store") end) end
-        if current ~= "template" then
-            add("rename preset…", function() ask_name("rename") end)
-            add("delete preset", ask_delete)
-        end
-        set_entries(menu, items)
-        menu.selected = 1
-    end
-
-    function ctl.name() return current end
-
-    -- "unsaved changes" when the panel differs from the file. Template has no file.
-    function ctl.check_dirty()
-        local dirty = false
-        if current ~= "template" and ctl.saved then
-            local settings = o.read_panel()
-            dirty = not settings or not M.preset_equal(o.schema, settings, ctl.saved)
-        end
-        dirty_label.visible = dirty
-        return dirty
-    end
-
-    function ctl.select(name)
-        if name ~= "template" and not index_of(name) then name = "template" end
-        if current and o.can_switch then
-            local ok, why = o.can_switch()
-            if not ok then say(why); show_picker(current); return false end
-        end
-        if not load(name) then
-            if current then show_picker(current) else ctl.select("template") end
-            return false
-        end
-        current = name
-        show_picker(name)
-        o.remember(name)
-        hide_boxes()
-        set_menu()
-        if o.on_change then o.on_change(name, name == "template") end
-        ctl.check_dirty()
-        return true
-    end
-
-    -- Rereads the preset list. A selected preset that has gone falls back to template.
-    function ctl.refresh()
-        names = M.preset_order(o.store.list())
-        set_entries(picker, names)
-        if current and not index_of(current) then
-            current = nil
-            ctl.select("template")
-        elseif current then
-            show_picker(current)
-        end
-    end
-
-    local function name_taken(name)
-        for _, n in ipairs(o.store.list()) do
-            if n:lower() == name:lower() and not (name_mode == "rename" and n == current) then return true end
-        end
-        return false
-    end
-
-    local function name_ok_clicked()
-        local name, why = M.preset_name_ok(name_entry.text)
-        if not name then say("preset name: " .. PRESET_WHY[why]); return end
-        if name_taken(name) then say(string.format('a preset called "%s" already exists', name)); return end
-        if name_mode == "store" then
-            local settings, bad = o.read_panel()
-            if not settings then say(bad); return end
-            local from = current
-            local function store_new()
-                if o.store.copy then
-                    local ok, err = o.store.copy(from, name)
-                    if not ok then say(string.format('couldn\'t copy "%s": %s', from, tostring(err))); return end
-                end
-                if not o.store.write(name, M.preset_encode(o.schema, settings)) then
-                    say("couldn't write " .. o.store.path(name))
-                    return
-                end
-                hide_boxes()
-                ctl.refresh()
-                ctl.select(name)
-            end
-            if o.store.copy_note then
-                local text, why = o.store.copy_note(from, name)
-                if not text then say(why); return end
-                ask_confirm(text, "Store", store_new)
-                return
-            end
-            store_new()
-        else
-            local ok, err = o.store.rename(current, name)
-            if not ok then say(string.format('couldn\'t rename "%s": %s', current, tostring(err))); return end
-            name_box.visible = false
-            current = name
-            ctl.refresh()
-            o.remember(name)
-            set_menu()
-        end
-    end
-
-    delete_clicked = function()
-        local ok, err = o.store.remove(current)
-        if not ok then say(string.format('couldn\'t delete "%s": %s', current, tostring(err))); return end
-        confirm_box.visible = false
-        say(string.format('preset "%s" deleted', current))
-        ctl.refresh()
-    end
-
-    picker = dt.new_widget("combobox") {
-        label = "preset",
-        tooltip = "Pick a saved set of panel settings. template = the defaults. Unsaved changes are dropped when you switch. Save with actions → update preset.",
-        changed_callback = function(self)
-            local name = self.value
-            if current and name and name ~= "" and name ~= current then ctl.select(name) end
-        end,
-        "template",
-    }
-    menu = dt.new_widget("combobox") {
-        label = "actions",
-        tooltip = "Preset actions: update the selected preset with the panel's values, store the panel as a new preset, rename or delete.",
-        changed_callback = function(self)
-            local i = self.selected
-            if not i or i <= 1 then return end
-            local action = menu_actions[i]
-            self.selected = 1
-            if action then ctl.check_dirty(); action() end
-        end,
-        "choose…",
-    }
-    dirty_label = dt.new_widget("label") { label = "unsaved changes", halign = "start", visible = false }
-    name_entry = dt.new_widget("entry") { placeholder = "preset name", text = "" }
-    name_box = dt.new_widget("box") {
-        orientation = "vertical",
-        visible = false,
-        name_entry,
-        dt.new_widget("box") {
-            orientation = "horizontal",
-            dt.new_widget("button") { label = "OK", clicked_callback = name_ok_clicked },
-            dt.new_widget("button") { label = "Cancel", clicked_callback = function() name_box.visible = false end },
-        },
-    }
-    confirm_label = dt.new_widget("label") { label = "", halign = "start" }
-    confirm_button = dt.new_widget("button") {
-        label = "Delete",
-        clicked_callback = function() if confirm_action then confirm_action() end end,
-    }
-    confirm_box = dt.new_widget("box") {
-        orientation = "vertical",
-        visible = false,
-        confirm_label,
-        dt.new_widget("box") {
-            orientation = "horizontal",
-            confirm_button,
-            dt.new_widget("button") { label = "Cancel", clicked_callback = function() confirm_box.visible = false end },
-        },
-    }
-    ctl.widgets = { picker = picker, menu = menu, dirty_label = dirty_label, name_box = name_box, confirm_box = confirm_box }
-    ctl.widget = dt.new_widget("box") {
-        orientation = "vertical",
-        dt.new_widget("box") { orientation = "horizontal", picker, menu },
-        dirty_label,
-        name_box,
-        confirm_box,
-    }
-
-    ctl.refresh()
-    ctl.select(o.initial or "template")
-    return ctl
-end
--- end preset controls
-
--- Section block: drift-guarded copy in grouping, culling and tagging. Change all three.
--- A panel section is a section_label heading ("1  title"; number optional) above its widgets.
--- Sections don't fold: Lua has no clickable heading widget, and a button header looks like a button.
-local function step_label(number, title)
-    return dt.new_widget("section_label") { label = (number and (number .. "  ") or "") .. title }
-end
-
-local function make_section(number, title, widgets)
-    local body = { orientation = "vertical", step_label(number, title) }
-    for i = 1, #widgets do body[#body + 1] = widgets[i] end
-    return dt.new_widget("box")(body)
-end
--- end section block
+local step_label, make_section = C.step_label, C.make_section
 
 -- Panel -----------------------------------------------------------------------
 

@@ -32,10 +32,8 @@ except ImportError as _e:
     )
     sys.exit(3)
 
-# Same list as RAW_EXT in assisted_culling.lua: LibRaw's camera formats.
-RAW_EXTENSIONS = {"." + e for e in (
-    "3fr ari arw bay cr2 cr3 crw dcr dcs dng erf fff iiq k25 kdc mdc mef mos mrw nef nrw "
-    "orf ori pef raf raw rw2 rwl sr2 srf srw x3f").split()}
+from common import RAW_EXTENSIONS, atomic_write  # noqa: E402  (stdlib-only module beside this file)
+
 MAX_DIM = 800
 SHADOW_CLIP = 5 / 255
 HIGHLIGHT_CLIP = 250 / 255
@@ -339,6 +337,8 @@ def _masked_sharpness(denoised: np.ndarray, mask_path: str):
         return None
     h, w = denoised.shape
     mh, mw = mask.shape
+    if not (h and w and mh and mw):
+        return None
     if abs((mw / mh) / (w / h) - 1) > MASK_ASPECT_TOLERANCE:
         return None
     inside = cv2.resize(mask, (w, h), interpolation=cv2.INTER_NEAREST) > 127
@@ -557,10 +557,59 @@ def technique_tag(burst_mode: str) -> str:
     return "Technique|Panning" if burst_mode == "subject_peak" else "Technique|Shallow DoF"
 
 
-# Bump whenever a change to the scoring code changes any number stored in the cache.
-SCORE_CACHE_VERSION = 2
+# Constants whose value changes a number stored in the score cache. cache_fingerprint()
+# hashes them with the decoder versions, so editing one re-scores on the next run with
+# no version to bump. test_score_images.py fails when a module constant is in neither
+# tuple, so a new constant must be filed here.
+CACHE_INPUTS = (
+    "MAX_DIM", "SHADOW_CLIP", "HIGHLIGHT_CLIP", "CLIP_PCT_FLAG", "SALIENCY_GRID",
+    "DETECTOR_INPUT", "DETECTOR_STRIDES", "DETECTOR_MIN_SCORE", "DETECTOR_NMS", "VEHICLE_CLASSES",
+    "BLINK_MIN_FACE_PX", "EYE_SEARCH_TOP", "MASK_ASPECT_TOLERANCE", "UNIFORMITY_MIN_CONTRAST", "EXIF_SLACK",
+    "SUBJECT_PAD", "SUBJECT_CROP_MAX", "NORM_MIN_CONTRAST", "MOTION_GRID", "STREAK_COHERENCE", "STREAK_ANGLE_TOL",
+    "SUBJECT_STREAK_MAX", "STREAK_SHARE", "STREAK_SHARE_SLOW", "STREAK_SHARE_FAST", "PAN_REACH", "FAST_SHUTTER",
+    "PAN_BONUS", "MISSED_PAN_FACTOR", "BLUR_STRAIGHT_SCALE", "CENTRE_BOX",
+)
+# Constants that only use cached numbers (ranking, stars, keepers, shortlist, report) or
+# pick a mode that is already in the key. Changing one re-applies without re-scoring.
+CACHE_NEUTRAL = (
+    "RAW_EXTENSIONS", "STAR_THRESHOLDS", "RELATIVE_REFERENCE_PERCENTILE", "GRADED_STEPS", "TIER_THRESHOLDS",
+    "FLAG_PENALTIES", "COCO_NAMES", "SHORTLIST_MIN", "PANNING_SHUTTER", "SHALLOW_DOF_APERTURE",
+    "SCORE_CACHE_MAX_AGE_DAYS", "SCORE_CACHE_COMMIT_EVERY", "CACHE_INPUTS", "CACHE_NEUTRAL",
+    "MOTION_TIER_THRESHOLDS", "MOTION_TAGS", "PRESCORE_FAILED", "REPORT_HEADER", "REPORT_ARCHIVE_KEEP", "WHY_REASONS",
+)
 SCORE_CACHE_MAX_AGE_DAYS = 90
 SCORE_CACHE_COMMIT_EVERY = 50
+_FINGERPRINT = ""
+
+
+def _jsonable(v):
+    if isinstance(v, (set, frozenset)):
+        return sorted(v)
+    if isinstance(v, dict):
+        return {str(k): _jsonable(x) for k, x in v.items()}
+    if isinstance(v, (list, tuple)):
+        return [_jsonable(x) for x in v]
+    return v
+
+
+def cache_fingerprint() -> str:
+    """12 hex chars over CACHE_INPUTS' values and the decoder versions (OpenCV, Pillow,
+    rawpy, numpy). Part of every cache key, so any of them changing misses the cache."""
+    global _FINGERPRINT
+    if _FINGERPRINT:
+        return _FINGERPRINT
+    import hashlib
+    import PIL
+    try:
+        import rawpy
+        rawpy_version = getattr(rawpy, "__version__", "?")
+    except ImportError:
+        rawpy_version = "none"
+    g = globals()
+    bits = {name: _jsonable(g[name]) for name in CACHE_INPUTS}
+    bits["versions"] = [cv2.__version__, PIL.__version__, rawpy_version, np.__version__]
+    _FINGERPRINT = hashlib.sha1(json.dumps(bits, sort_keys=True, default=str).encode()).hexdigest()[:12]
+    return _FINGERPRINT
 
 
 def file_key(filepath: str):
@@ -576,7 +625,7 @@ def file_key(filepath: str):
 class ScoreCache:
     """Per-frame scores in SQLite, keyed by everything that changes the number:
     the file's identity, the settings that feed the score, and
-    SCORE_CACHE_VERSION. Settings that only use the scores (ranking, keepers,
+    cache_fingerprint(). Settings that only use the scores (ranking, keepers,
     non-keepers, tag-only flags) stay out of the key. An empty path disables
     it: every get misses and put does nothing. Only the main process uses it."""
 
@@ -597,7 +646,7 @@ class ScoreCache:
 
     @staticmethod
     def _key(parts) -> str:
-        return json.dumps(list(parts) + [SCORE_CACHE_VERSION], separators=(",", ":"))
+        return json.dumps(list(parts) + [cache_fingerprint()], separators=(",", ":"))
 
     def get(self, *parts):
         if not self.db or any(p is None for p in parts):
@@ -646,8 +695,7 @@ def masked_key(filepath: str, args, prompt, edited: str):
 # motion_aware (motorsport): the car is scored at full resolution with a
 # contrast-free measure, and each frame's motion is read from the streaks in
 # its tiles. Design: docs/superpowers/specs/culling/assisted-culling/2026-11-11-rally-sharpness-design.md
-MOTION_VERSION = 1           # bump when a constant below changes a motion_aware score
-SUBJECT_PAD = 0.10           # vehicle box grown by this share of its size on each side
+SUBJECT_PAD = 0.10          # vehicle box grown by this share of its size on each side
 SUBJECT_CROP_MAX = 1600      # long side (px) the subject crop is shrunk to
 NORM_MIN_CONTRAST = 8.0      # gray std (0–255) floor, so a flat patch can't divide by ~0
 MOTION_GRID = 6
@@ -976,12 +1024,18 @@ def emit_saliency_points(manifest, args, cache):
     log("finding subjects: done")
 
 
+# The one "Why|<reason>" tag every scored frame gets in results column 7, saying how
+# it was decided. Kept to a handful: a tag per score bucket floods darktable's tag list.
+WHY_REASONS = ("Keeper", "Keeper by margin", "Outranked", "Graded", "Not shortlisted")
+
+
 def process_burst_logic(burst_id, burst_sharpness, burst_flags, burst_size, args, results_path,
                         eligible=None, diag_tags=None, reference=None) -> list:
     """Appends the burst's result rows and returns its keepers, best first.
     diag_tags maps an id to its diagnostic tags (under "Assisted Culling|"),
-    written ";"-joined in the 7th column. reference is the relative mode's
-    selection-wide sharpness for 100 points (see relative_references)."""
+    written ";"-joined in the 7th column after the frame's Why|<reason> tag
+    (WHY_REASONS). reference is the relative mode's selection-wide sharpness
+    for 100 points (see relative_references)."""
     if not burst_sharpness:
         return []
 
@@ -994,6 +1048,7 @@ def process_burst_logic(burst_id, burst_sharpness, burst_flags, burst_size, args
     keepers = set([i for i in sorted_members if i in eligible][:allowed])
     best = max((burst_sharpness[i] for i in eligible), default=0.0)
     margin = getattr(args, "keep_margin", 0.0)
+    ranked = set(keepers)  # kept by rank, before the margin adds any
     if margin > 0 and best > 0:
         keepers |= {i for i in eligible if burst_sharpness[i] >= margin * best}
 
@@ -1061,6 +1116,9 @@ def process_burst_logic(burst_id, burst_sharpness, burst_flags, burst_size, args
                 except ValueError:
                     stars = 0
 
+        reason = (("Keeper" if img_id in ranked else "Keeper by margin") if is_keeper
+                  else "Not shortlisted" if img_id not in eligible
+                  else "Graded" if args.nk_mode == "graded" else "Outranked")
         burst_rows.append([
             img_id,
             round(raw_score, 1),
@@ -1068,7 +1126,7 @@ def process_burst_logic(burst_id, burst_sharpness, burst_flags, burst_size, args
             burst_id,
             int(is_keeper),
             stars,
-            ";".join((diag_tags or {}).get(img_id, [])),
+            ";".join(list((diag_tags or {}).get(img_id, [])) + [f"Why|{reason}"]),
         ])
 
     with open(results_path, "a", newline="", encoding="utf-8") as f:
@@ -1083,12 +1141,13 @@ def relative_references(groups: dict) -> dict:
     return {g: float(np.percentile(v, RELATIVE_REFERENCE_PERCENTILE)) for g, v in groups.items() if v}
 
 
-REPORT_HEADER = ["burst", "file", "rank", "of", "score", "stars", "keeper", "flags", "tags", "why", "folder"]
+REPORT_HEADER = ["burst", "file", "rank", "of", "score", "stars", "keeper", "flags", "tags", "why", "folder", "reason"]
 
 
 def report_rows(manifest, result_rows, keepers_per_burst) -> list:
     """One row per scored frame, bursts in manifest order and frames best first, saying why it
-    was kept or not. stars is "leave" for a non-keeper the run left alone."""
+    was kept or not. stars is "leave" for a non-keeper the run left alone. reason is the
+    frame's Why tag (WHY_REASONS), last so older readers of the columns keep working."""
     file_of = {row[0]: row[1] for row in manifest}
     by_burst = {}
     for row in result_rows:
@@ -1109,9 +1168,11 @@ def report_rows(manifest, result_rows, keepers_per_burst) -> list:
             if flags:
                 why += f"; flagged {flags.replace(';', ', ')}"
             path = file_of.get(img_id, img_id)
+            tags = rest[0] if rest else ""
+            reason = next((t[4:] for t in tags.split(";") if t.startswith("Why|")), "")
             out.append([burst_id, os.path.basename(path), rank, len(rows),
-                        score, stars, "yes" if keeper == "1" else "no", flags, rest[0] if rest else "", why,
-                        os.path.dirname(path)])
+                        score, stars, "yes" if keeper == "1" else "no", flags, tags, why,
+                        os.path.dirname(path), reason])
     return out
 
 
@@ -1140,7 +1201,7 @@ def write_report(manifest, args):
     try:
         with open(args.results, newline="", encoding="utf-8") as f:
             result_rows = [row for row in csv.reader(f) if row]
-        with open(args.report, "w", newline="", encoding="utf-8") as f:
+        with atomic_write(args.report, newline="") as f:  # last-run.csv outlives the run; never half-written
             w = csv.writer(f)
             w.writerow(REPORT_HEADER)
             w.writerows(report_rows(manifest, result_rows, lambda n: keepers_allowed(args.keep_mode, n)))
@@ -1277,13 +1338,15 @@ def score_manifest(manifest, args, cache):
     # thresholds are part of the key without storing shutter or aperture
     motion = args.sharp_mode == "motion_aware"
     detector = getattr(args, "detector", "") if motion else ""
+    if detector:
+        _detector(detector)  # a missing or corrupt model fails the run here, not the centre third on every frame
     motion_of = {}  # burst → {id: (class, straightness)}, motion_aware only
 
     def score_key(filepath, burst_id, image_id):
         key = ("score", file_key(filepath), mode_of[burst_id], args.exp_mode, args.fast_jpeg)
         if motion:
             # the EXIF prior and the detector change the class, so they key it
-            key += (detector_key(detector), [round(v, 6) for v in shot_of[image_id]], MOTION_VERSION)
+            key += (detector_key(detector), [round(v, 6) for v in shot_of[image_id]])
         return key
 
     def keep_motion(burst_id, image_id, cls, straight):

@@ -14,6 +14,42 @@ local function check(name, got, want)
     end
 end
 
+-- plugin_common.lua ---------------------------------------------------------------
+-- The same file in all three plugin repos; COMMON_HASH pins it. After changing it, copy it to the
+-- other two repos and put the hash this prints into their tests too.
+local COMMON_HASH = "de05b21b"
+local script_dir = (arg and arg[0] or ""):match("^(.*)[/\\]") or "."
+local PC = dofile(script_dir .. "/plugin_common.lua")
+local function fnv1a(text)
+    local h = 2166136261
+    for i = 1, #text do h = ((h ~ text:byte(i)) * 16777619) & 0xffffffff end
+    return string.format("%08x", h)
+end
+local cf = assert(io.open(script_dir .. "/plugin_common.lua", "rb"))
+local common_text = cf:read("a"):gsub("\r\n", "\n")
+cf:close()
+check("plugin_common.lua matches COMMON_HASH (copy it to the other repos after a change)", fnv1a(common_text), COMMON_HASH)
+check("shell_quote: Windows escapes quotes and doubles %", PC.shell_quote('C:\\x %y% "z"', true), '"C:\\x %%y%% \\"z\\""')
+check("shell_quote: POSIX escapes single quotes", PC.shell_quote("a'b", false), "'a'\\''b'")
+check("parse_csv_line: quoted comma and doubled quote", PC.parse_csv_line('1,"a ""x"", b.jpg",3\r', 3)[2], 'a "x", b.jpg')
+check("parse_csv_line: wrong field count is nil", PC.parse_csv_line("a,b", 3), nil)
+check("lead_rank: full-size JPEG beats RAW", PC.lead_rank("x.JPG") > PC.lead_rank("x.nef"), true)
+do -- temp_base / sweep_temp: leftovers older than max_age go, newer ones and other prefixes stay
+    local dir = os.tmpname()
+    os.remove(dir)
+    os.execute(PC.IS_WINDOWS and ('mkdir "' .. dir .. '"') or ("mkdir -p '" .. dir .. "'"))
+    local function touch(name) local f = assert(io.open(dir .. "/" .. name, "w")); f:write("x"); f:close() end
+    touch("dt_assisted_x_1000_1_old.csv"); touch("dt_assisted_x_5000_1_new.csv"); touch("dt_assisted_y_1000_1_other.csv")
+    local base = PC.temp_base(dir, "dt_assisted_x_")
+    check("temp_base: <dir>/<prefix><epoch>_<seq>_", base:match("^" .. dir:gsub("%p", "%%%0") .. "/dt_assisted_x_%d+_%d+_$") ~= nil, true)
+    local removed = PC.sweep_temp(dir, "dt_assisted_x_", 86400, 1000 + 86401)
+    check("sweep_temp: removes only this prefix's stale files", table.concat(removed, ","), "dt_assisted_x_1000_1_old.csv")
+    check("sweep_temp: newer file kept", PC.file_exists(dir .. "/dt_assisted_x_5000_1_new.csv"), true)
+    check("sweep_temp: other prefix kept", PC.file_exists(dir .. "/dt_assisted_y_1000_1_other.csv"), true)
+    for _, n in ipairs(PC.list_dir(dir)) do os.remove(dir .. "/" .. n) end
+    os.remove(dir)
+end
+
 -- group keys ----------------------------------------------------------------
 local G10 = "Assisted Grouping|2026-11-09 10:00:00|Group"
 local G12 = "Assisted Grouping|2026-11-09 12:30:00|Group"
@@ -123,6 +159,13 @@ local report_folders = 'burst,file,rank,of,score,stars,keeper,flags,tags,why,fol
 local why_cam2 = C.explain_report(report_folders, { ["C:\\shoot\\cam2/a.jpg"] = true })
 check("explain_report: a same-named file in another folder doesn't match", table.concat(why_cam2, "|"),
     "a.jpg: 1 stars, burst 1, score 30.0. kept")
+local report_reason = 'burst,file,rank,of,score,stars,keeper,flags,tags,why,folder,reason\n'
+    .. '0,a.jpg,1,2,80.0,4,yes,,Why|Keeper,kept,C:\\shoot,Keeper\n'
+    .. '0,b.jpg,2,2,70.0,3,yes,,Why|Keeper by margin,kept,C:\\shoot,Keeper by margin\n'
+local why_reason = C.explain_report(report_reason, { ["C:\\shoot/b.jpg"] = true })
+check("explain_report: a 12-column report adds the reason", why_reason[1],
+    "b.jpg: 3 stars, burst 0, score 70.0. kept Why: Keeper by margin.")
+check("is_diag_tag: Why tags are diagnostics", C.is_diag_tag("Assisted Culling|Why|Outranked"), true)
 local _, why_cam3 = C.explain_report(report_folders, { ["C:\\shoot\\cam3/a.jpg"] = true })
 check("explain_report: no row in its folder is missing", table.concat(why_cam3, "|"), "C:\\shoot\\cam3/a.jpg")
 
@@ -188,11 +231,11 @@ check("preset schema: switch defaults", string.format("%s %s %s %s %s %s", cd.ru
     cd.fast_jpeg_decode, cd.penalise_overexposed, cd.penalise_underexposed, cd.penalise_eyes_closed),
     "false false true true true true")
 local all_tags_on = true
-for _, k in ipairs({ "keeper", "rejected", "overexposed", "underexposed", "eyes_closed", "subject", "technique", "scored" }) do
+for _, k in ipairs({ "keeper", "rejected", "overexposed", "underexposed", "eyes_closed", "subject", "technique", "scored", "why" }) do
     if cd["tag_" .. k] ~= true then all_tags_on = false end
 end
 check("preset schema: every tag switch defaults on", all_tags_on, true)
-check("preset schema: 24 keys", #C.PRESET_SCHEMA, 24)
+check("preset schema: 25 keys", #C.PRESET_SCHEMA, 25)
 check("preset schema: keeper margin defaults off", cd.keep_margin, "off")
 check("preset schema: graded non-keepers can be picked",
     C.preset_merge(C.PRESET_SCHEMA, { non_keeper = "graded" }).non_keeper, "graded")

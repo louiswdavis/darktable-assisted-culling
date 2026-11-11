@@ -183,6 +183,31 @@ def run_tests():
     keeper_rows = [line.split(",")[0] for line in open(res_path) if line.split(",")[4] == "1"]
     check("burst logic: ineligible frame can't keep even when it scores higher", keeper_rows, ["b"])
 
+    def why_of(**kw):
+        """id -> Why reason for a 3-frame burst scored 9/6/1."""
+        open(res_path, "w").close()
+        ns = dict(keep_mode="single_best", rank_mode="universal", nk_mode="leave", keep_margin=0.0)
+        ns.update(kw.pop("ns", {}))
+        S.process_burst_logic("1", {"a": 9.0, "b": 6.0, "c": 1.0}, {k: () for k in "abc"}, 3, Namespace(**ns),
+                              res_path, diag_tags={"a": ["Scored|Masked"]}, **kw)
+        rows = [line.strip().split(",") for line in open(res_path)]
+        return {r[0]: [t for t in r[6].split(";") if t.startswith("Why|")][0][4:] for r in rows}
+
+    check("why: keeper by rank, the rest outranked", why_of(), {"a": "Keeper", "b": "Outranked", "c": "Outranked"})
+    check("why: the margin keeper says so", why_of(ns={"keep_margin": 0.6}),
+          {"a": "Keeper", "b": "Keeper by margin", "c": "Outranked"})
+    check("why: graded non-keepers", why_of(ns={"nk_mode": "graded"}), {"a": "Keeper", "b": "Graded", "c": "Graded"})
+    check("why: a frame outside the shortlist", why_of(eligible={"a", "b"}),
+          {"a": "Keeper", "b": "Outranked", "c": "Not shortlisted"})
+    open(res_path, "w").close()
+    S.process_burst_logic("1", {"a": 9.0}, {"a": ()}, 1, Namespace(keep_mode="single_best", rank_mode="universal",
+                          nk_mode="leave"), res_path, diag_tags={"a": ["Scored|Masked"]})
+    check("why: the Why tag follows the other diagnostic tags", open(res_path).read().strip().split(",")[6],
+          "Scored|Masked;Why|Keeper")
+    check("why: every reason the scorer writes is listed",
+          set(why_of(ns={"keep_margin": 0.6}).values()) | set(why_of(ns={"nk_mode": "graded"}).values())
+          | set(why_of(eligible={"a"}).values()) <= set(S.WHY_REASONS), True)
+
     # flags: listed in column 3, each costs its stars, and they stack -------------
     check("frame_flags: exposure ok and eyes open is no flags", S.frame_flags("ok"), ())
     check("frame_flags: both problems", S.frame_flags("overexposed", True), ("overexposed", "eyes_closed"))
@@ -490,15 +515,16 @@ def run_tests():
     # report_rows --------------------------------------------------------------
     rep_manifest = [("1", "/p/a.jpg", "0", "", "", "", 0.0, 0.0, 0.0), ("2", "/p/b.jpg", "0", "", "", "", 0.0, 0.0, 0.0),
                     ("3", "/p/c.jpg", "1", "", "", "", 0.0, 0.0, 0.0)]
-    rep_results = [["2", "40.0", "blur", "0", "0", "leave", ""], ["1", "80.0", "", "0", "1", "4", "Subject|Car"],
+    rep_results = [["2", "40.0", "blur", "0", "0", "leave", ""], ["1", "80.0", "", "0", "1", "4", "Subject|Car;Why|Keeper"],
                    ["3", "55.0", "", "1", "1", "3", ""]]
     rep = S.report_rows(rep_manifest, rep_results, lambda n: 1)
     check("report: bursts in manifest order, best frame first", [r[1] for r in rep], ["a.jpg", "b.jpg", "c.jpg"])
     check("report: a keeper says its rank and the allowance", rep[0][9], "kept: rank 1 of 2, 1 allowed")
     check("report: a non-keeper lists its flags", rep[1][9],
           "not kept: rank 2 of 2, only 1 allowed or not eligible; flagged blur")
-    check("report: diagnostic tags carry through", rep[0][8], "Subject|Car")
-    check("report: the folder is the last column", rep[0][10], os.path.dirname("/p/a.jpg"))
+    check("report: diagnostic tags carry through", rep[0][8], "Subject|Car;Why|Keeper")
+    check("report: the folder is the eleventh column", rep[0][10], os.path.dirname("/p/a.jpg"))
+    check("report: the reason column is the Why tag", (rep[0][11], rep[1][11]), ("Keeper", ""))
     check("report: one column per header", len(rep[0]), len(S.REPORT_HEADER))
     # frame 5 couldn't be read, so it has no result row; the allowance still counts it
     unread_manifest = rep_manifest + [("5", "/p/e.jpg", "1", "", "", "", 0.0, 0.0, 0.0)]
@@ -520,6 +546,51 @@ def run_tests():
         check("report archive: the oldest is deleted", "20200101-000001.csv" in left, False)
         check("report archive: the new copy is added", any(n > "2021" for n in left), True)
 
+    # cache fingerprint ---------------------------------------------------------
+    # every public constant is filed as a cache input or as neutral, so a new one
+    # can't silently leave stale scores in the cache
+    constants = {n for n, v in vars(S).items() if n.isupper() and not n.startswith("_")
+                 and not callable(v) and not hasattr(v, "__file__")}
+    filed = set(S.CACHE_INPUTS) | set(S.CACHE_NEUTRAL)
+    check("fingerprint: every constant is filed as input or neutral", sorted(constants - filed), [])
+    check("fingerprint: nothing filed twice", sorted(set(S.CACHE_INPUTS) & set(S.CACHE_NEUTRAL)), [])
+    check("fingerprint: nothing filed that doesn't exist", sorted(filed - constants), [])
+    fp = S.cache_fingerprint()
+    check("fingerprint: 12 hex chars", (len(fp), all(c in "0123456789abcdef" for c in fp)), (12, True))
+    S._FINGERPRINT, saved = "", S.MAX_DIM
+    S.MAX_DIM = saved + 1
+    changed = S.cache_fingerprint()
+    S.MAX_DIM, S._FINGERPRINT = saved, ""
+    check("fingerprint: a changed input changes it", changed != fp, True)
+    check("fingerprint: restored inputs give the old value back", S.cache_fingerprint(), fp)
+    check("fingerprint: it is part of every cache key", fp in S.ScoreCache._key(("score", "x")), True)
+
+    # common.py ----------------------------------------------------------------
+    # Shared byte for byte with the tagging repo: bump COMMON_SHA256 there too.
+    COMMON_SHA256 = "e18eed8d2048bb379ed2bdbb9d5292803bc589858750f00e529115bde0ae4480"
+    import hashlib
+    import common
+    with open(common.__file__, "rb") as f:
+        digest = hashlib.sha256(f.read().replace(b"\r\n", b"\n")).hexdigest()
+    check("common.py matches the shared copy", digest, COMMON_SHA256)
+    check("common: RAW_EXTENSIONS is the one score_images uses", S.RAW_EXTENSIONS is common.RAW_EXTENSIONS, True)
+    with tempfile.TemporaryDirectory() as d:
+        p = os.path.join(d, "x.txt")
+        with open(p, "w") as f:
+            f.write("old")
+        try:
+            with common.atomic_write(p) as f:
+                f.write("new")
+                raise RuntimeError("abort")
+        except RuntimeError:
+            pass
+        with open(p) as f:
+            check("common: atomic_write keeps the old file on failure", f.read(), "old")
+        with common.atomic_write(p) as f:
+            f.write("new")
+        with open(p) as f:
+            check("common: atomic_write replaces on success", f.read(), "new")
+        check("common: atomic_write leaves no temp file", sorted(os.listdir(d)), ["x.txt"])
 
     print("")
     if failures == 0:

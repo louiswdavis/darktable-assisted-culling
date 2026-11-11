@@ -59,7 +59,7 @@ Only needed for the *subject tracking (SAM)* sharpness mode. Every other mode wo
 
 ### 3. darktable side
 
-darktable's config directory is `~/.config/darktable` on Linux/macOS and `%LOCALAPPDATA%\darktable` on Windows. Link the plugin into it and load it from `luarc`.
+darktable's config directory is `~/.config/darktable` on Linux/macOS and `%LOCALAPPDATA%\darktable` on Windows. Link the plugin into it and load it from `luarc`. The plugin is `lua/assisted_culling.lua` plus `lua/plugin_common.lua`, the module the three Assisted plugins share; a link into the repo finds the module beside the plugin by itself.
 
 Linux / macOS:
 
@@ -84,6 +84,8 @@ New-Item -ItemType Directory -Force "$env:LOCALAPPDATA\darktable\lua\contrib"
 New-Item -ItemType SymbolicLink -Path "$env:LOCALAPPDATA\darktable\lua\contrib\assisted_culling.lua" -Value "$PWD\lua\assisted_culling.lua"
 Add-Content "$env:LOCALAPPDATA\darktable\luarc" 'require "contrib/assisted_culling"'
 ```
+
+Windows without Administrator rights or Developer Mode: copy `assisted_culling.lua` into `%LOCALAPPDATA%\darktable\lua\contrib` instead of linking it, and add the same `luarc` line. Re-copy it after every update. With the **plugin folder** preference (next step) set, the plugin loads `plugin_common.lua` from that folder's `lua/`; copy it into `contrib` too if you want darktable to start with the preference unset (the three plugins' copies are identical, so one copy serves all of them).
 
 ### 4. Point the plugin at the repo
 
@@ -120,6 +122,8 @@ Frames are also tagged with how they were judged, so you can spot-check the scor
 | `Assisted Culling\|Scored\|Subject bias` | *subject tracking (SAM)*: a shortlisted frame got no mask, so the burst fell back to *subject bias* |
 | `Assisted Culling\|Technique\|Panning` / `…\|Shallow DoF` | The burst's EXIF switched its sharpness mode (see [shooting intent](#shooting-intent-from-exif)). In *motorsport*, `Panning` is per frame instead. |
 | `Assisted Culling\|Technique\|Motion Blur` / `…\|Missed Pan` | *motorsport* only: the frame is blurred in one straight line, or the car is blurred across the pan (see [Motorsport](#motorsport-subject--motion)) |
+| `Assisted Culling\|Why\|Keeper` / `…\|Keeper by margin` | Every scored frame gets one `Why` tag saying how it was decided. Kept by rank, or kept by the [keeper margin](#keeper-margin). |
+| `Assisted Culling\|Why\|Outranked` / `…\|Graded` / `…\|Not shortlisted` | Lost to a sharper frame (left alone or rejected), lost and rated by burst (*graded by burst*), or left out of the SAM shortlist. Filter on one to step through, say, every frame the margin kept. |
 
 `Subject` is grouped by kind (`Vehicle` today), leaving room for other detectors later.
 
@@ -155,7 +159,7 @@ A few things a re-run doesn't touch:
 
 Tick **Tag each run** to also stamp every frame a run writes with `Assisted Culling|Run|YYYY-MM-DD HH:MM`, so you can filter darktable down to one run's frames. Stamps accumulate, and **Clear culling marks** leaves them; remove old ones in darktable's tag manager.
 
-Each scoring run also writes `assisted_culling/last-run.csv` in darktable's config folder (the folder holding `assisted_culling.log`): one row per scored frame with its burst, rank in the burst, score, stars, keeper yes/no, flags, diagnostic tags, a `why` line ("kept: rank 1 of 4, 2 allowed", "not kept: rank 3 of 4, only 2 allowed or not eligible; flagged blur") and the file's folder. The allowance counts every frame of the burst, including frames that couldn't be read. Open it in a spreadsheet to see why a frame lost, or to tune thresholds from evidence. It is overwritten by the next run, but each run's copy is also kept as `assisted_culling/reports/YYYYMMDD-HHMMSS.csv` (newest 20), so two runs can be compared.
+Each scoring run also writes `assisted_culling/last-run.csv` in darktable's config folder (the folder holding `assisted_culling.log`): one row per scored frame with its burst, rank in the burst, score, stars, keeper yes/no, flags, diagnostic tags, a `why` line ("kept: rank 1 of 4, 2 allowed", "not kept: rank 3 of 4, only 2 allowed or not eligible; flagged blur"), the file's folder and a `reason` column (the frame's `Why` tag: Keeper, Keeper by margin, Outranked, Graded or Not shortlisted). The allowance counts every frame of the burst, including frames that couldn't be read. Open it in a spreadsheet to see why a frame lost, or to tune thresholds from evidence. It is overwritten by the next run, but each run's copy is also kept as `assisted_culling/reports/YYYYMMDD-HHMMSS.csv` (newest 20), so two runs can be compared.
 
 While a run is going, **Clear culling marks** and the culling shortcut queue behind it instead of refusing. Each queued job keeps the selection and settings from when you clicked, and starts when the run before it finishes. Cancelling drops the queue. (The panel button turns into **Cancel culling** during a run, so a second culling run can only be queued with the shortcut.)
 
@@ -308,7 +312,7 @@ Flags still cost a star each. **Star strictness** scales these steps too: strict
 
 ### 4 tags written
 
-One switch per branch (default on): `Keeper`, `Rejected`, `Overexposed`, `Underexposed`, `Eyes Closed`, `Subject`, `Technique`, `Scored`. Off = runs stop writing that branch and remove it from the images they process; images outside the run keep it until **Clear culling marks**. Ratings and keeper picks don't change. Fewer tag writes also apply results faster. See [Choosing which tags are written](#choosing-which-tags-are-written).
+One switch per branch (default on): `Keeper`, `Rejected`, `Overexposed`, `Underexposed`, `Eyes Closed`, `Subject`, `Technique`, `Scored`, `Why`. Off = runs stop writing that branch and remove it from the images they process; images outside the run keep it until **Clear culling marks**. Ratings and keeper picks don't change. Fewer tag writes also apply results faster. See [Choosing which tags are written](#choosing-which-tags-are-written).
 
 ### 5 run
 
@@ -391,6 +395,8 @@ A cached score is only reused when everything that produced it is the same:
 
 In SAM mode, raising the keeper count or changing the grouping can put new frames on a burst's shortlist; only those get a SAM pass. An edit in darktable (crop, rotate, lens correction) changes what SAM sees, so it re-runs SAM for that frame next time.
 
+Every key also carries a fingerprint of the scoring constants in `score_images.py` and the versions of OpenCV, Pillow, rawpy and numpy, so editing a constant or upgrading a package re-scores on the next run by itself. The first run after this plugin update re-scores everything once (the old keys carried a version number instead).
+
 Entries not used for 90 days are deleted at the start of a run. To start over, delete the file.
 
 EXIF can't supply the prompt instead: darktable exposes focus *distance*, not the AF point's position.
@@ -410,9 +416,9 @@ Everything you'd change per shoot is a panel option or a preference. What's left
   - `BLINK_MIN_FACE_PX` is the smallest face width judged for closed eyes.
   - `DETECTOR_MIN_SCORE` is the confidence a vehicle detection needs.
   - `PANNING_SHUTTER` (1/125 s) and `SHALLOW_DOF_APERTURE` (f/4) are the [shooting intent](#shooting-intent-from-exif) cutoffs.
-  - Motorsport mode: `MOTION_TIER_THRESHOLDS` (its universal stars, a first guess), `STREAK_COHERENCE` (how strong a streak must be), `STREAK_SHARE` / `_SLOW` / `_FAST` (share of the background that must streak), `SUBJECT_STREAK_MAX` (how much of the car may streak in a good pan), `PAN_BONUS` and `MISSED_PAN_FACTOR`. Bump `MOTION_VERSION` after changing any of them except the tiers; that re-scores only motorsport frames.
+  - Motorsport mode: `MOTION_TIER_THRESHOLDS` (its universal stars, a first guess), `STREAK_COHERENCE` (how strong a streak must be), `STREAK_SHARE` / `_SLOW` / `_FAST` (share of the background that must streak), `SUBJECT_STREAK_MAX` (how much of the car may streak in a good pan), `PAN_BONUS` and `MISSED_PAN_FACTOR`.
   - `SCORE_CACHE_MAX_AGE_DAYS` (default 90) is how long an unused cache entry is kept.
-  - `SCORE_CACHE_VERSION`: bump it after changing any of the constants above that feed a score (clip levels, `MAX_DIM`, `BLINK_MIN_FACE_PX`, `DETECTOR_MIN_SCORE`, …) or the scoring code, so old cached scores aren't reused. Star and penalty tables don't need a bump, and neither do the shooting-intent cutoffs: they only pick which mode a burst uses, and the mode is already part of the cache key.
+  - Nothing to bump after changing a constant: the ones that feed a score are listed in `CACHE_INPUTS` and hashed into every cache key, so the next run re-scores. Star and penalty tables, the shooting-intent cutoffs and the other names in `CACHE_NEUTRAL` only use the scores, so they re-apply from the cache. A new constant goes in one of the two tuples, or `test_score_images.py` fails. A change to the scoring *code* with no constant behind it isn't detected: delete `scores.sqlite` after one.
 
 These are sensible starting points, not tuned defaults. Run a real shoot through it, see what gets flagged, and adjust.
 
@@ -423,7 +429,7 @@ These are sensible starting points, not tuned defaults. Run a real shoot through
 - **"no results" or "scorer produced no ratings".** The scorer failed; its output is at the end of the run log. The usual cause is the interpreter preference pointing at a Python without the requirements installed.
 - **"SAM masked 0 of N shortlisted frames".** Look for the `SAM … failed:` lines in the run log for the error on each frame.
 - **"score cache … is unreadable".** The cache file is damaged. Delete `assisted_culling/scores.sqlite` in darktable's config directory; the next run rebuilds it.
-- **Scores look stale after changing a constant in `score_images.py`.** Bump `SCORE_CACHE_VERSION` (see Tuning), or delete the cache file.
+- **Scores look stale after editing `score_images.py`.** A constant change re-scores by itself (see Tuning); a code-only change doesn't. Delete the cache file.
 - **darktable itself crashes on startup on Windows 11** (`0xC0000005`). darktable's Windows binaries are unsigned, and Smart App Control blocks unsigned DLLs that haven't built up reputation; it blocked `libdarkroom.dll` from 5.6.1 on a test machine. Check the `Microsoft-Windows-CodeIntegrity/Operational` event log for event 3077. Don't turn Smart App Control off (it's a one-way switch). An older release passes: `winget install --id darktable.darktable --version 5.4.1` ran with no blocks, and this plugin needs nothing newer.
 
 ## Limitations
@@ -457,7 +463,7 @@ Use a selection with at least two bursts of 3+ frames each.
 8. **Cancel.** Start a run on a large selection and click the button while it shows **Cancel culling**. *Expect:* the run stops; frames already done keep their changes. Repeat with the X on the job in darktable's job area. *Expect:* the button shows **Cancelling...** until the run has stopped, then **Cull selection** again; a new run started straight after works normally.
 9. **Why these ratings?** with nothing selected. *Expect:* "Assisted Culling: select some images first".
 10. **Clear culling marks** on the selection. *Expect:* the plugin's tags are gone; star ratings are unchanged.
-11. **Tag switches.** Cull a batch with every tag on and note the stars. Under **tags written** in the panel, turn off *Subject* and *Rejected*, then cull the same batch again. *Expect:* the stars and keepers are the same as before; no image in the batch has an `Assisted Culling|Subject|…` or `Assisted Culling|Rejected` tag; `Keeper`, the flags, `Technique` and `Scored` are still there. No `LUA ERROR`.
+11. **Tag switches.** Cull a batch with every tag on and note the stars. Under **tags written** in the panel, turn off *Subject* and *Rejected*, then cull the same batch again. *Expect:* the stars and keepers are the same as before; no image in the batch has an `Assisted Culling|Subject|…` or `Assisted Culling|Rejected` tag; `Keeper`, the flags, `Technique`, `Scored` and `Why` are still there. Filter on `Assisted Culling|Why|Outranked`: every match is a non-keeper. Turn off *Why* and cull again: the `Why` tags are gone from the batch. No `LUA ERROR`.
 
 ## Development
 
