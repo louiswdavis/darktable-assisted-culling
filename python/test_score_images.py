@@ -574,6 +574,12 @@ def run_tests():
         digest = hashlib.sha256(f.read().replace(b"\r\n", b"\n")).hexdigest()
     check("common.py matches the shared copy", digest, COMMON_SHA256)
     check("common: RAW_EXTENSIONS is the one score_images uses", S.RAW_EXTENSIONS is common.RAW_EXTENSIONS, True)
+
+    # eval_culling.py keeps its own copy of the motion tags (it imports no cv2/numpy) -----
+    import eval_culling
+    check("eval_culling: MOTION_CLASS mirrors MOTION_TAGS", eval_culling.MOTION_CLASS, {v: k for k, v in S.MOTION_TAGS.items()})
+    check("eval_culling: mode switches name technique_tag's tags",
+          sorted(t for _m, t in eval_culling.MODE_SWITCH), sorted({S.technique_tag("subject_peak"), S.technique_tag("subject_focus")}))
     with tempfile.TemporaryDirectory() as d:
         p = os.path.join(d, "x.txt")
         with open(p, "w") as f:

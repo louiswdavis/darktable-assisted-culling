@@ -420,7 +420,7 @@ Everything you'd change per shoot is a panel option or a preference. What's left
   - `SCORE_CACHE_MAX_AGE_DAYS` (default 90) is how long an unused cache entry is kept.
   - Nothing to bump after changing a constant: the ones that feed a score are listed in `CACHE_INPUTS` and hashed into every cache key, so the next run re-scores. Star and penalty tables, the shooting-intent cutoffs and the other names in `CACHE_NEUTRAL` only use the scores, so they re-apply from the cache. A new constant goes in one of the two tuples, or `test_score_images.py` fails. A change to the scoring *code* with no constant behind it isn't detected: delete `scores.sqlite` after one.
 
-These are sensible starting points, not tuned defaults. Run a real shoot through it, see what gets flagged, and adjust.
+These are sensible starting points, not tuned defaults. Run a real shoot through it, see what gets flagged, and adjust. To adjust from numbers rather than impressions, [score a run against your own picks](#scoring-a-run-against-your-own-picks).
 
 ## Troubleshooting
 
@@ -495,6 +495,8 @@ The scorer's pure functions (saliency point, vehicle detection decoding, mask-aw
 .venv\Scripts\python python\stress_test_cull.py
 ```
 
+The eval script has its own stdlib-only tests: `python python/test_eval_culling.py`.
+
 ### Running the scorer on its own
 
 The scorer runs standalone against any folder of images, no darktable involved. `manifest.csv` is `id,filepath,burst_id` per line:
@@ -502,6 +504,27 @@ The scorer runs standalone against any folder of images, no darktable involved. 
 ```
 python python/score_images.py manifest.csv results.csv
 ```
+
+### Scoring a run against your own picks
+
+`python/eval_culling.py` compares `last-run.csv` with the stars and rejects you gave a shoot by hand, so tuning star tiers, keeper settings or a new model is done on numbers. It needs no darktable, numpy or cv2.
+
+1. Cull a shoot by hand in darktable: stars and rejects, as you would normally.
+2. Before running the plugin on it, save those ratings, because the plugin writes its own stars into the same sidecars:
+   ```
+   python python/eval_culling.py @rally-photos.txt --snapshot rally-truth.csv
+   ```
+   `rally-photos.txt` holds one file or folder per line; folders are read for their photos, and a RAW with a JPEG beside it counts once. Plain paths work in place of the `@list`.
+3. Run the plugin with the settings under test.
+4. Score it:
+   ```
+   python python/eval_culling.py @rally-photos.txt --truth rally-truth.csv --sharp-mode subject_focus
+   ```
+   Without `--truth` the sidecars are read directly, which only makes sense before the plugin has rated them. `--report PATH` points at a `last-run.csv` other than the one in darktable's config folder (an archived copy under `assisted_culling/reports/`, say). `--out FILE` also saves the text.
+
+It prints, overall and per group, per sharpness mode and per motion class: the hit rate (your picks the plugin kept), false keepers (plugin keepers you didn't pick) and Spearman's rank correlation between your stars and its stars (rejected counts as -1; frames the run left alone are excluded and counted). A pick is a photo you rated 1 star or more and didn't reject; `--pick-stars 3` raises the bar. The sharpness mode per burst is the one you pass, corrected where the run's `Technique` tag shows a burst switched (see [Shooting intent from EXIF](#shooting-intent-from-exif)). Only report rows for the given photos count, so one `last-run.csv` can cover more than the shoot. A truth CSV can also be written by hand: columns `file` (name or path), `stars` (or `rating`, -1 for a reject) and optionally `rejected`.
+
+Same inputs give the same output, so two runs with different settings are compared by diffing their `--out` files.
 
 ### End-to-end without the GUI
 
