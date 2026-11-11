@@ -1,0 +1,20 @@
+ok   saliency: off-centre patch wins (x)
+ok   saliency: off-centre patch wins (y)
+ok   saliency: flat frame falls back to frame centre
+ok   detector: one vehicle survives class filter and NMS
+ok   detector: box mapped back to source pixels
+ok   detector: box keeps its COCO class
+Traceback (most recent call last):
+  File "C:\Users\Louis\Pictures\DarkTable\Settings\Plugins\darktable-assisted-culling\python\test_score_images.py", line 637, in <module>
+    run_tests()
+    ~~~~~~~~~^^
+  File "C:\Users\Louis\Pictures\DarkTable\Settings\Plugins\darktable-assisted-culling\python\test_score_images.py", line 53, in run_tests
+    check("detector: nothing above threshold \u2192 no boxes", S.decode_vehicles(np.zeros((8400, 85), np.float32), 1.0), [])
+    ~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Louis\Pictures\DarkTable\Settings\Plugins\darktable-assisted-culling\python\test_score_images.py", line 23, in check
+    print(f"ok   {name}")
+    ~~~~~^^^^^^^^^^^^^^^^
+  File "C:\Python313\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\u2192' in position 39: character maps to <undefined>
