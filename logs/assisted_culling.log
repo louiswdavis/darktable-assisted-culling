@@ -1,0 +1,634 @@
+12:44:08 lua: run started: darktable 5.6.2, 1624 images (0 locked left out)
+12:44:08 lua: settings: rank universal, sharpness motion_aware, exposure none, keepers dynamic_burst, non-keepers leave
+12:44:09 lua: group support native: 809 of 812 photos in groups of 2+
+12:44:09 lua: fast JPEG true, apply while scoring true, SAM model none
+12:44:09 lua: Assisted Culling: scoring 812 images in 105 groups (dynamic burst keepers, universal ranking, native grouping)
+12:44:09 lua: Assisted Culling: 812 image(s) share a shot with another (a duplicate, or the RAW of a RAW+JPEG pair); each shot is scored once and its result copied to all of it.
+12:44:09 lua: scoring: "C:\Users\Louis\Pictures\DarkTable\Settings\Plugins\darktable-assisted-culling\.venv\Scripts\python.exe" -u "C:\Users\Louis\Pictures\DarkTable\Settings\Plugins\darktable-assisted-culling/python/score_images.py" "C:\Users\Louis\AppData\Local\Temp/dt_assisted_culling_1794401048_6_manifest.csv" "C:\Users\Louis\AppData\Local\Temp/dt_assisted_culling_1794401048_6_results.csv" "--progress" "C:\Users\Louis\AppData\Local\Temp/dt_assisted_culling_1794401048_6_progress.txt" "--rank-mode" "universal" "--sharp-mode" "motion_aware" "--exp-mode" "none" "--keep-mode" "dynamic_burst" "--nk-mode" "leave" "--tag-only-flags" "overexposed,underexposed,eyes_closed" "--star-scale" "1" "--keep-margin" "0.9" "--fast-jpeg" "--cache" "C:\Users\Louis\AppData\Local\darktable/assisted_culling/scores.sqlite" "--report" "C:\Users\Louis\AppData\Local\darktable/assisted_culling/last-run.csv" "--report-archive-dir" "C:\Users\Louis\AppData\Local\darktable/assisted_culling/reports"
+12:44:11 py: scoring: 812 frames in 105 bursts, 812 from cache or stage A, 0 to decode, sharpness motion_aware
+12:44:11 py: burst 1: 4 of 4 frames scored, mode motion_aware, keepers 199933, 199931
+12:44:11 py: burst 2: 5 of 5 frames scored, mode motion_aware, keepers 199937, 199941, 199943, 199945
+12:44:11 py: burst 3: 5 of 5 frames scored, mode motion_aware, keepers 199955, 199953, 199947, 199951, 199949
+12:44:11 py: burst 4: 5 of 5 frames scored, mode motion_aware, keepers 199961, 199959, 199963, 199965
+12:44:11 py: burst 5: 2 of 2 frames scored, mode motion_aware, keepers 199967, 199969
+12:44:11 py: burst 6: 21 of 21 frames scored, mode motion_aware, keepers 199981, 199973, 199985, 199983, 199977, 199975, 199989, 199979, 199971
+12:44:11 py: burst 7: 6 of 6 frames scored, mode motion_aware, keepers 200021, 200023
+12:44:11 py: burst 8: 16 of 16 frames scored, mode motion_aware, keepers 200055, 200029, 200037, 200027
+12:44:11 py: burst 9: 5 of 5 frames scored, mode motion_aware, keepers 200063, 200061, 200057, 200065, 200059
+12:44:11 py: burst 10: 4 of 4 frames scored, mode motion_aware, keepers 200067, 200069, 200071, 200073
+12:44:11 py: burst 11: 3 of 3 frames scored, mode motion_aware, keepers 200075, 200077
+12:44:11 py: burst 12: 10 of 10 frames scored, mode motion_aware, keepers 200097, 200093, 200089, 200083, 200081, 200095, 200085, 200091, 200087
+12:44:11 py: burst 13: 7 of 7 frames scored, mode motion_aware, keepers 200113, 200103
+12:44:11 py: burst 14: 8 of 8 frames scored, mode motion_aware, keepers 200117, 200127
+12:44:11 py: burst 15: 7 of 7 frames scored, mode motion_aware, keepers 200143, 200141
+12:44:11 py: burst 16: 15 of 15 frames scored, mode motion_aware, keepers 200147, 200169, 200145, 200149
+12:44:11 py: burst 17: 6 of 6 frames scored, mode motion_aware, keepers 200177, 200181, 200183
+12:44:11 py: burst 18: 6 of 6 frames scored, mode motion_aware, keepers 200187, 200197
+12:44:11 py: burst 19: 5 of 5 frames scored, mode motion_aware, keepers 200207, 200203, 200201
+12:44:11 py: burst 20: 14 of 14 frames scored, mode motion_aware, keepers 200213, 200211, 200227, 200231
+12:44:11 py: burst 21: 6 of 6 frames scored, mode motion_aware, keepers 200243, 200245, 200241, 200247, 200239, 200237
+12:44:11 py: burst 22: 3 of 3 frames scored, mode motion_aware, keepers 200251, 200253, 200249
+12:44:11 py: burst 23: 6 of 6 frames scored, mode motion_aware, keepers 200265, 200263, 200261, 200259, 200257
+12:44:11 py: burst 24: 4 of 4 frames scored, mode motion_aware, keepers 200267, 200269, 200271, 200273
+12:44:11 py: burst 25: 2 of 2 frames scored, mode motion_aware, keepers 200275, 200277
+12:44:11 py: burst 26: 7 of 7 frames scored, mode motion_aware, keepers 200279, 200283
+12:44:11 py: burst 27: 8 of 8 frames scored, mode motion_aware, keepers 200297, 200299, 200293, 200295, 200301, 200303, 200305, 200307
+12:44:11 py: burst 28: 7 of 7 frames scored, mode motion_aware, keepers 200317, 200321, 200311, 200313
+12:44:11 py: burst 29: 10 of 10 frames scored, mode motion_aware, keepers 200341, 200339, 200337, 200335
+12:44:11 py: burst 30: 5 of 5 frames scored, mode motion_aware, keepers 200351, 200349
+12:44:11 py: burst 31: 6 of 6 frames scored, mode motion_aware, keepers 200361, 200357, 200359, 200353, 200363
+12:44:11 py: burst 32: 4 of 4 frames scored, mode motion_aware, keepers 200365, 200367, 200369, 200371
+12:44:11 py: burst 33: 6 of 6 frames scored, mode motion_aware, keepers 200377, 200379
+12:44:11 py: burst 34: 2 of 2 frames scored, mode motion_aware, keepers 200387, 200385
+12:44:11 py: burst 35: 9 of 9 frames scored, mode motion_aware, keepers 200389, 200397, 200395
+12:44:11 py: burst 36: 8 of 8 frames scored, mode motion_aware, keepers 200415, 200413
+12:44:11 py: burst 37: 4 of 4 frames scored, mode motion_aware, keepers 200425, 200427, 200423, 200429
+12:44:11 py: burst 38: 7 of 7 frames scored, mode motion_aware, keepers 200439, 200433, 200431
+12:44:11 py: burst 39: 6 of 6 frames scored, mode motion_aware, keepers 200455, 200453, 200451, 200449, 200447, 200445
+12:44:11 py: burst 40: 2 of 2 frames scored, mode motion_aware, keepers 200457, 200459
+12:44:11 py: burst 41: 2 of 2 frames scored, mode motion_aware, keepers 200463
+12:44:11 py: burst 42: 6 of 6 frames scored, mode motion_aware, keepers 200465, 200469, 200475, 200467, 200471
+12:44:11 py: burst 43: 7 of 7 frames scored, mode motion_aware, keepers 200483, 200481
+12:44:11 py: burst 44: 12 of 12 frames scored, mode motion_aware, keepers 200493, 200495, 200497
+12:44:11 py: burst 45: 4 of 4 frames scored, mode motion_aware, keepers 200515, 200517, 200519, 200521
+12:44:11 py: burst 46: 16 of 16 frames scored, mode motion_aware, keepers 200543, 200529, 200547, 200551, 200527, 200553, 200545, 200549, 200541, 200525, 200523, 200531
+12:44:11 py: burst 47: 5 of 5 frames scored, mode motion_aware, keepers 200559, 200563, 200555, 200561
+12:44:11 py: burst 48: 5 of 5 frames scored, mode motion_aware, keepers 200565, 200567, 200569, 200571, 200573
+12:44:11 py: burst 49: 2 of 2 frames scored, mode motion_aware, keepers 200575, 200577
+12:44:11 py: burst 50: 2 of 2 frames scored, mode motion_aware, keepers 200579, 200581
+12:44:11 py: burst 51: 14 of 14 frames scored, mode motion_aware, keepers 200599, 200601, 200609, 200607, 200589, 200587, 200603, 200585, 200605, 200593, 200597, 200583, 200595
+12:44:11 py: burst 52: 30 of 30 frames scored, mode motion_aware, keepers 200621, 200617, 200655, 200625, 200611
+12:44:11 py: burst 53: 9 of 9 frames scored, mode motion_aware, keepers 200671, 200675, 200673
+12:44:11 py: burst 54: 6 of 6 frames scored, mode motion_aware, keepers 200691, 200689, 200695, 200697, 200699, 200693
+12:44:11 py: burst 55: 5 of 5 frames scored, mode motion_aware, keepers 200701, 200703, 200705
+12:44:11 py: burst 56: 5 of 5 frames scored, mode motion_aware, keepers 200719, 200713, 200715, 200717, 200711
+12:44:11 py: burst 57: 9 of 9 frames scored, mode motion_aware, keepers 200729, 200723, 200737, 200731
+12:44:11 py: burst 58: 17 of 17 frames scored, mode motion_aware, keepers 200771, 200769, 200761, 200745, 200759, 200749, 200763, 200747
+12:44:11 py: burst 59: 6 of 6 frames scored, mode motion_aware, keepers 200773, 200779, 200775, 200777
+12:44:11 py: burst 60: 23 of 23 frames scored, mode motion_aware, keepers 200795, 200785, 200789, 200791, 200793, 200797, 200799, 200801, 200803, 200805, 200807, 200809, 200811, 200813, 200815, 200817, 200819, 200821, 200823, 200825, 200827, 200829
+12:44:11 py: burst 61: 2 of 2 frames scored, mode motion_aware, keepers 200831
+12:44:11 py: burst 62: 10 of 10 frames scored, mode motion_aware, keepers 200835, 200837, 200839, 200841
+12:44:11 py: burst 63: 8 of 8 frames scored, mode motion_aware, keepers 200865, 200867, 200869, 200861, 200863, 200857
+12:44:11 py: burst 64: 7 of 7 frames scored, mode motion_aware, keepers 200871, 200873, 200875, 200877, 200879, 200881, 200883
+12:44:11 py: burst 65: 4 of 4 frames scored, mode motion_aware, keepers 200885
+12:44:11 py: burst 66: 6 of 6 frames scored, mode motion_aware, keepers 200897, 200901, 200899
+12:44:11 py: burst 67: 2 of 2 frames scored, mode motion_aware, keepers 200907, 200905
+12:44:11 py: burst 68: 6 of 6 frames scored, mode motion_aware, keepers 200911, 200909, 200915, 200917, 200919, 200913
+12:44:11 py: burst 69: 18 of 18 frames scored, mode motion_aware, keepers 200923, 200927, 200945, 200925
+12:44:11 py: burst 70: 5 of 5 frames scored, mode motion_aware, keepers 200965, 200963
+12:44:11 py: burst 71: 11 of 11 frames scored, mode motion_aware, keepers 200967, 200969, 200971, 200973, 200975, 200977, 200979, 200981, 200983, 200985, 200987
+12:44:11 py: burst 72: 6 of 6 frames scored, mode motion_aware, keepers 200999, 200989
+12:44:11 py: burst 73: 13 of 13 frames scored, mode motion_aware, keepers 201021, 201023, 201019, 201009, 201007, 201025, 201013, 201003
+12:44:11 py: burst 74: 11 of 11 frames scored, mode motion_aware, keepers 201029, 201027, 201045
+12:44:11 py: burst 75: 11 of 11 frames scored, mode motion_aware, keepers 201049, 201053, 201051, 201059, 201061, 201063, 201065, 201067, 201069
+12:44:11 py: burst 76: 7 of 7 frames scored, mode motion_aware, keepers 201075, 201073
+12:44:11 py: burst 77: 17 of 17 frames scored, mode motion_aware, keepers 201099, 201095, 201097, 201089, 201093, 201091
+12:44:11 py: burst 78: 11 of 11 frames scored, mode motion_aware, keepers 201135, 201129, 201131
+12:44:11 py: burst 79: 10 of 10 frames scored, mode motion_aware, keepers 201141, 201143, 201145, 201147, 201149, 201151, 201153, 201155, 201157, 201159
+12:44:11 py: burst 80: 8 of 8 frames scored, mode motion_aware, keepers 201161, 201163, 201165, 201167, 201169, 201171, 201173, 201175
+12:44:11 py: burst 81: 15 of 15 frames scored, mode motion_aware, keepers 201189, 201193, 201183, 201185, 201191, 201187, 201195, 201199, 201197, 201201, 201203
+12:44:11 py: burst 82: 5 of 5 frames scored, mode motion_aware, keepers 201215, 201207, 201209, 201213, 201211
+12:44:11 py: burst 83: 1 of 1 frames scored, mode motion_aware, keepers 201217
+12:44:11 py: burst 84: 4 of 4 frames scored, mode motion_aware, keepers 201219
+12:44:11 py: burst 85: 3 of 3 frames scored, mode motion_aware, keepers 201231, 201227, 201229
+12:44:11 py: burst 86: 6 of 6 frames scored, mode motion_aware, keepers 201241, 201239, 201243, 201235, 201237
+12:44:11 py: burst 87: 7 of 7 frames scored, mode motion_aware, keepers 201245, 201247, 201249, 201251, 201257, 201255, 201253
+12:44:11 py: burst 88: 5 of 5 frames scored, mode motion_aware, keepers 201261, 201263, 201259, 201265, 201267
+12:44:11 py: burst 89: 19 of 19 frames scored, mode motion_aware, keepers 201283, 201281, 201285, 201279, 201305, 201269, 201275, 201273, 201287, 201277, 201271, 201299, 201303
+12:44:11 py: burst 90: 8 of 8 frames scored, mode motion_aware, keepers 201311, 201307, 201313, 201315, 201317, 201319, 201321, 201309
+12:44:11 py: burst 91: 20 of 20 frames scored, mode motion_aware, keepers 201327, 201323, 201325, 201329, 201331, 201333, 201335, 201337, 201339, 201341, 201343, 201345, 201347, 201349, 201353, 201355, 201357, 201359, 201361, 201351
+12:44:11 py: burst 92: 4 of 4 frames scored, mode motion_aware, keepers 201363, 201365, 201367, 201369
+12:44:11 py: burst 93: 4 of 4 frames scored, mode motion_aware, keepers 201375, 201377, 201371, 201373
+12:44:11 py: burst 94: 5 of 5 frames scored, mode motion_aware, keepers 201385, 201383, 201381, 201387
+12:44:11 py: burst 95: 4 of 4 frames scored, mode motion_aware, keepers 201395, 201389, 201391, 201393
+12:44:11 py: burst 96: 1 of 1 frames scored, mode motion_aware, keepers 201397
+12:44:11 py: burst 97: 17 of 17 frames scored, mode motion_aware, keepers 201401, 201399, 201421, 201403, 201411, 201419, 201423, 201425, 201409, 201415
+12:44:11 py: burst 98: 16 of 16 frames scored, mode motion_aware, keepers 201453, 201451, 201457, 201463, 201459, 201461, 201433, 201443, 201435, 201449, 201455, 201447
+12:44:11 py: burst 99: 3 of 3 frames scored, mode motion_aware, keepers 201469, 201467, 201465
+12:44:11 py: burst 100: 10 of 10 frames scored, mode motion_aware, keepers 201479, 201473, 201475, 201477, 201481, 201483, 201485, 201487, 201489, 201471
+12:44:11 py: burst 101: 1 of 1 frames scored, mode motion_aware, keepers 201491
+12:44:11 py: burst 102: 10 of 10 frames scored, mode motion_aware, keepers 201501, 201505, 201503, 201507, 201509, 201493, 201497
+12:44:11 py: burst 103: 6 of 6 frames scored, mode motion_aware, keepers 201513, 201517, 201519, 201521, 201523
+12:44:11 py: burst 104: 7 of 7 frames scored, mode motion_aware, keepers 201531, 201527, 201525, 201533, 201529
+12:44:11 py: burst 105: 7 of 7 frames scored, mode motion_aware, keepers 201547, 201543
+12:44:11 py: archived report: C:\Users\Louis\AppData\Local\darktable/assisted_culling/reports\20261111-124411.csv
+12:44:12 lua: scoring: scorer exit 0
+12:44:12 lua: Assisted Culling: analysis done, applying ratings to the last 806 images...
+12:44:12 lua: applying: results 7 of 812
+12:44:23 lua: ratings: selecting 14 images for 2 stars
+12:44:24 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:44:24 lua: ratings: selecting 4 images for 3 stars
+12:44:24 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:44:24 lua: ratings: restoring selection of 102
+12:44:25 lua: applying: results 17 of 812
+12:44:32 lua: ratings: selecting 6 images for 1 stars
+12:44:32 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:44:32 lua: ratings: selecting 10 images for 2 stars
+12:44:33 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:44:33 lua: ratings: selecting 2 images for 3 stars
+12:44:33 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:44:33 lua: ratings: restoring selection of 100
+12:44:34 lua: applying: results 27 of 812
+12:44:42 lua: ratings: selecting 8 images for 1 stars
+12:44:42 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:44:42 lua: ratings: restoring selection of 99
+12:44:43 lua: applying: results 37 of 812
+12:44:52 lua: ratings: selecting 2 images for 4 stars
+12:44:52 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:44:52 lua: ratings: selecting 2 images for 3 stars
+12:44:52 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:44:52 lua: ratings: restoring selection of 99
+12:44:52 lua: applying: results 47 of 812
+12:45:01 lua: ratings: selecting 4 images for 1 stars
+12:45:01 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:45:01 lua: ratings: selecting 4 images for 2 stars
+12:45:02 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:45:02 lua: ratings: restoring selection of 98
+12:45:02 lua: applying: results 57 of 812
+12:45:11 lua: ratings: selecting 4 images for 3 stars
+12:45:12 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:45:12 lua: ratings: restoring selection of 97
+12:45:12 lua: applying: results 67 of 812
+12:45:22 lua: ratings: selecting 4 images for 1 stars
+12:45:22 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:45:22 lua: ratings: selecting 12 images for 2 stars
+12:45:22 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:45:23 lua: ratings: selecting 2 images for 3 stars
+12:45:23 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:45:23 lua: ratings: restoring selection of 94
+12:45:23 lua: applying: results 77 of 812
+12:45:33 lua: ratings: selecting 8 images for 3 stars
+12:45:33 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:45:33 lua: ratings: selecting 10 images for 2 stars
+12:45:33 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:45:34 lua: ratings: restoring selection of 93
+12:45:34 lua: applying: results 87 of 812
+12:45:43 lua: ratings: selecting 4 images for 1 stars
+12:45:44 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:45:44 lua: ratings: selecting 2 images for 2 stars
+12:45:44 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:45:44 lua: ratings: selecting 2 images for 3 stars
+12:45:44 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:45:44 lua: ratings: restoring selection of 92
+12:45:44 lua: applying: results 97 of 812
+12:45:54 lua: ratings: selecting 2 images for 4 stars
+12:45:54 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:45:54 lua: ratings: selecting 2 images for 2 stars
+12:45:54 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:45:54 lua: ratings: restoring selection of 90
+12:45:55 lua: applying: results 107 of 812
+12:46:04 lua: ratings: selecting 4 images for 1 stars
+12:46:04 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:46:05 lua: ratings: selecting 2 images for 2 stars
+12:46:05 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:46:05 lua: ratings: selecting 2 images for 3 stars
+12:46:05 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:46:05 lua: ratings: restoring selection of 89
+12:46:05 lua: applying: results 117 of 812
+12:46:15 lua: ratings: selecting 4 images for 1 stars
+12:46:15 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:46:15 lua: ratings: selecting 2 images for 3 stars
+12:46:15 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:46:15 lua: ratings: restoring selection of 89
+12:46:16 lua: applying: results 127 of 812
+12:46:25 lua: ratings: selecting 2 images for 1 stars
+12:46:25 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:46:25 lua: ratings: selecting 2 images for 2 stars
+12:46:25 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:46:26 lua: ratings: selecting 2 images for 4 stars
+12:46:26 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:46:26 lua: ratings: restoring selection of 87
+12:46:26 lua: applying: results 137 of 812
+12:46:35 lua: ratings: selecting 4 images for 1 stars
+12:46:36 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:46:36 lua: ratings: selecting 8 images for 2 stars
+12:46:36 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:46:36 lua: ratings: restoring selection of 85
+12:46:36 lua: applying: results 147 of 812
+12:46:46 lua: ratings: selecting 4 images for 3 stars
+12:46:46 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:46:46 lua: ratings: restoring selection of 85
+12:46:47 lua: applying: results 157 of 812
+12:46:56 lua: ratings: selecting 14 images for 2 stars
+12:46:57 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:46:57 lua: ratings: selecting 6 images for 3 stars
+12:46:57 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:46:57 lua: ratings: restoring selection of 83
+12:46:58 lua: applying: results 167 of 812
+12:47:08 lua: ratings: selecting 4 images for 1 stars
+12:47:08 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:47:08 lua: ratings: selecting 12 images for 2 stars
+12:47:08 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:47:08 lua: ratings: selecting 2 images for 3 stars
+12:47:09 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:47:09 lua: ratings: restoring selection of 79
+12:47:09 lua: applying: results 177 of 812
+12:47:19 lua: ratings: selecting 4 images for 1 stars
+12:47:19 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:47:19 lua: ratings: selecting 6 images for 2 stars
+12:47:19 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:47:19 lua: ratings: restoring selection of 78
+12:47:20 lua: applying: results 187 of 812
+12:47:29 lua: ratings: selecting 12 images for 1 stars
+12:47:29 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:47:30 lua: ratings: selecting 4 images for 2 stars
+12:47:30 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:47:30 lua: ratings: restoring selection of 77
+12:47:30 lua: applying: results 197 of 812
+12:47:40 lua: ratings: selecting 4 images for 3 stars
+12:47:40 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:47:40 lua: ratings: selecting 4 images for 2 stars
+12:47:40 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:47:41 lua: ratings: restoring selection of 76
+12:47:41 lua: applying: results 207 of 812
+12:47:50 lua: ratings: selecting 6 images for 2 stars
+12:47:51 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:47:51 lua: ratings: selecting 4 images for 3 stars
+12:47:51 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:47:51 lua: ratings: selecting 2 images for 4 stars
+12:47:51 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:47:51 lua: ratings: restoring selection of 74
+12:47:52 lua: applying: results 217 of 812
+12:48:01 lua: ratings: selecting 4 images for 1 stars
+12:48:01 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:48:01 lua: ratings: selecting 8 images for 2 stars
+12:48:02 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:48:02 lua: ratings: selecting 2 images for 3 stars
+12:48:02 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:48:02 lua: ratings: restoring selection of 72
+12:48:02 lua: applying: results 227 of 812
+12:48:12 lua: ratings: selecting 4 images for 1 stars
+12:48:12 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:48:12 lua: ratings: selecting 2 images for 2 stars
+12:48:13 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:48:13 lua: ratings: selecting 4 images for 3 stars
+12:48:13 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:48:13 lua: ratings: restoring selection of 70
+12:48:13 lua: applying: results 237 of 812
+12:48:23 lua: ratings: selecting 2 images for 4 stars
+12:48:23 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:48:23 lua: ratings: selecting 2 images for 3 stars
+12:48:23 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:48:23 lua: ratings: restoring selection of 69
+12:48:24 lua: applying: results 247 of 812
+12:48:34 lua: ratings: selecting 6 images for 1 stars
+12:48:34 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:48:34 lua: ratings: selecting 4 images for 2 stars
+12:48:34 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:48:34 lua: ratings: selecting 4 images for 3 stars
+12:48:34 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:48:34 lua: ratings: restoring selection of 67
+12:48:35 lua: applying: results 257 of 812
+12:48:44 lua: ratings: selecting 6 images for 3 stars
+12:48:45 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:48:45 lua: ratings: selecting 10 images for 2 stars
+12:48:45 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:48:45 lua: ratings: restoring selection of 65
+12:48:46 lua: applying: results 267 of 812
+12:48:55 lua: ratings: selecting 6 images for 1 stars
+12:48:56 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:48:56 lua: ratings: selecting 2 images for 2 stars
+12:48:56 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:48:56 lua: ratings: selecting 8 images for 3 stars
+12:48:56 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:48:56 lua: ratings: restoring selection of 63
+12:48:57 lua: applying: results 277 of 812
+12:49:06 lua: ratings: selecting 2 images for 4 stars
+12:49:07 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:49:07 lua: ratings: selecting 4 images for 2 stars
+12:49:07 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:49:07 lua: ratings: restoring selection of 62
+12:49:07 lua: applying: results 287 of 812
+12:49:17 lua: ratings: selecting 4 images for 3 stars
+12:49:17 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:49:17 lua: ratings: selecting 2 images for 2 stars
+12:49:17 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:49:17 lua: ratings: restoring selection of 60
+12:49:18 lua: applying: results 297 of 812
+12:49:28 lua: ratings: selecting 4 images for 2 stars
+12:49:28 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:49:28 lua: ratings: selecting 6 images for 3 stars
+12:49:28 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:49:28 lua: ratings: selecting 10 images for 4 stars
+12:49:28 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:49:29 lua: ratings: restoring selection of 60
+12:49:29 lua: applying: results 307 of 812
+12:49:39 lua: ratings: selecting 2 images for 1 stars
+12:49:39 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:49:39 lua: ratings: selecting 10 images for 2 stars
+12:49:39 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:49:39 lua: ratings: restoring selection of 58
+12:49:40 lua: applying: results 317 of 812
+12:49:50 lua: ratings: selecting 8 images for 1 stars
+12:49:50 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:49:50 lua: ratings: selecting 6 images for 2 stars
+12:49:50 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:49:50 lua: ratings: selecting 4 images for 3 stars
+12:49:51 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:49:51 lua: ratings: restoring selection of 55
+12:49:51 lua: applying: results 327 of 812
+12:50:01 lua: ratings: selecting 2 images for 2 stars
+12:50:01 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:50:01 lua: ratings: selecting 8 images for 3 stars
+12:50:01 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:50:02 lua: ratings: selecting 10 images for 4 stars
+12:50:02 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:50:02 lua: ratings: restoring selection of 55
+12:50:02 lua: applying: results 337 of 812
+12:50:14 lua: ratings: selecting 6 images for 1 stars
+12:50:14 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:50:15 lua: ratings: selecting 8 images for 2 stars
+12:50:15 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:50:15 lua: ratings: selecting 4 images for 3 stars
+12:50:15 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:50:15 lua: ratings: restoring selection of 53
+12:50:16 lua: applying: results 347 of 812
+12:50:16 lua: applying: results 357 of 812
+12:50:16 lua: applying: results 367 of 812
+12:50:49 lua: ratings: selecting 2 images for 3 stars
+12:50:49 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:50:49 lua: ratings: selecting 4 images for 2 stars
+12:50:49 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:50:49 lua: ratings: restoring selection of 52
+12:50:49 lua: applying: results 377 of 812
+12:51:02 lua: ratings: selecting 4 images for 3 stars
+12:51:02 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:51:02 lua: ratings: selecting 8 images for 2 stars
+12:51:02 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:51:02 lua: ratings: restoring selection of 51
+12:51:03 lua: applying: results 387 of 812
+12:51:12 lua: ratings: selecting 6 images for 1 stars
+12:51:12 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:51:13 lua: ratings: selecting 8 images for 2 stars
+12:51:13 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:51:13 lua: ratings: selecting 2 images for 3 stars
+12:51:13 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:51:13 lua: ratings: restoring selection of 49
+12:51:14 lua: applying: results 397 of 812
+12:51:25 lua: ratings: selecting 4 images for 1 stars
+12:51:25 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:51:25 lua: ratings: selecting 4 images for 2 stars
+12:51:25 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:51:25 lua: ratings: selecting 2 images for 4 stars
+12:51:25 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:51:25 lua: ratings: restoring selection of 48
+12:51:26 lua: applying: results 407 of 812
+12:51:37 lua: ratings: selecting 4 images for 4 stars
+12:51:37 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:51:37 lua: ratings: selecting 10 images for 2 stars
+12:51:37 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:51:37 lua: ratings: restoring selection of 48
+12:51:38 lua: applying: results 417 of 812
+12:51:48 lua: ratings: selecting 4 images for 1 stars
+12:51:48 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:51:48 lua: ratings: selecting 4 images for 2 stars
+12:51:48 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:51:49 lua: ratings: restoring selection of 46
+12:51:49 lua: applying: results 427 of 812
+12:51:59 lua: ratings: selecting 16 images for 3 stars
+12:52:00 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:52:00 lua: ratings: restoring selection of 45
+12:52:01 lua: applying: results 437 of 812
+12:52:07 lua: ratings: selecting 2 images for 3 stars
+12:52:07 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:52:07 lua: ratings: selecting 18 images for 2 stars
+12:52:07 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:52:08 lua: ratings: restoring selection of 45
+12:52:08 lua: applying: results 447 of 812
+12:52:15 lua: ratings: selecting 2 images for 1 stars
+12:52:15 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:52:15 lua: ratings: selecting 14 images for 2 stars
+12:52:15 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:52:15 lua: ratings: restoring selection of 43
+12:52:16 lua: applying: results 457 of 812
+12:52:22 lua: ratings: selecting 2 images for 1 stars
+12:52:22 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:52:22 lua: ratings: selecting 2 images for 2 stars
+12:52:22 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:52:22 lua: ratings: selecting 2 images for 3 stars
+12:52:23 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:52:23 lua: ratings: selecting 2 images for 4 stars
+12:52:23 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:52:23 lua: ratings: restoring selection of 43
+12:52:23 lua: applying: results 467 of 812
+12:52:29 lua: ratings: selecting 10 images for 2 stars
+12:52:29 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:52:30 lua: ratings: selecting 6 images for 3 stars
+12:52:30 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:52:30 lua: ratings: restoring selection of 41
+12:52:31 lua: applying: results 477 of 812
+12:52:37 lua: ratings: selecting 10 images for 2 stars
+12:52:37 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:52:37 lua: ratings: selecting 2 images for 3 stars
+12:52:37 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:52:37 lua: ratings: restoring selection of 40
+12:52:38 lua: applying: results 487 of 812
+12:52:44 lua: ratings: selecting 8 images for 1 stars
+12:52:44 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:52:44 lua: ratings: selecting 6 images for 2 stars
+12:52:45 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:52:45 lua: ratings: selecting 2 images for 3 stars
+12:52:45 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:52:45 lua: ratings: restoring selection of 37
+12:52:45 lua: applying: results 497 of 812
+12:52:52 lua: ratings: selecting 4 images for 1 stars
+12:52:52 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:52:52 lua: ratings: selecting 4 images for 3 stars
+12:52:52 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:52:52 lua: ratings: restoring selection of 36
+12:52:52 lua: applying: results 507 of 812
+12:52:59 lua: ratings: selecting 2 images for 1 stars
+12:52:59 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:52:59 lua: ratings: selecting 2 images for 3 stars
+12:52:59 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:52:59 lua: ratings: restoring selection of 36
+12:52:59 lua: applying: results 517 of 812
+12:53:06 lua: ratings: selecting 8 images for 3 stars
+12:53:06 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:53:06 lua: ratings: selecting 6 images for 2 stars
+12:53:06 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:53:06 lua: ratings: restoring selection of 34
+12:53:07 lua: applying: results 527 of 812
+12:53:13 lua: ratings: selecting 2 images for 1 stars
+12:53:13 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:53:13 lua: ratings: selecting 8 images for 2 stars
+12:53:13 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:53:14 lua: ratings: restoring selection of 33
+12:53:14 lua: applying: results 537 of 812
+12:53:20 lua: ratings: selecting 6 images for 3 stars
+12:53:21 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:53:21 lua: ratings: selecting 10 images for 2 stars
+12:53:21 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:53:21 lua: ratings: restoring selection of 32
+12:53:22 lua: applying: results 547 of 812
+12:53:28 lua: ratings: selecting 4 images for 1 stars
+12:53:28 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:53:28 lua: ratings: selecting 2 images for 2 stars
+12:53:28 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:53:28 lua: ratings: restoring selection of 31
+12:53:29 lua: applying: results 557 of 812
+12:53:35 lua: ratings: selecting 4 images for 1 stars
+12:53:35 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:53:35 lua: ratings: selecting 4 images for 2 stars
+12:53:35 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:53:36 lua: ratings: selecting 4 images for 3 stars
+12:53:36 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:53:36 lua: ratings: restoring selection of 30
+12:53:36 lua: applying: results 567 of 812
+12:53:42 lua: ratings: selecting 8 images for 1 stars
+12:53:43 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:53:43 lua: ratings: selecting 2 images for 3 stars
+12:53:43 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:53:43 lua: ratings: restoring selection of 29
+12:53:44 lua: applying: results 577 of 812
+12:53:50 lua: ratings: selecting 8 images for 1 stars
+12:53:50 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:53:50 lua: ratings: selecting 4 images for 3 stars
+12:53:51 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:53:51 lua: ratings: restoring selection of 28
+12:53:51 lua: applying: results 587 of 812
+12:53:58 lua: ratings: selecting 2 images for 3 stars
+12:53:58 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:53:58 lua: ratings: restoring selection of 28
+12:53:58 lua: applying: results 597 of 812
+12:54:05 lua: ratings: selecting 4 images for 2 stars
+12:54:05 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:54:05 lua: ratings: restoring selection of 27
+12:54:05 lua: applying: results 607 of 812
+12:54:12 lua: ratings: selecting 8 images for 3 stars
+12:54:12 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:54:12 lua: ratings: selecting 12 images for 2 stars
+12:54:12 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:54:13 lua: ratings: restoring selection of 26
+12:54:13 lua: applying: results 617 of 812
+12:54:20 lua: ratings: selecting 10 images for 1 stars
+12:54:20 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:54:20 lua: ratings: selecting 6 images for 2 stars
+12:54:20 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:54:21 lua: ratings: selecting 4 images for 3 stars
+12:54:21 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:54:21 lua: ratings: restoring selection of 25
+12:54:21 lua: applying: results 627 of 812
+12:54:28 lua: ratings: selecting 8 images for 1 stars
+12:54:28 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:54:28 lua: ratings: selecting 6 images for 2 stars
+12:54:28 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:54:28 lua: ratings: selecting 4 images for 3 stars
+12:54:29 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:54:29 lua: ratings: restoring selection of 25
+12:54:29 lua: applying: results 637 of 812
+12:54:36 lua: ratings: selecting 8 images for 3 stars
+12:54:36 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:54:36 lua: ratings: selecting 6 images for 2 stars
+12:54:36 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:54:36 lua: ratings: restoring selection of 21
+12:54:37 lua: applying: results 647 of 812
+12:54:43 lua: ratings: selecting 6 images for 3 stars
+12:54:43 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:54:43 lua: ratings: selecting 8 images for 2 stars
+12:54:44 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:54:44 lua: ratings: restoring selection of 20
+12:54:44 lua: applying: results 657 of 812
+12:54:51 lua: ratings: selecting 8 images for 1 stars
+12:54:51 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:54:51 lua: ratings: selecting 6 images for 2 stars
+12:54:51 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:54:51 lua: ratings: selecting 4 images for 3 stars
+12:54:52 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:54:52 lua: ratings: restoring selection of 18
+12:54:52 lua: applying: results 667 of 812
+12:54:59 lua: ratings: selecting 12 images for 3 stars
+12:54:59 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:54:59 lua: ratings: selecting 8 images for 2 stars
+12:54:59 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:55:00 lua: ratings: restoring selection of 16
+12:55:00 lua: applying: results 677 of 812
+12:55:07 lua: ratings: selecting 14 images for 2 stars
+12:55:07 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:55:07 lua: ratings: restoring selection of 16
+12:55:08 lua: applying: results 687 of 812
+12:55:15 lua: ratings: selecting 6 images for 3 stars
+12:55:15 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:55:15 lua: ratings: selecting 8 images for 2 stars
+12:55:15 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:55:15 lua: ratings: restoring selection of 15
+12:55:16 lua: applying: results 697 of 812
+12:55:22 lua: ratings: selecting 4 images for 2 stars
+12:55:23 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:55:23 lua: ratings: selecting 14 images for 3 stars
+12:55:23 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:55:23 lua: ratings: selecting 2 images for 4 stars
+12:55:24 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:55:24 lua: ratings: restoring selection of 14
+12:55:24 lua: applying: results 707 of 812
+12:55:31 lua: ratings: selecting 20 images for 2 stars
+12:55:31 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:55:31 lua: ratings: restoring selection of 14
+12:55:32 lua: applying: results 717 of 812
+12:55:39 lua: ratings: selecting 10 images for 2 stars
+12:55:39 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:55:39 lua: ratings: selecting 10 images for 3 stars
+12:55:40 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:55:40 lua: ratings: restoring selection of 12
+12:55:40 lua: applying: results 727 of 812
+12:55:47 lua: ratings: selecting 4 images for 1 stars
+12:55:47 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:55:47 lua: ratings: selecting 8 images for 2 stars
+12:55:47 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:55:48 lua: ratings: selecting 2 images for 3 stars
+12:55:48 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:55:48 lua: ratings: selecting 4 images for 4 stars
+12:55:48 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:55:48 lua: ratings: restoring selection of 9
+12:55:49 lua: applying: results 737 of 812
+12:55:55 lua: ratings: selecting 6 images for 3 stars
+12:55:55 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:55:55 lua: ratings: selecting 12 images for 2 stars
+12:55:56 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:55:56 lua: ratings: restoring selection of 8
+12:55:56 lua: applying: results 747 of 812
+12:56:03 lua: ratings: selecting 8 images for 3 stars
+12:56:03 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:56:03 lua: ratings: restoring selection of 8
+12:56:04 lua: applying: results 757 of 812
+12:56:10 lua: ratings: selecting 2 images for 3 stars
+12:56:11 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:56:11 lua: ratings: selecting 14 images for 2 stars
+12:56:11 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:56:11 lua: ratings: restoring selection of 7
+12:56:12 lua: applying: results 767 of 812
+12:56:18 lua: ratings: selecting 2 images for 2 stars
+12:56:18 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:56:18 lua: ratings: selecting 12 images for 3 stars
+12:56:19 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:56:19 lua: ratings: selecting 2 images for 4 stars
+12:56:19 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:56:19 lua: ratings: restoring selection of 6
+12:56:19 lua: applying: results 777 of 812
+12:56:26 lua: ratings: selecting 10 images for 2 stars
+12:56:26 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:56:27 lua: ratings: selecting 2 images for 3 stars
+12:56:27 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:56:27 lua: ratings: selecting 8 images for 4 stars
+12:56:27 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:56:27 lua: ratings: restoring selection of 4
+12:56:27 lua: applying: results 787 of 812
+12:56:34 lua: ratings: selecting 6 images for 3 stars
+12:56:34 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:56:34 lua: ratings: selecting 8 images for 2 stars
+12:56:34 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:56:35 lua: ratings: restoring selection of 2
+12:56:35 lua: applying: results 797 of 812
+12:56:42 lua: ratings: selecting 8 images for 2 stars
+12:56:42 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:56:42 lua: ratings: selecting 4 images for 3 stars
+12:56:42 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:56:42 lua: ratings: selecting 2 images for 4 stars
+12:56:42 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:56:43 lua: ratings: restoring selection of 1
+12:56:43 lua: applying: results 807 of 812
+12:56:47 lua: ratings: selecting 2 images for 2 stars
+12:56:47 lua: ratings: act-on is 0 images, not the batch; rating one by one
+12:56:47 lua: ratings: restoring selection of 0
+12:56:47 lua: Assisted Culling: done. 509 keepers, 303 not kept
+12:56:47 lua: run finished
