@@ -332,8 +332,8 @@ def run_tests():
           ["0", "1", "2", "3", "4"])
     check("stage C: keeper comes from the shortlist",
           [r[0] for r in res_rows if r[4] == "1"][0] in shortlisted_ids, True)
-    check("stage C: no masks and no detector tags only the fallback",
-          {r[6] for r in res_rows}, {"Scored|Subject bias"})
+    check("stage C: no masks and no detector tags only the fallback (plus the Why reason)",
+          {t for r in res_rows for t in r[6].split(";") if not t.startswith("Why|")}, {"Scored|Subject bias"})
 
     # score cache: plain modes ------------------------------------------------
     import sqlite3 as _sq
@@ -380,7 +380,8 @@ def run_tests():
     check("cache: a pan is scored as subject_peak, not read from the subject bias entry",
           plain_run(manifest=exif_manifest("pan.csv", "0.008"))["1"] != "12345.0", True)
     check("diagnostic tags: a pan is tagged Technique|Panning",
-          {r[6] for r in _csv.reader(open(os.path.join(tmp, "plain_res.csv")))}, {"Technique|Panning"})
+          {t for r in _csv.reader(open(os.path.join(tmp, "plain_res.csv"))) for t in r[6].split(";") if not t.startswith("Why|")},
+          {"Technique|Panning"})
 
     db = _sq.connect(cache_p)
     db.execute("UPDATE scores SET used = 0")
