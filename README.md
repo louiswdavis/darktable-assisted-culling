@@ -205,9 +205,9 @@ Below the [preset](#presets) picker the panel runs top to bottom in the order yo
 
 In every mode, keepers are picked within their own burst and non-keepers follow the *non-keepers* setting. The mode only decides a keeper's stars.
 
-- *universal absolute*: keepers are rated against fixed sharpness tiers, so the same frame gets the same stars in any shoot.
+- *universal absolute*: keepers are rated against fixed sharpness tiers, so the same frame gets the same stars in any shoot. Each sharpness scale has its own tiers: the variance modes (*subject focus*, *subject peak*, *center*, *face*, *SAM*) share one table, and *peak*, *tiles uniformity* and *motion aware* have their own, so the macro and landscape presets spread stars too. A burst that [switched mode from EXIF](#shooting-intent-from-exif) is rated on the tiers of the mode it was scored in.
 - *binary (keepers top)*: every keeper starts at 5 stars and only flags lower it (eyes closed −1, over/underexposed −3).
-- *relative to selection*: tiers scale to the selection you're culling, so its sharpest frames get 5 stars even on a soft lens or in low light. The 5-star mark is the 95th percentile of the frames that could keep, so one freak frame can't flatten everyone else. Each sharpness scale is judged on its own: bursts that switched mode from EXIF, and SAM bursts with and without masks, don't share a 5-star mark. Ratings only appear once every burst is scored, even with *apply ratings while scoring* on.
+- *relative to selection*: tiers scale to the selection you're culling, so its sharpest frames get 5 stars even on a soft lens or in low light. The 5-star mark is the 95th percentile of the frames that could keep, so one freak frame can't flatten everyone else. Each sharpness scale is judged on its own: bursts that switched mode from EXIF, and SAM bursts with and without masks, don't share a 5-star mark. A scale with fewer than 5 frames that could keep (a one-frame selection, say) has no mark worth 5 stars, so its bursts take the universal tiers of their mode instead, and the log says so; a scale where every frame scores 0 gives 0 stars. Ratings only appear once every burst is scored, even with *apply ratings while scoring* on.
 
 **Star strictness** (default *standard (×1)*) multiplies the sharpness every star needs in *universal* and *relative* ranking, and how fast [graded non-keepers](#non-keepers) lose stars. *Stricter (×1.25)* to *strictest (×2)* hand out fewer stars for the same frames; *more generous (×0.75)* and *much more generous (×0.5)* hand out more. Scores and keeper picks don't change, and neither does *binary*. Changing it re-applies from the [score cache](#score-cache) without decoding again.
 
@@ -407,16 +407,17 @@ Everything you'd change per shoot is a panel option or a preference. What's left
 
 - `assisted_culling.lua`: `PROGRESS_ANALYSIS` (0.75) is the share of the progress bar for analysis; applying ratings fills the rest. In SAM mode, `PROGRESS_SUBJECTS` (0.15) and `PROGRESS_SAM` (0.45) mark where finding subjects and segmenting end.
 - `assisted_culling.lua`: `STAGE2_BATCH_WRITE_BUDGET` (60 tag writes) and `STAGE2_BATCH_LINES` (200 results) size each slice of the final apply step before it yields to the GUI. Lower them if darktable stutters while ratings apply.
-- `score_images.py`:
-  - `SHADOW_CLIP`, `HIGHLIGHT_CLIP` and `CLIP_PCT_FLAG` control exposure flagging.
-  - `TIER_THRESHOLDS` (universal mode) and `STAR_THRESHOLDS` (binary and relative mode, as a percentage) turn sharpness into stars.
-  - `RELATIVE_REFERENCE_PERCENTILE` sets which frame marks 5 stars in relative mode.
+- `rating.py` (the keeper and star rules; `score_images.py` applies them during a run and `eval_culling.py --suggest` replays them):
+  - `TIER_THRESHOLDS` (universal mode, variance scale), `PEAK_TIER_THRESHOLDS`, `UNIFORMITY_TIER_THRESHOLDS` and `MOTION_TIER_THRESHOLDS` (the other scales, mapped in `TIER_THRESHOLDS_BY_MODE`) and `STAR_THRESHOLDS` (binary and relative mode, as a percentage) turn sharpness into stars. The peak and uniformity tables are first guesses: set them from the `score` column of a real run's `last-run.csv` and check with [the eval script](#scoring-a-run-against-your-own-picks).
+  - `RELATIVE_REFERENCE_PERCENTILE` sets which frame marks 5 stars in relative mode; `RELATIVE_MIN_FRAMES` (5) is the smallest scale that gets one.
   - `GRADED_STEPS` sets the shares of the burst's best that *graded by burst* non-keepers step down at.
   - `FLAG_PENALTIES` sets what each flag costs: points off the binary score (15 points is one star) and stars off in universal and relative mode.
+- `score_images.py`:
+  - `SHADOW_CLIP`, `HIGHLIGHT_CLIP` and `CLIP_PCT_FLAG` control exposure flagging.
   - `BLINK_MIN_FACE_PX` is the smallest face width judged for closed eyes.
   - `DETECTOR_MIN_SCORE` is the confidence a vehicle detection needs.
   - `PANNING_SHUTTER` (1/125 s) and `SHALLOW_DOF_APERTURE` (f/4) are the [shooting intent](#shooting-intent-from-exif) cutoffs.
-  - Motorsport mode: `MOTION_TIER_THRESHOLDS` (its universal stars, a first guess), `STREAK_COHERENCE` (how strong a streak must be), `STREAK_SHARE` / `_SLOW` / `_FAST` (share of the background that must streak), `SUBJECT_STREAK_MAX` (how much of the car may streak in a good pan), `PAN_BONUS` and `MISSED_PAN_FACTOR`.
+  - Motorsport mode: `STREAK_COHERENCE` (how strong a streak must be), `STREAK_SHARE` / `_SLOW` / `_FAST` (share of the background that must streak), `SUBJECT_STREAK_MAX` (how much of the car may streak in a good pan), `PAN_BONUS` and `MISSED_PAN_FACTOR`.
   - `SCORE_CACHE_MAX_AGE_DAYS` (default 90) is how long an unused cache entry is kept.
   - Nothing to bump after changing a constant: the ones that feed a score are listed in `CACHE_INPUTS` and hashed into every cache key, so the next run re-scores. Star and penalty tables, the shooting-intent cutoffs and the other names in `CACHE_NEUTRAL` only use the scores, so they re-apply from the cache. A new constant goes in one of the two tuples, or `test_score_images.py` fails. A change to the scoring *code* with no constant behind it isn't detected: delete `scores.sqlite` after one.
 
@@ -495,7 +496,7 @@ The scorer's pure functions (saliency point, vehicle detection decoding, mask-aw
 .venv\Scripts\python python\stress_test_cull.py
 ```
 
-The eval script has its own stdlib-only tests: `python python/test_eval_culling.py`.
+The eval script has its own stdlib-only tests: `python python/test_eval_culling.py` (they also run `rating.py`, which needs neither numpy nor cv2).
 
 ### Running the scorer on its own
 
@@ -525,6 +526,21 @@ python python/score_images.py manifest.csv results.csv
 It prints, overall and per group, per sharpness mode and per motion class: the hit rate (your picks the plugin kept), false keepers (plugin keepers you didn't pick) and Spearman's rank correlation between your stars and its stars (rejected counts as -1; frames the run left alone are excluded and counted). A pick is a photo you rated 1 star or more and didn't reject; `--pick-stars 3` raises the bar. The sharpness mode per burst is the one you pass, corrected where the run's `Technique` tag shows a burst switched (see [Shooting intent from EXIF](#shooting-intent-from-exif)). Only report rows for the given photos count, so one `last-run.csv` can cover more than the shoot. A truth CSV can also be written by hand: columns `file` (name or path), `stars` (or `rating`, -1 for a reject) and optionally `rejected`.
 
 Same inputs give the same output, so two runs with different settings are compared by diffing their `--out` files.
+
+#### Letting it suggest settings
+
+Instead of re-running the plugin per setting, `--suggest` replays the run's scores under every combination of ranking mode, keepers, keeper margin, star strictness and non-keepers (the panel's own choices) and prints the best few against your picks:
+
+```
+python python/eval_culling.py @rally-photos.txt --truth rally-truth.csv --sharp-mode subject_focus --suggest
+```
+
+Each suggestion shows its hit rate, false keepers and Spearman, then the preset as JSON: paste it into `assisted_culling/presets/<name>.json` (see [Presets](#presets)), or `--write-preset FILE` writes the first one (to a new file only). Nothing in the plugin changes on its own. `--top N` shows more than 5.
+
+- It needs `--sharp-mode`, because the replay rates each burst with the tiers of the mode the run used. The sharpness mode and the tier tables are not searched: `star_scale` covers "stricter or looser stars", and a different sharpness mode means different scores, so that is a new run.
+- One shoot overfits: the best settings for one rally are the ones that happen to fit that rally. Keep each run's `last-run.csv` and `--snapshot` CSV and add them with `--shoot REPORT TRUTH` (repeatable; all must be runs in the same `--sharp-mode`). Counts are pooled across shoots. With one shoot it says so.
+- The replay reads the report, not the photos: it uses the same scores, bursts and shortlist. Frames the run could not read are not in the report, and tag-only flags are not either, so every flag it lists costs a star. The ranking is hit rate minus false-keeper rate, then Spearman; when two choices give the same numbers the panel's default wins.
+- `python/rating.py` holds the keeper and star rules for both the plugin and the replay, so the two agree exactly.
 
 ### End-to-end without the GUI
 

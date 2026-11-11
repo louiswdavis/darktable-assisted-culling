@@ -228,9 +228,36 @@ def run_tests():
     check("relative: 80% of the reference is 3 stars", keeper_row((), "relative", 320.0, 400.0), ("", 3))
     check("relative: eyes closed is one star lower", keeper_row(("eyes_closed",), "relative", 400.0, 400.0),
           ("eyes_closed", 4))
-    check("relative: no reference is 0 stars", keeper_row((), "relative", 400.0), ("", 0))
+    check("relative: a reference of 0 is 0 stars", keeper_row((), "relative", 400.0, 0.0), ("", 0))
+    check("relative: no reference (group too small) takes the universal tiers",
+          keeper_row((), "relative", 5000.0), ("", 5))
     check("relative reference: one freak frame doesn't set the scale",
           S.relative_references({"g": [100.0] * 19 + [10000.0]})["g"] < 1000, True)
+    check("relative reference: a group under RELATIVE_MIN_FRAMES gets none",
+          S.relative_references({"g": [100.0] * (S.RELATIVE_MIN_FRAMES - 1), "h": [100.0] * S.RELATIVE_MIN_FRAMES}),
+          {"h": 100.0})
+
+    # universal tiers per sharpness mode -----------------------------------------
+    check("tier_table: variance modes share TIER_THRESHOLDS",
+          [S.tier_table(m) is S.TIER_THRESHOLDS for m in ("subject_focus", "subject_peak", "center", "face_detect", "sam_subject")],
+          [True] * 5)
+    check("tier_table: own tables", (S.tier_table("peak"), S.tier_table("tiles_uniformity"), S.tier_table("motion_aware")),
+          (S.PEAK_TIER_THRESHOLDS, S.UNIFORMITY_TIER_THRESHOLDS, S.MOTION_TIER_THRESHOLDS))
+    check("tier_table: every table ends at 0 stars", [t[-1] == (0, 0) or t[-1][1] == 1 for t in S.TIER_THRESHOLDS_BY_MODE.values()],
+          [True] * len(S.TIER_THRESHOLDS_BY_MODE))
+
+    def stars_in(sharp_mode, sharp, **kw):
+        open(res_path, "w").close()
+        S.process_burst_logic("1", {"a": sharp}, {"a": ()}, 1,
+                              Namespace(keep_mode="single_best", rank_mode="universal", nk_mode="leave", sharp_mode=sharp_mode),
+                              res_path, **kw)
+        return int(open(res_path).read().strip().split(",")[5])
+
+    check("universal: a peak score of 150 is 5 stars in peak mode, 0 on the variance scale",
+          (stars_in("peak", 150.0), stars_in("subject_focus", 150.0)), (5, 0))
+    check("universal: tiles_uniformity has its own table", stars_in("tiles_uniformity", 700.0), 3)
+    check("universal: the burst's own mode wins over the run's",
+          stars_in("subject_focus", 150.0, mode="peak"), 5)
     check("flags (universal): exposure and eyes closed stack",
           keeper_row(("underexposed", "eyes_closed"), "universal"), ("underexposed;eyes_closed", 3))
 

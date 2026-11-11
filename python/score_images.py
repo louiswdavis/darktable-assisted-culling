@@ -33,50 +33,24 @@ except ImportError as _e:
     sys.exit(3)
 
 from common import RAW_EXTENSIONS, atomic_write  # noqa: E402  (stdlib-only module beside this file)
+# Star tables, keeper rules and the per-burst rating live in rating.py (stdlib only), so
+# eval_culling.py can replay them on a finished run without cv2.
+from rating import (  # noqa: E402,F401
+    STAR_THRESHOLDS, RELATIVE_REFERENCE_PERCENTILE, RELATIVE_MIN_FRAMES, GRADED_STEPS, TIER_THRESHOLDS,
+    PEAK_TIER_THRESHOLDS, UNIFORMITY_TIER_THRESHOLDS, MOTION_TIER_THRESHOLDS, TIER_THRESHOLDS_BY_MODE,
+    FLAG_PENALTIES, tier_table, keepers_allowed, penalised_flags, relative_references, rate_burst,
+)
 
 MAX_DIM = 800
 SHADOW_CLIP = 5 / 255
 HIGHLIGHT_CLIP = 250 / 255
 CLIP_PCT_FLAG = 0.02
 
-STAR_THRESHOLDS = [(95, 5), (85, 4), (75, 3), (60, 2), (45, 1), (0, 0)]
-RELATIVE_REFERENCE_PERCENTILE = 95
-# graded non-keepers: (share of the burst's best score, stars below the burst's lowest keeper);
-# a frame under the last share gets 0 stars
-GRADED_STEPS = [(0.90, 1), (0.75, 2), (0.60, 3), (0.45, 4)]
-
-TIER_THRESHOLDS = [
-    (2700, 5),
-    (2200, 4),
-    (1600, 3),
-    (1200, 2),
-    (750, 1),
-    (0, 0),
-]
-
-# Per-frame problem flags → (points off the binary-mode score, stars off in
-# universal and relative mode). A frame pays for every flag it carries. Binary-mode
-# keepers start at 100, so 15 points is one star (STAR_THRESHOLDS) and 30 is three.
-# The results CSV lists a frame's flags in column 3; assisted_culling.lua maps each to a tag.
-FLAG_PENALTIES = {
-    "overexposed": (30, 1),
-    "underexposed": (30, 1),
-    "eyes_closed": (15, 1),
-}
-
 
 def frame_flags(exposure: str, eyes_closed: bool = False) -> tuple:
     flags = () if exposure == "ok" else (exposure,)
     return flags + ("eyes_closed",) if eyes_closed else flags
 
-
-def penalised_flags(burst_flags: dict, tag_only=frozenset()) -> dict:
-    """id → the flags that cost that frame stars. Tag-only flags never do, nor
-    does a flag every frame of a multi-frame burst shares: a burst that's all
-    dark or all eyes-closed was most likely shot that way on purpose."""
-    shared = set.intersection(*map(set, burst_flags.values())) if len(burst_flags) > 1 else set()
-    exempt = shared | set(tag_only)
-    return {i: tuple(f for f in flags if f not in exempt) for i, flags in burst_flags.items()}
 
 SALIENCY_GRID = 5
 
@@ -480,16 +454,6 @@ def _init_worker():
 SHORTLIST_MIN = 3
 
 
-def keepers_allowed(keep_mode: str, burst_size: int) -> int:
-    if keep_mode == "dynamic_burst":
-        return 1 if burst_size <= 4 else (2 if burst_size <= 8 else (3 if burst_size <= 12 else (4 if burst_size <= 18 else 5)))
-    if keep_mode == "portrait_mode":
-        return 1 if burst_size <= 3 else 2
-    if keep_mode == "single_best":
-        return 1
-    return burst_size
-
-
 def shortlist(heuristic: dict, keep_mode: str) -> set:
     """Ids of the frames worth running SAM on: the top heuristic scorers, at
     least SHORTLIST_MIN and never fewer than the burst can keep."""
@@ -572,7 +536,8 @@ CACHE_INPUTS = (
 # Constants that only use cached numbers (ranking, stars, keepers, shortlist, report) or
 # pick a mode that is already in the key. Changing one re-applies without re-scoring.
 CACHE_NEUTRAL = (
-    "RAW_EXTENSIONS", "STAR_THRESHOLDS", "RELATIVE_REFERENCE_PERCENTILE", "GRADED_STEPS", "TIER_THRESHOLDS",
+    "RAW_EXTENSIONS", "STAR_THRESHOLDS", "RELATIVE_REFERENCE_PERCENTILE", "RELATIVE_MIN_FRAMES", "GRADED_STEPS",
+    "TIER_THRESHOLDS", "PEAK_TIER_THRESHOLDS", "UNIFORMITY_TIER_THRESHOLDS", "TIER_THRESHOLDS_BY_MODE",
     "FLAG_PENALTIES", "COCO_NAMES", "SHORTLIST_MIN", "PANNING_SHUTTER", "SHALLOW_DOF_APERTURE",
     "SCORE_CACHE_MAX_AGE_DAYS", "SCORE_CACHE_COMMIT_EVERY", "CACHE_INPUTS", "CACHE_NEUTRAL",
     "MOTION_TIER_THRESHOLDS", "MOTION_TAGS", "PRESCORE_FAILED", "REPORT_HEADER", "REPORT_ARCHIVE_KEEP", "WHY_REASONS",
@@ -711,7 +676,6 @@ PAN_BONUS = 1.15
 MISSED_PAN_FACTOR = 0.7
 BLUR_STRAIGHT_SCALE = 500.0  # an all-motion-blur burst scores straightness × this
 CENTRE_BOX = (1 / 3, 1 / 3, 2 / 3, 2 / 3)
-MOTION_TIER_THRESHOLDS = [(500, 5), (400, 4), (300, 3), (200, 2), (120, 1)]
 MOTION_TAGS = {"pan": "Technique|Panning", "motion_blur": "Technique|Motion Blur",
                "missed_pan": "Technique|Missed Pan"}
 
@@ -1030,115 +994,30 @@ WHY_REASONS = ("Keeper", "Keeper by margin", "Outranked", "Graded", "Not shortli
 
 
 def process_burst_logic(burst_id, burst_sharpness, burst_flags, burst_size, args, results_path,
-                        eligible=None, diag_tags=None, reference=None) -> list:
+                        eligible=None, diag_tags=None, reference=None, mode=None) -> list:
     """Appends the burst's result rows and returns its keepers, best first.
     diag_tags maps an id to its diagnostic tags (under "Assisted Culling|"),
     written ";"-joined in the 7th column after the frame's Why|<reason> tag
     (WHY_REASONS). reference is the relative mode's selection-wide sharpness
-    for 100 points (see relative_references)."""
-    if not burst_sharpness:
-        return []
-
-    allowed = keepers_allowed(args.keep_mode, burst_size)
-    if eligible is None:
-        eligible = set(burst_sharpness)
-
-    sorted_members = sorted(burst_sharpness.keys(),
-                            key=lambda i: (i in eligible, burst_sharpness[i]), reverse=True)
-    keepers = set([i for i in sorted_members if i in eligible][:allowed])
-    best = max((burst_sharpness[i] for i in eligible), default=0.0)
-    margin = getattr(args, "keep_margin", 0.0)
-    ranked = set(keepers)  # kept by rank, before the margin adds any
-    if margin > 0 and best > 0:
-        keepers |= {i for i in eligible if burst_sharpness[i] >= margin * best}
-
-    burst_keepers = [i for i in sorted_members if i in keepers]
-    num_keepers = len(burst_keepers)
-    top_40_count = max(1, int(round(num_keepers * 0.4)))
-    top_40_keepers = set(burst_keepers[:top_40_count])
-    penalised = penalised_flags(burst_flags, getattr(args, "tag_only_flags", frozenset()))
-    star_scale = getattr(args, "star_scale", 1.0)
-    tiers = MOTION_TIER_THRESHOLDS if getattr(args, "sharp_mode", "") == "motion_aware" else TIER_THRESHOLDS
-
-    rated = {}
-    for img_id in sorted_members:
-        is_keeper = img_id in keepers
-        raw_score = burst_sharpness[img_id]
-
-        if args.rank_mode == "relative":
-            score = 100.0 * raw_score / reference if reference else 0.0
-            for threshold, stars in STAR_THRESHOLDS:
-                if score >= threshold * star_scale:
-                    break
-            else:
-                stars = 0
-            stars = max(0, stars - sum(FLAG_PENALTIES[f][1] for f in penalised[img_id]))
-        elif args.rank_mode == "binary":
-            score = 100.0 if is_keeper else 0.0
-            score -= sum(FLAG_PENALTIES[f][0] for f in penalised[img_id])
-            for threshold, stars in STAR_THRESHOLDS:
-                if max(0, score) >= threshold:
-                    break
-            else:
-                stars = 0
-        else:
-            for threshold, stars in tiers:
-                if raw_score >= threshold * star_scale:
-                    break
-            else:
-                stars = 0
-            stars = max(0, stars - sum(FLAG_PENALTIES[f][1] for f in penalised[img_id]))
-
-        if is_keeper and args.keep_mode != "keep_all" and num_keepers > 1 and img_id not in top_40_keepers:
-            stars = max(0, stars - 1)
-        rated[img_id] = stars
-
-    lowest_keeper = min((rated[i] for i in keepers), default=5)
-    burst_rows = []
-    for img_id in sorted_members:
-        is_keeper = img_id in keepers
-        raw_score = burst_sharpness[img_id]
-        flags = burst_flags[img_id]
-        stars = rated[img_id]
-        if not is_keeper:
-            if args.nk_mode == "leave":
-                stars = "leave"
-            elif args.nk_mode == "reject":
-                stars = -1
-            elif args.nk_mode == "graded":
-                share = (raw_score / best if best > 0 else 0.0) / star_scale
-                drop = next((d for t, d in GRADED_STEPS if share >= t), None)
-                stars = 0 if drop is None else max(0, lowest_keeper - drop)
-                stars = max(0, stars - sum(FLAG_PENALTIES[f][1] for f in penalised[img_id]))
-            else:
-                try:
-                    stars = int(args.nk_mode)
-                except ValueError:
-                    stars = 0
-
-        reason = (("Keeper" if img_id in ranked else "Keeper by margin") if is_keeper
-                  else "Not shortlisted" if img_id not in eligible
-                  else "Graded" if args.nk_mode == "graded" else "Outranked")
-        burst_rows.append([
-            img_id,
-            round(raw_score, 1),
-            ";".join(flags),
-            burst_id,
-            int(is_keeper),
-            stars,
-            ";".join(list((diag_tags or {}).get(img_id, [])) + [f"Why|{reason}"]),
-        ])
+    for 100 points (see relative_references); None means the group was too
+    small for one and the burst takes universal tiers. mode is the burst's
+    sharp mode (args.sharp_mode when not given) and picks its tier table."""
+    sorted_members, burst_keepers, stars_of, reason_of = rate_burst(
+        burst_sharpness, burst_flags, burst_size, args, eligible, reference, mode)
+    keepers = set(burst_keepers)
+    burst_rows = [[
+        img_id,
+        round(burst_sharpness[img_id], 1),
+        ";".join(burst_flags[img_id]),
+        burst_id,
+        int(img_id in keepers),
+        stars_of[img_id],
+        ";".join(list((diag_tags or {}).get(img_id, [])) + [f"Why|{reason_of[img_id]}"]),
+    ] for img_id in sorted_members]
 
     with open(results_path, "a", newline="", encoding="utf-8") as f:
         csv.writer(f).writerows(burst_rows)
     return burst_keepers
-
-
-def relative_references(groups: dict) -> dict:
-    """group → the sharpness that earns 100 points in relative mode: the 95th
-    percentile of the group's keeper-eligible scores, so one freak frame
-    can't flatten everyone else's stars."""
-    return {g: float(np.percentile(v, RELATIVE_REFERENCE_PERCENTILE)) for g, v in groups.items() if v}
 
 
 REPORT_HEADER = ["burst", "file", "rank", "of", "score", "stars", "keeper", "flags", "tags", "why", "folder", "reason"]
@@ -1319,7 +1198,7 @@ def score_manifest(manifest, args, cache):
             deferred.append((burst_id, scores, burst_flags[burst_id], eligible, diag, note, group))
         else:
             keepers = process_burst_logic(burst_id, scores, burst_flags[burst_id], len(burst_groups[burst_id]),
-                                          args, args.results, eligible, diag)
+                                          args, args.results, eligible, diag, mode=mode_of[burst_id])
             log(f"{note}, keepers {', '.join(keepers) or 'none'}")
         del burst_sharpness[burst_id]
         del burst_flags[burst_id]
@@ -1437,12 +1316,19 @@ def score_manifest(manifest, args, cache):
                 write_progress(args.progress, processed_count, total_images, completed_bursts, total_bursts)
 
     references = relative_references(relative_scores)
-    for (mode, masked), ref in references.items():
-        log(f"relative: {ref:.1f} sharpness is 100 points for {mode}{' masked' if masked else ''} "
-            f"({len(relative_scores[(mode, masked)])} frames)")
+    for (mode, masked), values in relative_scores.items():
+        label = f"{mode}{' masked' if masked else ''} ({len(values)} frames)"
+        ref = references.get((mode, masked))
+        if ref is None:
+            log(f"relative: {label} is under {RELATIVE_MIN_FRAMES} frames, so its bursts take the universal "
+                f"tiers of {mode}")
+        elif ref <= 0:
+            log(f"relative: every frame scores 0 for {label}, so 0 stars")
+        else:
+            log(f"relative: {ref:.1f} sharpness is 100 points for {label}")
     for burst_id, scores, flags, eligible, diag, note, group in deferred:
         keepers = process_burst_logic(burst_id, scores, flags, len(burst_groups[burst_id]),
-                                      args, args.results, eligible, diag, references.get(group))
+                                      args, args.results, eligible, diag, references.get(group), mode=group[0])
         log(f"{note}, keepers {', '.join(keepers) or 'none'}")
 
 

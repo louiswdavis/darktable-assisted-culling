@@ -137,5 +137,52 @@ with tempfile.TemporaryDirectory() as tmp:
     run = subprocess.run([sys.executable, E.__file__, shoot, "--report", os.path.join(tmp, "missing.csv")], capture_output=True, text=True)
     check("cli: missing report exits 1 with a hint", (run.returncode, "--report" in run.stderr), (1, True))
 
+    # --suggest: replay the report through rating.rate_burst under other settings ----------
+    import json
+    from rating import TIER_THRESHOLDS, rate_burst, star_tier
+
+    s = E.settings_of({"rank_mode": "universal", "keep_mode": "single_best", "keep_margin": "off", "non_keeper": "leave", "star_scale": "1"})
+    check("settings_of: margin off is 0, scale is a float", (s.keep_margin, s.star_scale, s.nk_mode), (0.0, 1.0, "leave"))
+    check("settings_of: margin 90 is 0.9", E.settings_of({**vars(s), "non_keeper": "graded", "keep_margin": "90", "star_scale": "1.25"}).keep_margin, 0.9)
+
+    whole = E.read_report(report, "subject_focus", suggest=True)
+    check("read_report --suggest: score, flags, of, eligible", (whole[0]["score"], whole[0]["flags"], whole[0]["of"], whole[0]["eligible"]), (900.0, (), 3, True))
+    rated = {f["path"]: f for f in E.replay(whole, s, "subject_focus")}
+    a1, a2, a3, b1 = (os.path.join(shoot, n) for n in ("a1.JPG", "a2.jpg", "a3.ARW", "b1.jpg"))
+    check("replay: single_best keeps one per burst", [rated[p]["keeper"] for p in (a1, a2, a3, b1)], [True, False, False, True])
+    check("replay: leave non-keepers", (rated[a2]["stars"], rated[a3]["stars"]), (None, None))
+    check("replay: keeper stars from the universal tiers", rated[a1]["stars"], star_tier(900, TIER_THRESHOLDS))
+    direct = rate_burst({a1: 900.0, a2: 700.0, a3: 200.0}, {a1: (), a2: (), a3: ()}, 3, s, {a1, a2, a3}, None, "subject_peak")[2]
+    check("replay: same stars as rate_burst on the burst", {p: rated[p]["stars"] for p in (a1,)}, {a1: direct[a1]})
+    margin = E.settings_of({**vars(s), "non_keeper": "graded", "keep_margin": "75", "star_scale": "1"})
+    rated = {f["path"]: f for f in E.replay(whole, margin, "subject_focus")}
+    check("replay: a margin keeps a2 as well and grades a3", (rated[a2]["keeper"], rated[a3]["keeper"], rated[a3]["stars"] is not None), (True, False, True))
+
+    ranked = E.suggest([(whole, truth)], "subject_focus", 1, 3)
+    check("suggest: top 3", len(ranked), 3)
+    check("suggest: every choice names every panel setting", [sorted(c) for c, _ in ranked], [sorted(E.SUGGEST_GRID)] * 3)
+    check("suggest: best first", [(c["hits"] / c["picks"] - c["false"] / c["kept"]) if c["kept"] else 0 for _, c in ranked] ==
+          sorted([(c["hits"] / c["picks"] - c["false"] / c["kept"]) if c["kept"] else 0 for _, c in ranked], reverse=True), True)
+    check("suggest: scores the hand-rated frames only", ranked[0][1]["frames"], 5)
+    preset = json.loads(E.preset_json(ranked[0][0], "subject_focus"))
+    check("preset_json: a custom preset with the run's sharpness mode", (preset["genre"], preset["sharp_mode"], sorted(preset)),
+          ("custom", "subject_focus", ["genre", "keep_margin", "keep_mode", "non_keeper", "rank_mode", "sharp_mode", "star_scale"]))
+    text = E.render_suggestions(ranked, 1, 5, "subject_focus", 1)
+    check("render_suggestions: one shoot warns", "one shoot only" in text, True)
+    check("render_suggestions: two shoots do not", "one shoot only" in E.render_suggestions(ranked, 2, 10, "subject_focus", 1), False)
+    check("render_suggestions: numbered with the preset", ("\n1. rank_mode" in text, '"genre": "custom"' in text), (True, True))
+
+    run = subprocess.run([sys.executable, E.__file__, shoot, "--report", report, "--suggest"], capture_output=True, text=True)
+    check("cli: --suggest needs --sharp-mode", (run.returncode, "--sharp-mode" in run.stderr), (1, True))
+    preset_file = os.path.join(tmp, "mine.json")
+    run = subprocess.run([sys.executable, E.__file__, shoot, "--report", report, "--sharp-mode", "subject_focus", "--suggest", "--top", "2",
+                          "--shoot", report, snap, "--write-preset", preset_file], capture_output=True, text=True)
+    check("cli: --suggest with a second --shoot", (run.returncode, run.stdout.startswith("suggest: 2 shoots, 10 frames")), (0, True))
+    with open(preset_file, encoding="utf-8") as f:
+        check("cli: --write-preset writes the first suggestion", json.load(f)["genre"], "custom")
+    run = subprocess.run([sys.executable, E.__file__, "--suggest", "--sharp-mode", "subject_focus", "--shoot", report, snap, "--write-preset", preset_file],
+                         capture_output=True, text=True)
+    check("cli: --shoot alone works and an existing preset file is refused", (run.returncode, "exists" in run.stderr), (1, True))
+
 print(f"\n{'all ok' if failures == 0 else f'{failures} failed'}")
 sys.exit(1 if failures else 0)
