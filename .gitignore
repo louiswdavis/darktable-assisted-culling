@@ -1,8 +1,8 @@
 .venv/
 __pycache__/
 *.pyc
-*.log
-tests/
+# *.log
+# tests/
 /docs/superpowers
 .superpowers/
 *.onnx
