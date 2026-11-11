@@ -521,19 +521,21 @@ end
 -- Panel choices as stored keys, in combobox order.
 local genre_opts = {"landscape", "portrait", "sport", "macro", "custom"}
 local rank_opts = {"universal", "binary", "relative"}
-local sharp_opts = {"center", "tiles_uniformity", "peak", "face_detect", "subject_focus", "sam_subject"}
+local sharp_opts = {"center", "tiles_uniformity", "peak", "face_detect", "subject_focus", "sam_subject", "motion_aware"}
 local exp_opts = {"whole_frame", "subject_only", "strict", "none"}
 local keep_opts = {"single_best", "portrait_mode", "dynamic_burst", "keep_all"}
 local nk_opts = {"leave", "reject", "0", "1", "2", "3", "4", "5"}
+-- multiplies every sharpness threshold a star needs (the scorer's --star-scale)
+local star_scale_opts = {"0.5", "0.75", "1", "1.25", "1.5", "2"}
 local group_support_opts = {"native", "tags", "none"}
 M.CHOICES = { genre = genre_opts, rank_mode = rank_opts, sharp_mode = sharp_opts, exp_mode = exp_opts,
-    keep_mode = keep_opts, non_keeper = nk_opts, group_support = group_support_opts }
+    keep_mode = keep_opts, non_keeper = nk_opts, star_scale = star_scale_opts, group_support = group_support_opts }
 
 -- The four modes each genre fills in. "custom" has none.
 M.GENRE_MODES = {
     landscape = { rank_mode = "universal", sharp_mode = "tiles_uniformity", exp_mode = "strict", keep_mode = "single_best" },
     portrait = { rank_mode = "universal", sharp_mode = "face_detect", exp_mode = "subject_only", keep_mode = "portrait_mode" },
-    sport = { rank_mode = "universal", sharp_mode = "subject_focus", exp_mode = "whole_frame", keep_mode = "dynamic_burst" },
+    sport = { rank_mode = "universal", sharp_mode = "motion_aware", exp_mode = "whole_frame", keep_mode = "dynamic_burst" },
     macro = { rank_mode = "universal", sharp_mode = "peak", exp_mode = "whole_frame", keep_mode = "keep_all" },
 }
 
@@ -555,6 +557,7 @@ M.PRESET_SCHEMA = {
     { key = "exp_mode", kind = "choice", choices = exp_opts, default = "strict" },
     { key = "keep_mode", kind = "choice", choices = keep_opts, default = "single_best" },
     { key = "non_keeper", kind = "choice", choices = nk_opts, default = "leave" },
+    { key = "star_scale", kind = "choice", choices = star_scale_opts, default = "1" },
     { key = "group_support", kind = "choice", choices = group_support_opts, default = "native" },
     { key = "group_node", kind = "string", default = "" },
     { key = "run_tag", kind = "bool", default = false },
@@ -894,8 +897,9 @@ local function sam_mask(encoder, decoder, img, prompt, out_path)
 end
 
 -- `edited` adds darktable's last-edit time: SAM masks come from the edited
--- export, so the scorer keys cached masked scores on it. Shutter (seconds)
--- and aperture (f-number) always go last, for the scorer's EXIF intent rules.
+-- export, so the scorer keys cached masked scores on it. Shutter (seconds),
+-- aperture (f-number) and focal length (mm) always go last, for the scorer's
+-- EXIF intent rules and motion_aware's blur prior.
 local function write_manifest(images, burst_of, mask_for_id, shortlisted, edited)
     local f = io.open(MANIFEST_PATH, "w")
     if not f then return false end
@@ -905,7 +909,7 @@ local function write_manifest(images, burst_of, mask_for_id, shortlisted, edited
             mask_for_id and mask_for_id[img.id] or "",
             shortlisted and (shortlisted[img.id] and "1" or "0") or "",
             edited and tostring(img.change_timestamp) or "",
-            img.exif_exposure or 0, img.exif_aperture or 0 }
+            img.exif_exposure or 0, img.exif_aperture or 0, img.exif_focal_length or 0 }
         f:write(M.csv_line(fields), "\n")
     end
     f:close()
@@ -967,8 +971,8 @@ local TAG_TOGGLES = {
       when = "face & eyes sharpness only: a face big enough to judge shows no open eyes. Dark sunglasses trigger it too." },
     { key = "subject", label = "Subject", diag = true, writes = { "Subject|Vehicle|Detected", "Subject|Vehicle|Guessed" },
       when = "subject tracking (SAM) only. Detected: the vehicle detector found the car SAM was pointed at. Guessed: SAM got the guessed subject point instead." },
-    { key = "technique", label = "Technique", diag = true, writes = { "Technique|Panning", "Technique|Shallow DoF" },
-      when = "the burst's EXIF switched its sharpness mode: panning at 1/125 s or slower, shallow DoF at f/4 or wider." },
+    { key = "technique", label = "Technique", diag = true, writes = { "Technique|Panning", "Technique|Shallow DoF", "Technique|Motion Blur", "Technique|Missed Pan" },
+      when = "the burst's EXIF switched its sharpness mode: panning at 1/125 s or slower, shallow DoF at f/4 or wider. Motorsport mode tags each frame instead: Panning (car sharp, background streaked), Motion Blur (whole frame blurred in one line), Missed Pan (car blurred across the pan)." },
     { key = "scored", label = "Scored", diag = true, writes = { "Scored|Masked", "Scored|Subject bias" },
       when = "subject tracking (SAM) only. Masked: the burst was ranked on SAM masks. Subject bias: a shortlisted frame got no mask, so the burst fell back." },
 }
@@ -1350,8 +1354,13 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             "--keep-mode", tostring(keep_mode),
             "--nk-mode", tostring(nk_mode),
             "--tag-only-flags", tag_only_flags(),
+            "--star-scale", tostring(settings.star_scale or "1"),
         }
         if fast_jpeg then argv[#argv + 1] = "--fast-jpeg" end
+        if sharp_mode == "motion_aware" then
+            local detector = plugin_root(sc_script) .. "/models/" .. DETECTOR_FILE
+            if file_exists(detector) then table.move({ "--detector", detector }, 1, 2, #argv + 1, argv) end
+        end
         if sam_model then
             table.move({ "--prescores", PRESCORE_PATH, "--sam-model", sam_model }, 1, 4, #argv + 1, argv)
         end
@@ -2315,8 +2324,8 @@ local function install_panel()
         { _("universal absolute"), _("binary (keepers top)"), _("relative to selection") })
 
     local sharp_combo = choice_combo("sharp_mode", _("sharpness"),
-        _("How sharpness is measured.\nedge-to-edge: scores the softest areas of the frame (ignoring plain sky), so a soft corner costs a frame.\nface & eyes: falls back to subject bias when no face is found; tags a frame Eyes Closed (one star lower) when a clear face shows no open eyes.\nsubject tracking (SAM): outlines the subject with darktable's AI mask model before scoring; slower than the rest, since each burst's top few frames go through the model."),
-        { _("center crop"), _("edge-to-edge uniformity"), _("absolute peak 1%"), _("face & eyes (OpenCV)"), _("subject bias (center-weighted)"), _("subject tracking (SAM)") })
+        _("How sharpness is measured.\nedge-to-edge: scores the softest areas of the frame (ignoring plain sky), so a soft corner costs a frame.\nface & eyes: falls back to subject bias when no face is found; tags a frame Eyes Closed (one star lower) when a clear face shows no open eyes.\nsubject tracking (SAM): outlines the subject with darktable's AI mask model before scoring; slower than the rest, since each burst's top few frames go through the model.\nmotorsport: finds the car, scores it at full resolution so overcast light isn't punished, and reads each frame's motion. Good pans score higher (Panning), a whole frame blurred in one straight line is kept with its burst (Motion Blur), a car blurred across the pan scores lower (Missed Pan)."),
+        { _("center crop"), _("edge-to-edge uniformity"), _("absolute peak 1%"), _("face & eyes (OpenCV)"), _("subject bias (center-weighted)"), _("subject tracking (SAM)"), _("motorsport (subject & motion)") })
 
     local exp_combo = choice_combo("exp_mode", _("exposure"),
         _("Flags clipped shadows/highlights (Overexposed/Underexposed tag, one star lower; turn the penalty off under penalties & speed below)."),
@@ -2329,6 +2338,10 @@ local function install_panel()
     local non_keeper_combo = choice_combo("non_keeper", _("non-keepers"),
         _("What to do with images that are not kept. They get the Rejected tag unless tags written → Rejected is off."),
         { _("leave alone"), _("reject (-1)"), _("0 stars"), _("1 star"), _("2 stars"), _("3 stars"), _("4 stars"), _("5 stars") })
+
+    local star_scale_combo = choice_combo("star_scale", _("star strictness"),
+        _("Scales the sharpness every star needs, in universal and relative ranking. Stricter: fewer stars for the same frame. More generous: more stars. The scores themselves don't change."),
+        { _("much more generous (×0.5)"), _("more generous (×0.75)"), _("standard (×1)"), _("stricter (×1.25)"), _("much stricter (×1.5)"), _("strictest (×2)") })
 
     action_button = dt.new_widget("button") {
         label = _("Cull selection"),
@@ -2496,7 +2509,7 @@ local function install_panel()
         end,
         ctl.widget,
         make_section(1, _("scoring"),
-            { genre_combo, rank_combo, sharp_combo, exp_combo, keep_combo, non_keeper_combo }),
+            { genre_combo, rank_combo, sharp_combo, exp_combo, keep_combo, non_keeper_combo, star_scale_combo }),
         make_section(2, _("bursts"), {
             group_support_combo,
             dt.new_widget("label") { label = _("grouping tag node"), halign = "start" },

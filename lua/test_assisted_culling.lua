@@ -192,7 +192,14 @@ for _, k in ipairs({ "keeper", "rejected", "overexposed", "underexposed", "eyes_
     if cd["tag_" .. k] ~= true then all_tags_on = false end
 end
 check("preset schema: every tag switch defaults on", all_tags_on, true)
-check("preset schema: 22 keys", #C.PRESET_SCHEMA, 22)
+check("preset schema: 23 keys", #C.PRESET_SCHEMA, 23)
+check("preset schema: star strictness defaults to standard", cd.star_scale, "1")
+check("preset schema: an unknown star strictness falls back",
+    C.preset_merge(C.PRESET_SCHEMA, { star_scale = "3" }).star_scale, "1")
+local has_motion = false
+for _, v in ipairs(C.CHOICES.sharp_mode) do if v == "motion_aware" then has_motion = true end end
+check("sharp modes: motorsport is offered", has_motion, true)
+check("genre modes: sport uses motorsport sharpness", C.GENRE_MODES.sport.sharp_mode, "motion_aware")
 check("genre modes: portrait sharpness", C.GENRE_MODES.portrait.sharp_mode, "face_detect")
 check("genre modes: macro keepers", C.GENRE_MODES.macro.keep_mode, "keep_all")
 check("genre modes: landscape defaults match", C.genre_matches("landscape", cd), true)

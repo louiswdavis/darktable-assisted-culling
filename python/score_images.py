@@ -99,6 +99,18 @@ _RAW_FLIP_TURNS = {3: 2, 5: 1, 6: 3}
 def load_image(filepath: str, fast_jpeg: bool = False) -> np.ndarray:
     """Decoded image, downscaled and upright, so it matches the orientation
     darktable's own pipeline (and therefore the SAM masks) uses."""
+    rgb = decode_image(filepath, fast_jpeg)
+    h, w = rgb.shape[:2]
+    scale = MAX_DIM / max(h, w)
+    if scale < 1:
+        rgb = cv2.resize(rgb, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
+    return rgb
+
+
+def decode_image(filepath: str, fast_jpeg: bool = False) -> np.ndarray:
+    """Decoded image, upright, at the size the file holds it: a JPEG at full
+    size (fast_jpeg lets it decode near MAX_DIM), a RAW's embedded preview at
+    its own size, or a half-size RAW render when there is no usable preview."""
     ext = Path(filepath).suffix.lower()
     if ext in RAW_EXTENSIONS:
         import rawpy
@@ -118,11 +130,6 @@ def load_image(filepath: str, fast_jpeg: bool = False) -> np.ndarray:
                 rgb = raw.postprocess(half_size=True, use_camera_wb=True, no_auto_bright=True)
     else:
         rgb, _ = _open_rgb(filepath, fast_jpeg)
-
-    h, w = rgb.shape[:2]
-    scale = MAX_DIM / max(h, w)
-    if scale < 1:
-        rgb = cv2.resize(rgb, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
     return rgb
 
 
@@ -509,14 +516,14 @@ def resolve_burst_scores(scores: dict, candidates=None) -> tuple:
 
 
 def parse_manifest_row(row) -> tuple:
-    """(id, filepath, burst_id, mask_path, shortlisted, edited, exposure, aperture).
+    """(id, filepath, burst_id, mask_path, shortlisted, edited, exposure, aperture, focal).
     mask_path, shortlisted and edited are "" when absent; shortlisted is "1"/"0"
     and edited is darktable's change_timestamp, both only in sam_subject runs.
-    exposure (seconds) and aperture (f-number) come from darktable's EXIF, 0.0
-    when absent or unknown."""
-    row = list(row) + [""] * (8 - len(row))
+    exposure (seconds), aperture (f-number) and focal length (mm) come from
+    darktable's EXIF, 0.0 when absent or unknown."""
+    row = list(row) + [""] * (9 - len(row))
     return (row[0], row[1], row[2], row[3], row[4], row[5],
-            float(row[6] or 0), float(row[7] or 0))
+            float(row[6] or 0), float(row[7] or 0), float(row[8] or 0))
 
 
 PANNING_SHUTTER = 1 / 125    # this slow or slower (s): a pan, background blur expected
@@ -633,8 +640,181 @@ def masked_key(filepath: str, args, prompt, edited: str):
             [round(v, 4) for v in prompt], edited)
 
 
+# motion_aware (motorsport): the car is scored at full resolution with a
+# contrast-free measure, and each frame's motion is read from the streaks in
+# its tiles. Design: docs/superpowers/specs/culling/assisted-culling/2026-11-11-rally-sharpness-design.md
+MOTION_VERSION = 1           # bump when a constant below changes a motion_aware score
+SUBJECT_PAD = 0.10           # vehicle box grown by this share of its size on each side
+SUBJECT_CROP_MAX = 1600      # long side (px) the subject crop is shrunk to
+NORM_MIN_CONTRAST = 8.0      # gray std (0–255) floor, so a flat patch can't divide by ~0
+MOTION_GRID = 6
+STREAK_COHERENCE = 0.45      # structure-tensor coherence from which a tile counts as streaked
+STREAK_ANGLE_TOL = 20.0      # degrees a streak may differ from the background's direction
+SUBJECT_STREAK_MAX = 0.35    # share of streaked subject tiles above which the car is not frozen
+STREAK_SHARE = 0.5           # share of background tiles streaked in one direction for a pan
+STREAK_SHARE_SLOW = 0.4      # ... when shutter × focal length says blur is likely
+STREAK_SHARE_FAST = 0.7      # ... when the shutter is fast enough to freeze most pans
+PAN_REACH = 0.8              # shutter (s) × focal length (mm): 1/125 at 100 mm
+FAST_SHUTTER = 1 / 1000
+PAN_BONUS = 1.15
+MISSED_PAN_FACTOR = 0.7
+BLUR_STRAIGHT_SCALE = 500.0  # an all-motion-blur burst scores straightness × this
+CENTRE_BOX = (1 / 3, 1 / 3, 2 / 3, 2 / 3)
+MOTION_TIER_THRESHOLDS = [(500, 5), (400, 4), (300, 3), (200, 2), (120, 1)]
+MOTION_TAGS = {"pan": "Technique|Panning", "motion_blur": "Technique|Motion Blur",
+               "missed_pan": "Technique|Missed Pan"}
+
+
+def subject_crop(full: np.ndarray, box) -> np.ndarray:
+    """The box (frame fractions) grown by SUBJECT_PAD, cut from the full-size
+    image and shrunk so its long side is at most SUBJECT_CROP_MAX."""
+    h, w = full.shape[:2]
+    x0, y0, x1, y1 = box
+    px, py = (x1 - x0) * SUBJECT_PAD, (y1 - y0) * SUBJECT_PAD
+    top, left = int(max(0.0, y0 - py) * h), int(max(0.0, x0 - px) * w)
+    bottom, right = max(int(min(1.0, y1 + py) * h), top + 1), max(int(min(1.0, x1 + px) * w), left + 1)
+    crop = full[top:bottom, left:right]
+    ch, cw = crop.shape[:2]
+    scale = SUBJECT_CROP_MAX / max(ch, cw)
+    if scale < 1:
+        crop = cv2.resize(crop, (max(1, int(cw * scale)), max(1, int(ch * scale))), interpolation=cv2.INTER_AREA)
+    return crop
+
+
+def normalised_sharpness(rgb: np.ndarray) -> float:
+    """Laplacian std over gray std per tile of a 3x3 grid, ×1000; 80% best
+    tile + 20% median. Both terms scale with contrast, so overcast and sunny
+    frames of the same focus score alike. A linear blur (not bilateral)
+    denoises first, so the ratio holds exactly."""
+    gray = cv2.GaussianBlur(cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY), (3, 3), 0).astype(np.float64)
+    h, w = gray.shape
+    hs, ws = max(1, h // 3), max(1, w // 3)
+    vals = []
+    for r in range(3):
+        for c in range(3):
+            patch = gray[r * hs:(r + 1) * hs, c * ws:(c + 1) * ws]
+            if patch.shape[0] < 4 or patch.shape[1] < 4:
+                continue
+            lap = float(cv2.Laplacian(patch, cv2.CV_64F).std())
+            vals.append(1000.0 * lap / max(float(patch.std()), NORM_MIN_CONTRAST))
+    if not vals:
+        return 0.0
+    return float(max(vals) * 0.8 + np.median(vals) * 0.2)
+
+
+def motion_tiles(gray: np.ndarray) -> list:
+    """[(centre x, centre y as frame fractions, coherence, doubled gradient
+    angle in radians)] for each textured tile of a MOTION_GRID grid. Coherence
+    is (λ1 − λ2)/(λ1 + λ2) of the tile's structure tensor: near 1 when every
+    edge runs one way (a streak), near 0 for texture in all directions."""
+    g = gray.astype(np.float32)
+    gx = cv2.Sobel(g, cv2.CV_32F, 1, 0, ksize=3)
+    gy = cv2.Sobel(g, cv2.CV_32F, 0, 1, ksize=3)
+    h, w = g.shape
+    hs, ws = h // MOTION_GRID, w // MOTION_GRID
+    if hs < 4 or ws < 4:
+        return []
+    out = []
+    for r in range(MOTION_GRID):
+        for c in range(MOTION_GRID):
+            rows, cols = slice(r * hs, (r + 1) * hs), slice(c * ws, (c + 1) * ws)
+            if float(g[rows, cols].std()) < UNIFORMITY_MIN_CONTRAST:
+                continue
+            tx, ty = gx[rows, cols], gy[rows, cols]
+            a, b, d = float((tx * tx).mean()), float((ty * ty).mean()), float((tx * ty).mean())
+            if a + b <= 1e-6:
+                continue
+            coherence = float(np.sqrt((a - b) ** 2 + 4 * d * d) / (a + b))
+            out.append(((c + 0.5) / MOTION_GRID, (r + 0.5) / MOTION_GRID, coherence, float(np.arctan2(2 * d, a - b))))
+    return out
+
+
+def _angle_gap(a: float, b: float) -> float:
+    """Degrees between two streak directions given as doubled angles."""
+    return float(np.degrees(abs((a - b + np.pi) % (2 * np.pi) - np.pi)) / 2)
+
+
+def streak_share_needed(exposure: float, focal: float) -> float:
+    """Share of background tiles that must streak for a pan, from EXIF
+    (0 = unknown → the default). A prior, never a rule: a fast shutter can
+    still pan, it just needs more evidence."""
+    if exposure <= 0:
+        return STREAK_SHARE
+    if exposure <= FAST_SHUTTER * EXIF_SLACK:
+        return STREAK_SHARE_FAST
+    if focal > 0 and exposure * focal * EXIF_SLACK >= PAN_REACH:
+        return STREAK_SHARE_SLOW
+    return STREAK_SHARE
+
+
+def classify_motion(tiles: list, box, share_needed: float) -> tuple:
+    """(class, straightness). Background = tiles centred outside the box.
+    pan: background streaked one way, subject tiles mostly not streaked.
+    motion_blur: subject streaked the same way as the background (the whole
+    frame blurred in a straight line). missed_pan: background streaked,
+    subject streaked some other way. ordinary: no dominant background streak.
+    Straightness is the mean coherence of the aligned tiles."""
+    x0, y0, x1, y1 = box
+    inside = [x0 <= t[0] <= x1 and y0 <= t[1] <= y1 for t in tiles]
+    bg = [t for t, i in zip(tiles, inside) if not i]
+    subj = [t for t, i in zip(tiles, inside) if i]
+    streaked_bg = [t for t in bg if t[2] >= STREAK_COHERENCE]
+    if not streaked_bg:
+        return "ordinary", 0.0
+    direction = float(np.arctan2(np.mean([np.sin(t[3]) for t in streaked_bg]),
+                                 np.mean([np.cos(t[3]) for t in streaked_bg])))
+
+    def aligned(t):
+        return t[2] >= STREAK_COHERENCE and _angle_gap(t[3], direction) <= STREAK_ANGLE_TOL
+
+    if sum(map(aligned, bg)) / len(bg) < share_needed:
+        return "ordinary", 0.0
+    straight = float(np.mean([t[2] for t in tiles if aligned(t)]))
+    if not subj:
+        return "pan", straight
+    if sum(map(aligned, subj)) / len(subj) >= share_needed:
+        return "motion_blur", straight
+    if sum(t[2] >= STREAK_COHERENCE for t in subj) / len(subj) < SUBJECT_STREAK_MAX:
+        return "pan", straight
+    return "missed_pan", straight
+
+
+def motion_aware_score(filepath: str, rgb: np.ndarray, detector: str, exposure: float, focal: float) -> tuple:
+    """(score, class, straightness, log detail) for one frame. rgb is the
+    MAX_DIM frame; the car is cut from a full-size decode. No detector or no
+    vehicle → the centre third stands in for the car."""
+    box, note = None, "no detector"
+    if detector:
+        box, _, note = vehicle_box(rgb, detector)
+    region = box or CENTRE_BOX
+    crop = subject_crop(decode_image(filepath), region)
+    subject = normalised_sharpness(crop)
+    cls, straight = classify_motion(motion_tiles(cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)), region,
+                                    streak_share_needed(exposure, focal))
+    score = subject * {"pan": PAN_BONUS, "missed_pan": MISSED_PAN_FACTOR}.get(cls, 1.0)
+    detail = (f"{cls}, straightness {straight:.2f}, subject {subject:.0f}, crop {crop.shape[1]}x{crop.shape[0]}"
+              + ("" if box else f", centre third ({note})"))
+    return score, cls, straight, detail
+
+
+def lift_motion_blur(scores: dict, motion: dict) -> dict:
+    """Motion-blur frames scored like their burst: raised to the median of the
+    burst's other frames, so a deliberate blur is kept or left with its
+    neighbours, never rejected for being soft. An all-blur burst is ranked by
+    straightness. motion maps an id to (class, straightness)."""
+    blur = [i for i in scores if motion.get(i, ("", 0.0))[0] == "motion_blur"]
+    if not blur:
+        return scores
+    rest = [v for i, v in scores.items() if i not in blur]
+    out = dict(scores)
+    for i in blur:
+        out[i] = max(out[i], float(np.median(rest))) if rest else motion[i][1] * BLUR_STRAIGHT_SCALE
+    return out
+
+
 def process_single_image(filepath: str, sharp_mode: str, exp_mode: str, cancel_path: str = "",
-                         fast_jpeg: bool = False, mask_path: str = ""):
+                         fast_jpeg: bool = False, mask_path: str = "", detector: str = "",
+                         exposure: float = 0.0, focal: float = 0.0):
     if cancel_path and os.path.exists(cancel_path):
         return filepath, None, None, "cancelled"
     try:
@@ -647,6 +827,8 @@ def process_single_image(filepath: str, sharp_mode: str, exp_mode: str, cancel_p
             gray = cv2.bilateralFilter(cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY), 5, 50, 50)
             masked = _masked_sharpness(gray, mask_path) if mask_path else None
             sharp = (masked, sharpness_score(rgb, "subject_focus"))
+        elif sharp_mode == "motion_aware":
+            sharp = motion_aware_score(filepath, rgb, detector, exposure, focal)
         else:
             sharp = sharpness_score(rgb, sharp_mode, mask_path)
         return filepath, sharp, frame_flags(exposure_status(rgb, exp_mode), eyes_closed), None
@@ -813,6 +995,8 @@ def process_burst_logic(burst_id, burst_sharpness, burst_flags, burst_size, args
     top_40_count = max(1, int(round(num_keepers * 0.4)))
     top_40_keepers = set(burst_keepers[:top_40_count])
     penalised = penalised_flags(burst_flags, getattr(args, "tag_only_flags", frozenset()))
+    star_scale = getattr(args, "star_scale", 1.0)
+    tiers = MOTION_TIER_THRESHOLDS if getattr(args, "sharp_mode", "") == "motion_aware" else TIER_THRESHOLDS
 
     burst_rows = []
     for img_id in sorted_members:
@@ -823,7 +1007,7 @@ def process_burst_logic(burst_id, burst_sharpness, burst_flags, burst_size, args
         if args.rank_mode == "relative":
             score = 100.0 * raw_score / reference if reference else 0.0
             for threshold, stars in STAR_THRESHOLDS:
-                if score >= threshold:
+                if score >= threshold * star_scale:
                     break
             else:
                 stars = 0
@@ -837,8 +1021,8 @@ def process_burst_logic(burst_id, burst_sharpness, burst_flags, burst_size, args
             else:
                 stars = 0
         else:
-            for threshold, stars in TIER_THRESHOLDS:
-                if raw_score >= threshold:
+            for threshold, stars in tiers:
+                if raw_score >= threshold * star_scale:
                     break
             else:
                 stars = 0
@@ -973,8 +1157,10 @@ def score_manifest(manifest, args, cache):
     burst_groups = {}
     candidates_of = {}  # burst → shortlisted ids, only when the manifest carries a shortlist
     exif_of = {}  # burst → ([exposures], [apertures])
-    for image_id, filepath, burst_id, mask_path, shortlisted, edited, exposure, aperture in manifest:
+    shot_of = {}  # id → (exposure, focal length), for motion_aware's EXIF prior
+    for image_id, filepath, burst_id, mask_path, shortlisted, edited, exposure, aperture, focal in manifest:
         burst_groups.setdefault(burst_id, []).append((image_id, filepath, mask_path, shortlisted, edited))
+        shot_of[image_id] = (exposure, focal)
         exposures, apertures = exif_of.setdefault(burst_id, ([], []))
         exposures.append(exposure)
         apertures.append(aperture)
@@ -1026,6 +1212,9 @@ def score_manifest(manifest, args, cache):
         completed_bursts += 1
         raw = burst_sharpness[burst_id]
         scores, eligible = resolve_burst_scores(raw, candidates_of.get(burst_id))
+        burst_motion = motion_of.pop(burst_id, {})
+        if burst_motion:
+            scores = lift_motion_blur(scores, burst_motion)
         burst_tags = []
         note = f"burst {burst_id}: {len(raw)} of {len(burst_groups[burst_id])} frames scored, mode {mode_of[burst_id]}"
         if mode_of[burst_id] != args.sharp_mode:
@@ -1039,7 +1228,9 @@ def score_manifest(manifest, args, cache):
             used_masks = bool(short) and masked == len(short)
             burst_tags.append("Scored|Masked" if used_masks else "Scored|Subject bias")
             note += f", masked {masked} of {len(short)} shortlisted" + ("" if used_masks else ", so subject bias")
-        diag = {i: ([prescored[i][3]] if i in prescored and prescored[i][3] else []) + burst_tags for i in raw}
+        diag = {i: ([prescored[i][3]] if i in prescored and prescored[i][3] else []) + burst_tags
+                + ([MOTION_TAGS[burst_motion[i][0]]] if burst_motion.get(i, ("",))[0] in MOTION_TAGS else [])
+                for i in raw}
         if args.rank_mode == "relative":
             # masked and fallback scores, and each sharpness mode, run on their own scales
             group = (mode_of[burst_id], sam and used_masks)
@@ -1064,12 +1255,27 @@ def score_manifest(manifest, args, cache):
 
     # keyed on the burst's effective mode, so the EXIF rules and their
     # thresholds are part of the key without storing shutter or aperture
-    def score_key(filepath, burst_id):
-        return ("score", file_key(filepath), mode_of[burst_id], args.exp_mode, args.fast_jpeg)
+    motion = args.sharp_mode == "motion_aware"
+    detector = getattr(args, "detector", "") if motion else ""
+    motion_of = {}  # burst → {id: (class, straightness)}, motion_aware only
+
+    def score_key(filepath, burst_id, image_id):
+        key = ("score", file_key(filepath), mode_of[burst_id], args.exp_mode, args.fast_jpeg)
+        if motion:
+            # the EXIF prior and the detector change the class, so they key it
+            key += (detector_key(detector), [round(v, 6) for v in shot_of[image_id]], MOTION_VERSION)
+        return key
+
+    def keep_motion(burst_id, image_id, cls, straight):
+        motion_of.setdefault(burst_id, {})[image_id] = (cls, straight)
 
     def store(filepath, sharp, flags, image_id, mask_path, edited, burst_id):
-        if not sam:
-            cache.put({"sharp": float(sharp), "flags": list(flags)}, *score_key(filepath, burst_id))
+        if motion:
+            score, cls, straight, _ = sharp
+            cache.put({"sharp": float(score), "flags": list(flags), "class": cls, "straight": straight},
+                      *score_key(filepath, burst_id, image_id))
+        elif not sam:
+            cache.put({"sharp": float(sharp), "flags": list(flags)}, *score_key(filepath, burst_id, image_id))
         elif mask_path and image_id in prescored:
             # None (mask unusable) is cached too: the same inputs give the same mask
             masked = None if sharp[0] is None else float(sharp[0])
@@ -1090,16 +1296,18 @@ def score_manifest(manifest, args, cache):
                     hit = cache.get(*masked_key(filepath, args, prompt, edited)) if shortlisted == "1" else None
                     known = ((hit["masked"] if hit else None, fallback), frame_flags(exp))
                 elif not sam:
-                    hit = cache.get(*score_key(filepath, burst_id))
+                    hit = cache.get(*score_key(filepath, burst_id, image_id))
                     if hit:
                         known = (hit["sharp"], tuple(hit["flags"]))
+                        if motion:
+                            keep_motion(burst_id, image_id, hit["class"], hit["straight"])
                 if known:
                     burst_sharpness[burst_id][image_id], burst_flags[burst_id][image_id] = known
                     processed_count += 1
                     burst_completion[burst_id] += 1
                     continue
                 fut = executor.submit(process_single_image, filepath, mode_of[burst_id], args.exp_mode,
-                                      cancel_path, args.fast_jpeg, mask_path)
+                                      cancel_path, args.fast_jpeg, mask_path, detector, *shot_of[image_id])
                 future_to_item[fut] = (burst_id, image_id, filepath, mask_path, edited)
         log(f"scoring: {total_images} frames in {total_bursts} bursts, {processed_count} from cache or stage A, "
             f"{len(future_to_item)} to decode, sharpness {args.sharp_mode}")
@@ -1126,6 +1334,11 @@ def score_manifest(manifest, args, cache):
                 log(f"skip {image_id} ({filepath}): {err}")
             else:
                 store(filepath, sharp, flags, image_id, mask_path, edited, burst_id)
+                if motion:
+                    score, cls, straight, detail = sharp
+                    keep_motion(burst_id, image_id, cls, straight)
+                    log(f"motion {image_id} ({os.path.basename(filepath)}): {detail}")
+                    sharp = score
                 burst_sharpness[burst_id][image_id] = sharp
                 burst_flags[burst_id][image_id] = flags
 
@@ -1166,6 +1379,9 @@ if __name__ == "__main__":
                         help="Decode JPEGs at reduced scale (faster; scores shift slightly)")
     parser.add_argument("--emit-saliency-points", action="store_true",
                         help="Write id,x0,y0,x1,y1,cached SAM prompts to the results path instead of scoring")
+    parser.add_argument("--star-scale", default=1.0, type=float,
+                        help="Multiplies every sharpness threshold a star needs (universal and relative "
+                             "ranking): above 1 is stricter, below 1 more generous")
     parser.add_argument("--detector", default="",
                         help="With --emit-saliency-points: YOLOX .onnx whose most prominent vehicle box "
                              "prompts SAM; frames without one fall back to the saliency point")

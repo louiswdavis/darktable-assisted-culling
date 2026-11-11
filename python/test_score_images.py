@@ -76,16 +76,19 @@ def run_tests():
 
     # parse_manifest_row -----------------------------------------------------
     check("manifest: 4-column row keeps mask path",
-          S.parse_manifest_row(["1", "/a.jpg", "3", "/m.png"]), ("1", "/a.jpg", "3", "/m.png", "", "", 0.0, 0.0))
+          S.parse_manifest_row(["1", "/a.jpg", "3", "/m.png"]), ("1", "/a.jpg", "3", "/m.png", "", "", 0.0, 0.0, 0.0))
     check("manifest: 5-column row keeps shortlist flag",
-          S.parse_manifest_row(["1", "/a.jpg", "3", "", "0"]), ("1", "/a.jpg", "3", "", "0", "", 0.0, 0.0))
+          S.parse_manifest_row(["1", "/a.jpg", "3", "", "0"]), ("1", "/a.jpg", "3", "", "0", "", 0.0, 0.0, 0.0))
     check("manifest: 6-column row keeps edit time",
-          S.parse_manifest_row(["1", "/a.jpg", "3", "", "", "t"]), ("1", "/a.jpg", "3", "", "", "t", 0.0, 0.0))
+          S.parse_manifest_row(["1", "/a.jpg", "3", "", "", "t"]), ("1", "/a.jpg", "3", "", "", "t", 0.0, 0.0, 0.0))
     check("manifest: 3-column row gets empty mask path",
-          S.parse_manifest_row(["1", "/a.jpg", "3"]), ("1", "/a.jpg", "3", "", "", "", 0.0, 0.0))
+          S.parse_manifest_row(["1", "/a.jpg", "3"]), ("1", "/a.jpg", "3", "", "", "", 0.0, 0.0, 0.0))
     check("manifest: 8-column row keeps shutter and aperture",
           S.parse_manifest_row(["1", "/a.jpg", "3", "", "", "", "0.0080000004", "2.8"]),
-          ("1", "/a.jpg", "3", "", "", "", 0.0080000004, 2.8))
+          ("1", "/a.jpg", "3", "", "", "", 0.0080000004, 2.8, 0.0))
+    check("manifest: 9-column row keeps focal length",
+          S.parse_manifest_row(["1", "/a.jpg", "3", "", "", "", "0.004", "5.6", "400"]),
+          ("1", "/a.jpg", "3", "", "", "", 0.004, 5.6, 400.0))
 
     # EXIF intent rules --------------------------------------------------------
     check("intent: 1/125 in subject bias is a pan",
@@ -308,6 +311,9 @@ def run_tests():
     st = os.stat(frames[0])
     os.utime(frames[0], ns=(st.st_atime_ns, st.st_mtime_ns + 10**9))
     check("cache: a modified file is re-scored", plain_run(), {"0": fresh["0"], "1": "12345.0"})
+    motion_fresh = plain_run(sharp_mode="motion_aware")
+    check("motion_aware: every frame scored without a detector", sorted(motion_fresh), ["0", "1"])
+    check("motion_aware: a rerun reads its cache entries", plain_run(sharp_mode="motion_aware"), motion_fresh)
 
     def exif_manifest(name, exposure):
         path = os.path.join(tmp, name)
@@ -405,9 +411,68 @@ def run_tests():
     check("face mode without a face never flags closed eyes",
           S.face_detect_score(one_spot), (S.sharpness_score(one_spot, "subject_focus"), False))
 
+    # motion_aware -------------------------------------------------------------
+    texture = rng.integers(0, 256, (240, 240), dtype=np.uint8)
+    streak_h = cv2.blur(texture, (31, 1))
+    streak_v = cv2.blur(texture, (1, 31))
+
+    def framed(background, centre):
+        out = background.copy()
+        out[80:160, 80:160] = centre[80:160, 80:160]  # the centre third: a 2x2 block of motion tiles
+        return out
+
+    def motion_class(gray, share=S.STREAK_SHARE):
+        return S.classify_motion(S.motion_tiles(gray), S.CENTRE_BOX, share)[0]
+
+    check("motion: sharp car on a streaked background is a pan", motion_class(framed(streak_h, texture)), "pan")
+    check("motion: whole frame streaked one way is motion blur", motion_class(streak_h), "motion_blur")
+    check("motion: car streaked across the pan is a missed pan",
+          motion_class(framed(streak_h, streak_v)), "missed_pan")
+    check("motion: sharp everywhere is ordinary", motion_class(texture), "ordinary")
+    check("motion: straightness of a clean streak is high",
+          S.classify_motion(S.motion_tiles(streak_h), S.CENTRE_BOX, S.STREAK_SHARE)[1] > 0.6, True)
+
+    rgb_of = lambda g: np.dstack([g, g, g])
+    full_contrast = S.normalised_sharpness(rgb_of(texture))
+    half_contrast = S.normalised_sharpness(rgb_of((texture.astype(np.float64) * 0.5 + 64).astype(np.uint8)))
+    check("normalised sharpness: half the contrast scores within 10%",
+          abs(full_contrast - half_contrast) / full_contrast < 0.10, True)
+    check("normalised sharpness: a streaked frame scores lower",
+          S.normalised_sharpness(rgb_of(streak_h)) < full_contrast * 0.7, True)
+    check("subject crop: padded box cut from the full frame",
+          S.subject_crop(np.zeros((1000, 2000, 3), np.uint8), (0.25, 0.25, 0.75, 0.75)).shape, (600, 1200, 3))
+    check("subject crop: shrunk to SUBJECT_CROP_MAX",
+          max(S.subject_crop(np.zeros((4000, 6000, 3), np.uint8), (0.0, 0.0, 1.0, 1.0)).shape[:2])
+          in (S.SUBJECT_CROP_MAX - 1, S.SUBJECT_CROP_MAX), True)
+
+    check("EXIF prior: unknown shutter uses the default", S.streak_share_needed(0.0, 0.0), S.STREAK_SHARE)
+    check("EXIF prior: 1/2000 needs more streak", S.streak_share_needed(1 / 2000, 400), S.STREAK_SHARE_FAST)
+    check("EXIF prior: 1/60 at 100 mm needs less", S.streak_share_needed(1 / 60, 100), S.STREAK_SHARE_SLOW)
+    check("EXIF prior: 1/250 at 50 mm keeps the default", S.streak_share_needed(1 / 250, 50), S.STREAK_SHARE)
+
+    check("motion blur: lifted to the burst's median",
+          S.lift_motion_blur({"a": 100.0, "b": 300.0, "c": 50.0}, {"c": ("motion_blur", 0.8)}),
+          {"a": 100.0, "b": 300.0, "c": 200.0})
+    check("motion blur: an all-blur burst ranks by straightness",
+          S.lift_motion_blur({"a": 10.0, "b": 20.0}, {"a": ("motion_blur", 0.8), "b": ("motion_blur", 0.6)}),
+          {"a": 0.8 * S.BLUR_STRAIGHT_SCALE, "b": 0.6 * S.BLUR_STRAIGHT_SCALE})
+    check("motion blur: a sharp frame keeps a higher score",
+          S.lift_motion_blur({"a": 100.0, "b": 900.0}, {"b": ("motion_blur", 0.5)}), {"a": 100.0, "b": 900.0})
+
+    def motion_stars(score, star_scale):
+        open(res_path, "w").close()
+        S.process_burst_logic("1", {"a": score}, {"a": ()}, 1,
+                              Namespace(keep_mode="single_best", rank_mode="universal", nk_mode="leave",
+                                        sharp_mode="motion_aware", star_scale=star_scale), res_path)
+        return int(open(res_path).read().strip().split(",")[5])
+
+    check("stars: motion_aware uses its own tiers", motion_stars(450.0, 1.0), 4)
+    check("stars: a star scale under 1 is more generous", motion_stars(450.0, 0.5), 5)
+    check("stars: a star scale over 1 is stricter", motion_stars(450.0, 2.0), 2)
+
     # report_rows --------------------------------------------------------------
-    rep_manifest = [("1", "/p/a.jpg", "0", "", "", "", 0.0, 0.0), ("2", "/p/b.jpg", "0", "", "", "", 0.0, 0.0),
-                    ("3", "/p/c.jpg", "1", "", "", "", 0.0, 0.0)]
+    rep_manifest = [("1", "/p/a.jpg", "0", "", "", "", 0.0, 0.0, 0.0), ("2", "/p/b.jpg", "0", "", "", "", 0.0, 0.0, 0.0),
+                    ("3", "/p/c.jpg", "1", "", "", "", 0.0, 0.0, 0.0)]
     rep_results = [["2", "40.0", "blur", "0", "0", "leave", ""], ["1", "80.0", "", "0", "1", "4", "Subject|Car"],
                    ["3", "55.0", "", "1", "1", "3", ""]]
     rep = S.report_rows(rep_manifest, rep_results, lambda n: 1)
@@ -419,7 +484,7 @@ def run_tests():
     check("report: the folder is the last column", rep[0][10], os.path.dirname("/p/a.jpg"))
     check("report: one column per header", len(rep[0]), len(S.REPORT_HEADER))
     # frame 5 couldn't be read, so it has no result row; the allowance still counts it
-    unread_manifest = rep_manifest + [("5", "/p/e.jpg", "1", "", "", "", 0.0, 0.0)]
+    unread_manifest = rep_manifest + [("5", "/p/e.jpg", "1", "", "", "", 0.0, 0.0, 0.0)]
     unread = S.report_rows(unread_manifest, rep_results, lambda n: n)
     check("report: the allowance counts unreadable frames", unread[2][9], "kept: rank 1 of 1, 2 allowed")
 

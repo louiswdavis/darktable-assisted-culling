@@ -118,7 +118,8 @@ Frames are also tagged with how they were judged, so you can spot-check the scor
 | `Assisted Culling\|Subject\|Vehicle\|Guessed` | The detector found no vehicle, so SAM was given the guessed subject point. Worth a look: the guess can land on a kerb or sponsor board. |
 | `Assisted Culling\|Scored\|Masked` | *subject tracking (SAM)*: the burst was ranked on SAM masks |
 | `Assisted Culling\|Scored\|Subject bias` | *subject tracking (SAM)*: a shortlisted frame got no mask, so the burst fell back to *subject bias* |
-| `Assisted Culling\|Technique\|Panning` / `…\|Shallow DoF` | The burst's EXIF switched its sharpness mode (see [shooting intent](#shooting-intent-from-exif)) |
+| `Assisted Culling\|Technique\|Panning` / `…\|Shallow DoF` | The burst's EXIF switched its sharpness mode (see [shooting intent](#shooting-intent-from-exif)). In *motorsport*, `Panning` is per frame instead. |
+| `Assisted Culling\|Technique\|Motion Blur` / `…\|Missed Pan` | *motorsport* only: the frame is blurred in one straight line, or the car is blurred across the pan (see [Motorsport](#motorsport-subject--motion)) |
 
 `Subject` is grouped by kind (`Vehicle` today), leaving room for other detectors later.
 
@@ -191,10 +192,10 @@ Below the [preset](#presets) picker the panel runs top to bottom in the order yo
 |--------|--------------|-----------|----------|---------|
 | landscape | universal absolute | edge-to-edge uniformity | strict histogram | single best only |
 | portrait | universal absolute | face & eyes (OpenCV) | subject only (ignore sky) | portrait (1 or 2) |
-| sport | universal absolute | subject bias (center-weighted) | whole frame | dynamic (1 to 5) |
+| sport | universal absolute | motorsport (subject & motion) | whole frame | dynamic (1 to 5) |
 | macro | universal absolute | absolute peak 1% | whole frame | keep all (focus stack) |
 
-*sport* uses *subject bias* because it works everywhere. If you've set up SAM, switch sharpness to *subject tracking (SAM)* for motorsport.
+*sport* uses *motorsport (subject & motion)*. It works without any model; with the [vehicle detector](#vehicle-detector) installed it scores the car itself instead of the centre third. Its scores sit on their own scale, so *relative to selection* ranking is the safer choice until the universal tiers are tuned on a real shoot.
 
 ### Ranking mode
 
@@ -203,6 +204,8 @@ In every mode, keepers are picked within their own burst and non-keepers follow 
 - *universal absolute*: keepers are rated against fixed sharpness tiers, so the same frame gets the same stars in any shoot.
 - *binary (keepers top)*: every keeper starts at 5 stars and only flags lower it (eyes closed −1, over/underexposed −3).
 - *relative to selection*: tiers scale to the selection you're culling, so its sharpest frames get 5 stars even on a soft lens or in low light. The 5-star mark is the 95th percentile of the frames that could keep, so one freak frame can't flatten everyone else. Each sharpness scale is judged on its own: bursts that switched mode from EXIF, and SAM bursts with and without masks, don't share a 5-star mark. Ratings only appear once every burst is scored, even with *apply ratings while scoring* on.
+
+**Star strictness** (default *standard (×1)*) multiplies the sharpness every star needs in *universal* and *relative* ranking. *Stricter (×1.25)* to *strictest (×2)* hand out fewer stars for the same frames; *more generous (×0.75)* and *much more generous (×0.5)* hand out more. Scores and keeper picks don't change, and neither does *binary*. Changing it re-applies from the [score cache](#score-cache) without decoding again.
 
 ### Sharpness
 
@@ -214,6 +217,19 @@ How each frame's focus is measured.
 - *face & eyes (OpenCV)*: detects the largest face with OpenCV's Haar cascades and scores sharpness over the eyes if found, the whole face box otherwise. Falls back to *subject bias* when no face is detected. Eyes are searched in the upper face, retrying with the glasses-aware cascade; a face at least 120 px wide with no eyes found is tagged *Eyes Closed*. Needs OpenCV 4.x: OpenCV 5 removed the Haar detector, and the scorer stops with an install hint if it finds 5.
 - *subject bias (center-weighted)*: a 3×3 grid scored on its sharpest patch, with the center patches counting more, on the assumption the subject is mid-frame. A classical heuristic, not AI.
 - *subject tracking (SAM)*: masks the subject with darktable's own AI mask model and scores sharpness only inside the mask. See below.
+- *motorsport (subject & motion)*: built for rally and track shoots in any light and at any shutter speed. See below.
+
+#### Motorsport (subject & motion)
+
+- **The car at full resolution.** The [vehicle detector](#vehicle-detector) finds the car (no detector, or no car found: the centre third of the frame). That area is cut from the full-size image, up to 1600 px on its long side, and scored there, so badges, numbers and tread still count. RAW-only frames use the embedded preview, so a small preview limits this.
+- **Overcast light isn't punished.** Sharpness is divided by the area's contrast, so a crisp car under flat grey cloud scores like the same car in sun.
+- **Motion is read per frame**, not per burst, from the direction of the streaks across a 6×6 grid:
+  - car sharp, background streaked → `Technique|Panning`, score ×1.15
+  - whole frame streaked in one straight line → `Technique|Motion Blur`; the frame is lifted to its burst's median, so an intentional blur is kept or left with its neighbours rather than rejected. A burst that is all motion blur ranks its straightest frame first.
+  - background streaked, car blurred across it → `Technique|Missed Pan`, score ×0.7
+  - anything else → no tag, scored on sharpness alone (camera shake and missed focus already score low)
+- **Shutter × focal length** makes the streak test easier at slow shutter speeds (1/125 s at 100 mm or longer) and harder at 1/1000 s or faster. It never decides the class on its own.
+- Each frame's class, streak share and crop size go in the log as a `motion …` line.
 
 #### Shooting intent from EXIF
 
@@ -352,8 +368,9 @@ A cached score is only reused when everything that produced it is the same:
 
 | Changes the score (new entry) | Only uses the score (reused) |
 |-------------------------------|------------------------------|
-| the file itself (path, modified time, size) | ranking mode |
+| the file itself (path, modified time, size) | ranking mode, star strictness |
 | sharpness mode, as adjusted by [shooting intent](#shooting-intent-from-exif) | keepers, non-keepers |
+| motorsport mode: the vehicle detector file, the frame's shutter speed and focal length | |
 | exposure mode | grouping support |
 | fast JPEG decode | the per-flag *… lowers stars* options |
 | SAM mode: the mask model, the vehicle detector file, the prompt, and your last darktable edit of the frame | |
@@ -378,6 +395,7 @@ Everything you'd change per shoot is a panel option or a preference. What's left
   - `BLINK_MIN_FACE_PX` is the smallest face width judged for closed eyes.
   - `DETECTOR_MIN_SCORE` is the confidence a vehicle detection needs.
   - `PANNING_SHUTTER` (1/125 s) and `SHALLOW_DOF_APERTURE` (f/4) are the [shooting intent](#shooting-intent-from-exif) cutoffs.
+  - Motorsport mode: `MOTION_TIER_THRESHOLDS` (its universal stars, a first guess), `STREAK_COHERENCE` (how strong a streak must be), `STREAK_SHARE` / `_SLOW` / `_FAST` (share of the background that must streak), `SUBJECT_STREAK_MAX` (how much of the car may streak in a good pan), `PAN_BONUS` and `MISSED_PAN_FACTOR`. Bump `MOTION_VERSION` after changing any of them except the tiers; that re-scores only motorsport frames.
   - `SCORE_CACHE_MAX_AGE_DAYS` (default 90) is how long an unused cache entry is kept.
   - `SCORE_CACHE_VERSION`: bump it after changing any of the constants above that feed a score (clip levels, `MAX_DIM`, `BLINK_MIN_FACE_PX`, `DETECTOR_MIN_SCORE`, …) or the scoring code, so old cached scores aren't reused. Star and penalty tables don't need a bump, and neither do the shooting-intent cutoffs: they only pick which mode a burst uses, and the mode is already part of the cache key.
 
