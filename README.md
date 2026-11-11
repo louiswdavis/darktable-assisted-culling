@@ -188,7 +188,7 @@ The **preset** picker at the top of the panel saves every panel setting (everyth
 
 ## Panel options
 
-Below the [preset](#presets) picker the panel runs top to bottom in the order you'd check it: **1 scoring** (genre to non-keepers, below), **2 bursts**, **3 penalties & speed**, **4 tags written**, **5 run**, then **tools**. Each section has its own heading; all sections stay open. darktable's reset button (↺ in the panel header) puts every setting back to the template defaults; nothing is saved until you update a preset.
+Below the [preset](#presets) picker, a **page** combobox picks one of **1 scoring** (genre to non-keepers, below), **2 bursts**, **3 penalties & speed** and **4 tags written** to show at a time; the last page picked is remembered across restarts. **5 run** and **tools** stay below the page, always shown. darktable's reset button (↺ in the panel header) puts every setting back to the template defaults; nothing is saved until you update a preset.
 
 ### Genre
 

@@ -650,6 +650,32 @@ function C.preset_order(names)
     return rest
 end
 
+-- A page table is { title = string, keys = { string, ... } }: one panel page and the preset keys its
+-- widgets edit. The stored page number is used when it is in 1..count, else the first page.
+function C.page_index(stored, count)
+    if type(stored) == "number" and stored >= 1 and stored <= count then return stored end
+    return 1
+end
+
+-- Schema keys that no page and no `other` entry covers, and keys listed more than once; both sorted.
+function C.page_coverage(pages, other, schema)
+    local seen, missing, duplicate = {}, {}, {}
+    local function count(key) seen[key] = (seen[key] or 0) + 1 end
+    for _, page in ipairs(pages) do
+        for _, key in ipairs(page.keys) do count(key) end
+    end
+    for _, key in ipairs(other) do count(key) end
+    for _, entry in ipairs(schema) do
+        if not seen[entry.key] then missing[#missing + 1] = entry.key end
+    end
+    for key, n in pairs(seen) do
+        if n > 1 then duplicate[#duplicate + 1] = key end
+    end
+    table.sort(missing)
+    table.sort(duplicate)
+    return missing, duplicate
+end
+
 local dt_ok, dt = pcall(require, "darktable")
 if not dt_ok then return C end
 
@@ -984,6 +1010,7 @@ end
 -- Sections ----------------------------------------------------------------------
 -- A panel section is a section_label heading ("1  title"; number optional) above its widgets.
 -- Sections don't fold: Lua has no clickable heading widget, and a button header looks like a button.
+-- Pages live in a stack under a combobox (paged_sections); the run area uses make_section directly.
 
 function C.step_label(number, title)
     return dt.new_widget("section_label") { label = (number and (number .. "  ") or "") .. title }
@@ -993,6 +1020,29 @@ function C.make_section(number, title, widgets)
     local body = { orientation = "vertical", C.step_label(number, title) }
     for i = 1, #widgets do body[#body + 1] = widgets[i] end
     return dt.new_widget("box")(body)
+end
+
+-- Pages: { number, title, widgets }. A combobox picks which page the stack shows; the choice is
+-- stored in preference `page` of `group`. The stack is not size-fixed, so it resizes per page.
+function C.paged_sections(group, pages)
+    local stack = dt.new_widget("stack") { h_size_fixed = false, v_size_fixed = false }
+    local labels = {}
+    for i, page in ipairs(pages) do
+        stack[i] = C.make_section(page.number, page.title, page.widgets)
+        labels[i] = page.number .. "  " .. page.title
+    end
+    local start = C.page_index(dt.preferences.read(group, "page", "integer"), #pages)
+    stack.active = start
+    local picker = dt.new_widget("combobox") {
+        label = "page",
+        selected = start,
+        changed_callback = function(self)
+            stack.active = self.selected
+            dt.preferences.write(group, "page", "integer", self.selected)
+        end,
+        table.unpack(labels),
+    }
+    return dt.new_widget("box") { orientation = "vertical", picker, stack }
 end
 
 return C

@@ -259,6 +259,22 @@ M.PRESET_SCHEMA = {
     { key = "tag_why", kind = "bool", default = true },
 }
 
+-- The panel's pages and the preset keys each page's widgets edit (C.page_coverage checks them).
+-- Page 4 holds every `tag_` key of the schema (TAG_TOGGLES is declared after the darktable guard).
+local tag_keys = {}
+for _, f in ipairs(M.PRESET_SCHEMA) do
+    if f.key:sub(1, 4) == "tag_" then tag_keys[#tag_keys + 1] = f.key end
+end
+M.PANEL_PAGES = {
+    { number = 1, title = "scoring", keys = { "genre", "rank_mode", "sharp_mode", "exp_mode", "keep_mode",
+        "keep_margin", "non_keeper", "star_scale" } },
+    { number = 2, title = "bursts", keys = { "group_support", "group_node" } },
+    { number = 3, title = "penalties & speed", keys = { "apply_while_scoring", "fast_jpeg_decode",
+        "penalise_overexposed", "penalise_underexposed", "penalise_eyes_closed" } },
+    { number = 4, title = "tags written", keys = tag_keys },
+}
+M.PANEL_OTHER_KEYS = { "run_tag" }
+
 local ok, dt = pcall(require, "darktable")
 if not ok then return M end
 
@@ -1773,6 +1789,21 @@ local function install_panel()
         allow_store_new = true,
     })
 
+    local page_widgets = {
+        { genre_combo, rank_combo, sharp_combo, exp_combo, keep_combo, keep_margin_combo, non_keeper_combo, star_scale_combo },
+        {
+            group_support_combo,
+            dt.new_widget("label") { label = _("grouping tag node"), halign = "start" },
+            group_node_entry,
+        },
+        option_checks,
+        tag_checks,
+    }
+    local pages = {}
+    for i, page in ipairs(M.PANEL_PAGES) do
+        pages[i] = { number = page.number, title = _(page.title), widgets = page_widgets[i] }
+    end
+
     local panel_box = dt.new_widget("box") {
         orientation = "vertical",
         -- shows the template defaults; nothing is saved
@@ -1781,15 +1812,7 @@ local function install_panel()
             changed()
         end,
         ctl.widget,
-        make_section(1, _("scoring"),
-            { genre_combo, rank_combo, sharp_combo, exp_combo, keep_combo, keep_margin_combo, non_keeper_combo, star_scale_combo }),
-        make_section(2, _("bursts"), {
-            group_support_combo,
-            dt.new_widget("label") { label = _("grouping tag node"), halign = "start" },
-            group_node_entry,
-        }),
-        make_section(3, _("penalties & speed"), option_checks),
-        make_section(4, _("tags written"), tag_checks),
+        C.paged_sections("assisted_culling", pages),
         step_label(5, _("run")),
         run_tag_check,
         action_button,

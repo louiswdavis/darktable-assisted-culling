@@ -17,7 +17,7 @@ end
 -- plugin_common.lua ---------------------------------------------------------------
 -- The same file in all three plugin repos; COMMON_HASH pins it. After changing it, copy it to the
 -- other two repos and put the hash this prints into their tests too.
-local COMMON_HASH = "5b5b2bf3"
+local COMMON_HASH = "ee1de49c"
 local script_dir = (arg and arg[0] or ""):match("^(.*)[/\\]") or "."
 local PC = dofile(script_dir .. "/plugin_common.lua")
 local function fnv1a(text)
@@ -236,6 +236,13 @@ for _, k in ipairs({ "keeper", "rejected", "overexposed", "underexposed", "eyes_
 end
 check("preset schema: every tag switch defaults on", all_tags_on, true)
 check("preset schema: 25 keys", #C.PRESET_SCHEMA, 25)
+local page_missing, page_duplicate = PC.page_coverage(C.PANEL_PAGES, C.PANEL_OTHER_KEYS, C.PRESET_SCHEMA)
+check("PANEL_PAGES: every preset key is on one page or listed off-stack",
+    table.concat(page_missing, " ") .. table.concat(page_duplicate, " "), "")
+local page_titles = {}
+for _, p in ipairs(C.PANEL_PAGES) do page_titles[#page_titles + 1] = p.title end
+check("PANEL_PAGES: titles match the README sections", table.concat(page_titles, ","),
+    "scoring,bursts,penalties & speed,tags written")
 check("preset schema: keeper margin defaults off", cd.keep_margin, "off")
 check("preset schema: graded non-keepers can be picked",
     C.preset_merge(C.PRESET_SCHEMA, { non_keeper = "graded" }).non_keeper, "graded")
