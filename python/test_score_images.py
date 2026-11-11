@@ -11,6 +11,7 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import score_images as S
 
+sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # check names hold arrows; a cp1252 console would crash on them
 failures = 0
 
 
