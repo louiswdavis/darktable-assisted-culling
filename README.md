@@ -85,14 +85,16 @@ New-Item -ItemType SymbolicLink -Path "$env:LOCALAPPDATA\darktable\lua\contrib\a
 Add-Content "$env:LOCALAPPDATA\darktable\luarc" 'require "contrib/assisted_culling"'
 ```
 
-Windows without Administrator rights or Developer Mode: copy `assisted_culling.lua` into `%LOCALAPPDATA%\darktable\lua\contrib` instead of linking it, and add the same `luarc` line. Re-copy it after every update. With the **plugin folder** preference (next step) set, the plugin loads `plugin_common.lua` from that folder's `lua/`; copy it into `contrib` too if you want darktable to start with the preference unset (the three plugins' copies are identical, so one copy serves all of them).
+Windows without Administrator rights or Developer Mode: copy `assisted_culling.lua` into `%LOCALAPPDATA%\darktable\lua\contrib` instead of linking it, and add the same `luarc` line. Re-copy it after every update. With the **plugins folder** preference (next step) set, the plugin loads `plugin_common.lua` from that folder's `darktable-assisted-culling/lua/`; copy it into `contrib` too if you want darktable to start with the preference unset (the three plugins' copies are identical, so one copy serves all of them).
 
 ### 4. Point the plugin at the repo
 
 Start darktable, open **preferences → lua options**, and set:
 
-- **Assisted Culling: python interpreter**: the venv's `python.exe` / `bin/python`. On Windows the plugin runs the `pythonw.exe` beside it through `python/launch.py`, so no console window opens and no `.vbs`/`.bat` is written (antivirus behaviour checks such as Bitdefender Advanced Threat Defense flag that chain). A venv or python.org install has both files.
-- **Assisted Culling: plugin folder**: this repo's folder. `python/score_images.py`, `models/` and `.venv` are found inside it, so the interpreter preference above is only needed if your Python lives elsewhere. A folder without `python/score_images.py` is an error.
+- **Python interpreter (.venv)**: the venv's `python.exe` / `bin/python`. On Windows the plugin runs the `pythonw.exe` beside it through `python/launch.py`, so no console window opens and no `.vbs`/`.bat` is written (antivirus behaviour checks such as Bitdefender Advanced Threat Defense flag that chain). A venv or python.org install has both files.
+- **plugins folder (holds the three assisted-* folders)**: the folder that holds `darktable-assisted-culling` (and the other assisted plugins). `python/score_images.py`, `models/` and `.venv` are found inside `darktable-assisted-culling`, so the interpreter preference above is only needed if your Python lives elsewhere. A folder whose `darktable-assisted-culling` has no `python/score_images.py` is an error.
+
+Both are shared by the assisted plugins; the older per-plugin **Assisted Culling: plugin folder** and **python interpreter** preferences still work, and the log says once to move them.
 
 Every other setting lives in the panel and is saved with its [preset](#presets).
 
@@ -264,7 +266,7 @@ Guessing the subject point works on a bright livery but can pick a sponsor board
    ```
 
    Re-cloning the repo deletes it.
-2. Nothing else: with **Assisted Culling: plugin folder** set, the file is used whenever `models/object_detection_yolox_2022nov.onnx` exists.
+2. Nothing else: with the **plugins folder** preference set (or auto-detected), the file is used whenever `models/object_detection_yolox_2022nov.onnx` exists.
 
 On each shortlisted frame, YOLOX finds cars, motorcycles and trucks (race cars are often labelled as trucks). The most prominent one, scored by confidence × size, becomes SAM's prompt, so a car filling a third of the frame beats a small one in the background. A frame with no vehicle (a crowd shot, a pit board) uses the point guess as before.
 
@@ -331,8 +333,8 @@ All under **preferences → lua options**. Everything else is a panel setting sa
 
 | Preference | Default | What it does |
 |------------|---------|--------------|
-| Assisted Culling: python interpreter | empty | Python with the requirements installed |
-| Assisted Culling: plugin folder | empty (auto-detect) | This repo's folder; `python/`, `models/` and `.venv` are found inside it. Its `models/` detector enables the [vehicle detector](#vehicle-detector) in SAM mode |
+| Python interpreter (.venv) (`assisted_plugins/python_bin`) | empty | Python with the requirements installed; shared by the assisted plugins. The old `assisted_culling/python_bin` is still read and logged as deprecated |
+| plugins folder (`assisted_plugins/plugins_root`) | empty (auto-detect) | The folder holding the assisted-* repos; this plugin uses `<plugins folder>/darktable-assisted-culling`, where `python/`, `models/` and `.venv` are found. The old `assisted_culling/plugin_folder` (this repo's folder) is still read and logged as deprecated. Its `models/` detector enables the [vehicle detector](#vehicle-detector) in SAM mode |
 
 ## How it works
 
@@ -448,7 +450,7 @@ The grouping-support changes have not run in darktable yet. Work through these s
 
 1. **Install Python** as in [Install](#1-python-side). *Expect:* the requirements install with no errors.
 2. **Install the plugin** as in [Install](#3-darktable-side) and start darktable. *Expect:* an **Assisted Culling** panel on the right in lighttable, with sections *1 scoring*, *2 bursts*, *3 penalties & speed*, *4 tags written*, *5 run* (with a **Cull selection** button) and *tools*, each under its own heading. No `LUA ERROR` in the darktable log.
-3. **Set the plugin folder** in **preferences → lua options → Assisted Culling: plugin folder** to the repo folder, and leave the interpreter empty. *Expect:* runs find the repo's `.venv` without the interpreter preference.
+3. **Set the plugins folder** in **preferences → lua options → plugins folder (holds the three assisted-* folders)** to the folder holding the repo, and leave the interpreter empty. *Expect:* runs find the repo's `.venv` without the interpreter preference.
 
 **One run per grouping mechanism**
 
