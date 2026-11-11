@@ -165,6 +165,12 @@ local report_reason = 'burst,file,rank,of,score,stars,keeper,flags,tags,why,fold
 local why_reason = C.explain_report(report_reason, { ["C:\\shoot/b.jpg"] = true })
 check("explain_report: a 12-column report adds the reason", why_reason[1],
     "b.jpg: 3 stars, burst 0, score 70.0. kept Why: Keeper by margin.")
+local report_car = 'burst,file,rank,of,score,stars,keeper,flags,tags,why,folder,reason,car\n'
+    .. '0,a.jpg,1,2,80.0,4,yes,,Why|Keeper,kept,C:\\shoot,Keeper,\n'
+    .. '0,b.jpg,2,2,70.0,3,yes,,Why|Keeper by margin,kept,C:\\shoot,Keeper by margin,37\n'
+local why_car_blank = C.explain_report(report_car, { ["C:\\shoot/a.jpg"] = true })
+local why_car_37 = C.explain_report(report_car, { ["C:\\shoot/b.jpg"] = true })
+check("explain_report: 13-column report row is read", #why_car_blank + #why_car_37, 2)
 check("is_diag_tag: Why tags are diagnostics", C.is_diag_tag("Assisted Culling|Why|Outranked"), true)
 local _, why_cam3 = C.explain_report(report_folders, { ["C:\\shoot\\cam3/a.jpg"] = true })
 check("explain_report: no row in its folder is missing", table.concat(why_cam3, "|"), "C:\\shoot\\cam3/a.jpg")

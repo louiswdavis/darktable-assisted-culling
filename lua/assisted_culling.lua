@@ -158,7 +158,7 @@ function M.explain_report(text, wanted)
             first = false -- header
         else
             local f = M.parse_report_line(line)
-            local names = (#f >= 10 and #f <= 12) and names_of[M.shot_stem(f[2])]
+            local names = #f >= 10 and names_of[M.shot_stem(f[2])]
             local row_folder = f[11] and (f[11]:gsub("\\", "/"))
             local hit = false
             for _, n in ipairs(names or {}) do
@@ -823,14 +823,21 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             if node then key_of, multi = M.tag_group_keys(items, node) end
         end
         local car_node = (settings.car_tag_node or ""):match("^%s*(.-)%s*$")
-        local car_of, car_multi, n_split, n_carred = nil, {}, 0, 0
+        local car_of, car_multi, n_split = nil, {}, 0
+        local n_groups_before_split = 0
+        do
+            local pre_of, seen = M.number_groups(primary_ids, key_of), {}
+            for _, id in ipairs(primary_ids) do
+                if not seen[pre_of[id]] then seen[pre_of[id]] = true; n_groups_before_split = n_groups_before_split + 1 end
+            end
+        end
         if car_node ~= "" then
             local items = {}
             for _, img in ipairs(primaries) do
                 items[#items + 1] = { id = img.id, tags = have_of(img) }
             end
             car_of, car_multi = M.tag_group_keys(items, car_node)
-            key_of, n_split, n_carred = M.split_by_car(primary_ids, key_of, car_of, car_multi)
+            key_of, n_split = M.split_by_car(primary_ids, key_of, car_of, car_multi)
         end
         local burst_of = M.number_groups(primary_ids, key_of)
 
@@ -849,7 +856,9 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             if #multi > 0 then msg = msg .. ", several children on ids " .. table.concat(multi, ",") end
         end
         if car_of then
-            msg = msg .. string.format(", car tag node %s: %d frames with a car, %d groups split", car_node, n_carred, n_split)
+            local n_with_car = 0
+            for _ in pairs(car_of) do n_with_car = n_with_car + 1 end
+            msg = msg .. string.format(", car tag node %s: %d frames with a car, %d groups split", car_node, n_with_car, n_split)
             if #car_multi > 0 then msg = msg .. ", several cars on ids " .. table.concat(car_multi, ",") end
         end
         log(msg)
@@ -1431,7 +1440,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             if n_skipped > 0 then msg = msg .. string.format(", %d unreadable (skipped, see log)", n_skipped) end
             if n_locked > 0 then msg = msg .. string.format(", %d locked (left alone)", n_locked) end
             if failed_total > 0 then msg = msg .. string.format(", %d failed to update (see log)", failed_total) end
-            local notice = M.no_groups_notice(mechanism, n_primary, n_bursts)
+            local notice = M.no_groups_notice(mechanism, n_primary, n_groups_before_split)
             if notice then msg = msg .. "; " .. notice end
             say(msg)
             if n_action_missed > 0 then
