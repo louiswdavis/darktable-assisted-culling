@@ -1007,42 +1007,35 @@ function C.make_preset_controls(o)
     return ctl
 end
 
--- Sections ----------------------------------------------------------------------
--- A panel section is a section_label heading ("1  title"; number optional) above its widgets.
--- Sections don't fold: Lua has no clickable heading widget, and a button header looks like a button.
--- Pages live in a stack under a combobox (paged_sections); the run area uses make_section directly.
-
-function C.step_label(number, title)
-    return dt.new_widget("section_label") { label = (number and (number .. "  ") or "") .. title }
-end
-
-function C.make_section(number, title, widgets)
-    local body = { orientation = "vertical", C.step_label(number, title) }
-    for i = 1, #widgets do body[#body + 1] = widgets[i] end
-    return dt.new_widget("box")(body)
-end
-
--- Pages: { number, title, widgets }. A combobox picks which page the stack shows; the choice is
--- stored in preference `page` of `group`. The stack is not size-fixed, so it resizes per page.
+-- Pages ------------------------------------------------------------------------
+-- Every panel section is a page, run and tools included; the page button is its heading.
+-- Pages: { number, title, widgets }. An accordion: each page is a button ("1  title ▸") with its
+-- widgets in a box below it. Clicking a button opens that page (its label ends in ▾) and folds the
+-- others; clicking the open page folds everything. The open page is stored in preference `page`
+-- of `group` (0 = all folded; the next start opens page 1).
 function C.paged_sections(group, pages)
-    local stack = dt.new_widget("stack") { h_size_fixed = false, v_size_fixed = false }
-    local labels = {}
-    for i, page in ipairs(pages) do
-        stack[i] = C.make_section(page.number, page.title, page.widgets)
-        labels[i] = page.number .. "  " .. page.title
+    local buttons, bodies, open = {}, {}, 0
+    local function show(index)
+        open = index
+        for i, page in ipairs(pages) do
+            bodies[i].visible = i == index
+            buttons[i].label = page.number .. "  " .. page.title .. (i == index and " ▾" or " ▸")
+        end
     end
-    local start = C.page_index(dt.preferences.read(group, "page", "integer"), #pages)
-    stack.active = start
-    local picker = dt.new_widget("combobox") {
-        label = "page",
-        selected = start,
-        changed_callback = function(self)
-            stack.active = self.selected
-            dt.preferences.write(group, "page", "integer", self.selected)
-        end,
-        table.unpack(labels),
-    }
-    return dt.new_widget("box") { orientation = "vertical", picker, stack }
+    local body = { orientation = "vertical" }
+    for i, page in ipairs(pages) do
+        buttons[i] = dt.new_widget("button") {
+            clicked_callback = function()
+                show(open == i and 0 or i)
+                dt.preferences.write(group, "page", "integer", open)
+            end,
+        }
+        bodies[i] = dt.new_widget("box")({ orientation = "vertical", table.unpack(page.widgets) })
+        body[#body + 1] = buttons[i]
+        body[#body + 1] = bodies[i]
+    end
+    show(C.page_index(dt.preferences.read(group, "page", "integer"), #pages))
+    return dt.new_widget("box")(body)
 end
 
 return C

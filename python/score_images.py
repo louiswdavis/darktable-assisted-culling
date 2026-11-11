@@ -483,14 +483,15 @@ def resolve_burst_scores(scores: dict, candidates=None) -> tuple:
 
 
 def parse_manifest_row(row) -> tuple:
-    """(id, filepath, burst_id, mask_path, shortlisted, edited, exposure, aperture, focal).
+    """(id, filepath, burst_id, mask_path, shortlisted, edited, exposure, aperture, focal, car).
     mask_path, shortlisted and edited are "" when absent; shortlisted is "1"/"0"
     and edited is darktable's change_timestamp, both only in sam_subject runs.
     exposure (seconds), aperture (f-number) and focal length (mm) come from
-    darktable's EXIF, 0.0 when absent or unknown."""
-    row = list(row) + [""] * (9 - len(row))
+    darktable's EXIF, 0.0 when absent or unknown. car is the car number the frame
+    was pooled under, "" when absent."""
+    row = list(row) + [""] * (10 - len(row))
     return (row[0], row[1], row[2], row[3], row[4], row[5],
-            float(row[6] or 0), float(row[7] or 0), float(row[8] or 0))
+            float(row[6] or 0), float(row[7] or 0), float(row[8] or 0), row[9])
 
 
 PANNING_SHUTTER = 1 / 125    # this slow or slower (s): a pan, background blur expected
@@ -1020,14 +1021,16 @@ def process_burst_logic(burst_id, burst_sharpness, burst_flags, burst_size, args
     return burst_keepers
 
 
-REPORT_HEADER = ["burst", "file", "rank", "of", "score", "stars", "keeper", "flags", "tags", "why", "folder", "reason"]
+REPORT_HEADER = ["burst", "file", "rank", "of", "score", "stars", "keeper", "flags", "tags", "why", "folder", "reason", "car"]
 
 
 def report_rows(manifest, result_rows, keepers_per_burst) -> list:
     """One row per scored frame, bursts in manifest order and frames best first, saying why it
     was kept or not. stars is "leave" for a non-keeper the run left alone. reason is the
-    frame's Why tag (WHY_REASONS), last so older readers of the columns keep working."""
+    frame's Why tag (WHY_REASONS); car is the car number the frame was pooled under, "" if none.
+    Both are last so older readers of the columns keep working."""
     file_of = {row[0]: row[1] for row in manifest}
+    car_of = {row[0]: row[9] for row in manifest}
     by_burst = {}
     for row in result_rows:
         if len(row) >= 6:
@@ -1051,7 +1054,7 @@ def report_rows(manifest, result_rows, keepers_per_burst) -> list:
             reason = next((t[4:] for t in tags.split(";") if t.startswith("Why|")), "")
             out.append([burst_id, os.path.basename(path), rank, len(rows),
                         score, stars, "yes" if keeper == "1" else "no", flags, tags, why,
-                        os.path.dirname(path), reason])
+                        os.path.dirname(path), reason, car_of.get(img_id, "")])
     return out
 
 
@@ -1118,7 +1121,7 @@ def score_manifest(manifest, args, cache):
     candidates_of = {}  # burst → shortlisted ids, only when the manifest carries a shortlist
     exif_of = {}  # burst → ([exposures], [apertures])
     shot_of = {}  # id → (exposure, focal length), for motion_aware's EXIF prior
-    for image_id, filepath, burst_id, mask_path, shortlisted, edited, exposure, aperture, focal in manifest:
+    for image_id, filepath, burst_id, mask_path, shortlisted, edited, exposure, aperture, focal, car in manifest:
         burst_groups.setdefault(burst_id, []).append((image_id, filepath, mask_path, shortlisted, edited))
         shot_of[image_id] = (exposure, focal)
         exposures, apertures = exif_of.setdefault(burst_id, ([], []))

@@ -56,6 +56,43 @@ for name, fn in pairs(C) do
 end
 
 
+-- Splits each group into one pool per car, so a burst with two identified cars gets a
+-- keeper each. Several cars, no car or no group key leave an id's key unchanged.
+function M.split_by_car(ids, key_of, car_of, multi)
+    local several = {}
+    for _, id in ipairs(multi) do several[id] = true end
+    local out, outs_of, n_carred = {}, {}, 0
+    for _, id in ipairs(ids) do
+        local key, car = key_of[id], car_of[id]
+        if key ~= nil and car ~= nil and not several[id] then
+            out[id] = key .. "\0" .. car
+            n_carred = n_carred + 1
+        else
+            out[id] = key
+        end
+        if key ~= nil then
+            outs_of[key] = outs_of[key] or {}
+            outs_of[key][out[id]] = true
+        end
+    end
+    local n_split = 0
+    for _, outs in pairs(outs_of) do
+        if next(outs, next(outs)) ~= nil then n_split = n_split + 1 end
+    end
+    return out, n_split, n_carred
+end
+
+
+-- Notice for the done message when grouping was on but every frame is its own burst
+-- (the two cull-first orders land here); nil otherwise.
+function M.no_groups_notice(mechanism, n_primary, n_bursts)
+    if mechanism ~= "none" and n_primary >= 2 and n_bursts == n_primary then
+        return "no groups found: every frame judged alone (group first for keepers)"
+    end
+    return nil
+end
+
+
 -- Images → the ones to score, and per scored id every image that takes its result.
 -- One shot = darktable duplicates of a file plus a RAW+JPEG pair (same folder and
 -- stem), so the pair always gets the same stars. A shot is scored from the member
@@ -242,6 +279,7 @@ M.PRESET_SCHEMA = {
     { key = "star_scale", kind = "choice", choices = star_scale_opts, default = "1" },
     { key = "group_support", kind = "choice", choices = group_support_opts, default = "native" },
     { key = "group_node", kind = "string", default = "" },
+    { key = "car_tag_node", kind = "string", default = "" },
     { key = "run_tag", kind = "bool", default = false },
     { key = "apply_while_scoring", kind = "bool", default = false },
     { key = "fast_jpeg_decode", kind = "bool", default = true },
@@ -268,12 +306,14 @@ end
 M.PANEL_PAGES = {
     { number = 1, title = "scoring", keys = { "genre", "rank_mode", "sharp_mode", "exp_mode", "keep_mode",
         "keep_margin", "non_keeper", "star_scale" } },
-    { number = 2, title = "bursts", keys = { "group_support", "group_node" } },
+    { number = 2, title = "bursts", keys = { "group_support", "group_node", "car_tag_node" } },
     { number = 3, title = "penalties & speed", keys = { "apply_while_scoring", "fast_jpeg_decode",
         "penalise_overexposed", "penalise_underexposed", "penalise_eyes_closed" } },
     { number = 4, title = "tags written", keys = tag_keys },
+    { number = 5, title = "run", keys = { "run_tag" } },
+    { number = 6, title = "tools", keys = {} },
 }
-M.PANEL_OTHER_KEYS = { "run_tag" }
+M.PANEL_OTHER_KEYS = {}
 
 local ok, dt = pcall(require, "darktable")
 if not ok then return M end
@@ -531,7 +571,7 @@ end
 -- export, so the scorer keys cached masked scores on it. Shutter (seconds),
 -- aperture (f-number) and focal length (mm) always go last, for the scorer's
 -- EXIF intent rules and motion_aware's blur prior.
-local function write_manifest(images, burst_of, mask_for_id, shortlisted, edited)
+local function write_manifest(images, burst_of, mask_for_id, shortlisted, edited, car_of)
     local f = io.open(MANIFEST_PATH, "w")
     if not f then return false end
     for _, img in ipairs(images) do
@@ -540,7 +580,8 @@ local function write_manifest(images, burst_of, mask_for_id, shortlisted, edited
             mask_for_id and mask_for_id[img.id] or "",
             shortlisted and (shortlisted[img.id] and "1" or "0") or "",
             edited and tostring(img.change_timestamp) or "",
-            img.exif_exposure or 0, img.exif_aperture or 0, img.exif_focal_length or 0 }
+            img.exif_exposure or 0, img.exif_aperture or 0, img.exif_focal_length or 0,
+            car_of and car_of[img.id] or "" }
         f:write(M.csv_line(fields), "\n")
     end
     f:close()
@@ -744,6 +785,14 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         -- A shot's group comes from any of its images, not just the lead: grouping may
         -- have seen only the RAWs (JPEGs hidden), or grouped the pair's RAW alone.
         local function members(img) return group_of[tonumber(img.id) or img.id] end
+        -- the tag names across a shot's members (name → true)
+        local function have_of(img)
+            local have = {}
+            for _, m in ipairs(members(img)) do
+                for name in pairs(tags_of(m)) do have[name] = true end
+            end
+            return have
+        end
         local mechanism = settings.group_support
         local key_of, node, multi = {}, nil, {}
         if mechanism == "native" then
@@ -763,10 +812,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         elseif mechanism == "tags" then
             local items, lists = {}, {}
             for _, img in ipairs(primaries) do
-                local have = {}
-                for _, m in ipairs(members(img)) do
-                    for name in pairs(tags_of(m)) do have[name] = true end
-                end
+                local have = have_of(img)
                 items[#items + 1] = { id = img.id, tags = have }
                 local names = {}
                 for name in pairs(have) do names[#names + 1] = name end
@@ -775,6 +821,16 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             local typed = (settings.group_node or ""):match("^%s*(.-)%s*$")
             node = typed ~= "" and typed or M.newest_group_node(lists)
             if node then key_of, multi = M.tag_group_keys(items, node) end
+        end
+        local car_node = (settings.car_tag_node or ""):match("^%s*(.-)%s*$")
+        local car_of, car_multi, n_split, n_carred = nil, {}, 0, 0
+        if car_node ~= "" then
+            local items = {}
+            for _, img in ipairs(primaries) do
+                items[#items + 1] = { id = img.id, tags = have_of(img) }
+            end
+            car_of, car_multi = M.tag_group_keys(items, car_node)
+            key_of, n_split, n_carred = M.split_by_car(primary_ids, key_of, car_of, car_multi)
         end
         local burst_of = M.number_groups(primary_ids, key_of)
 
@@ -791,6 +847,10 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             msg = msg .. string.format(", node %s", node or "(none found)")
             if node and next(key_of) == nil then msg = msg .. " (matches no selected photo)" end
             if #multi > 0 then msg = msg .. ", several children on ids " .. table.concat(multi, ",") end
+        end
+        if car_of then
+            msg = msg .. string.format(", car tag node %s: %d frames with a car, %d groups split", car_node, n_carred, n_split)
+            if #car_multi > 0 then msg = msg .. ", several cars on ids " .. table.concat(car_multi, ",") end
         end
         log(msg)
 
@@ -810,7 +870,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             for _, img in ipairs(primaries) do pcall(os.remove, mask_path_for(img.id)) end
         end
 
-        if not write_manifest(primaries, burst_of, nil, nil, sam_model ~= nil) then
+        if not write_manifest(primaries, burst_of, nil, nil, sam_model ~= nil, car_of) then
             error("couldn't write the image list to darktable's tmp folder (disk full or no write access?)", 0)
         end
 
@@ -973,7 +1033,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                 end
             end
 
-            if not write_manifest(primaries, burst_of, mask_for_id, shortlisted, true) then
+            if not write_manifest(primaries, burst_of, mask_for_id, shortlisted, true, car_of) then
                 error("couldn't write the image list to darktable's tmp folder (disk full or no write access?)", 0)
             end
             pcall(os.remove, PROGRESS_PATH)
@@ -1371,6 +1431,8 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             if n_skipped > 0 then msg = msg .. string.format(", %d unreadable (skipped, see log)", n_skipped) end
             if n_locked > 0 then msg = msg .. string.format(", %d locked (left alone)", n_locked) end
             if failed_total > 0 then msg = msg .. string.format(", %d failed to update (see log)", failed_total) end
+            local notice = M.no_groups_notice(mechanism, n_primary, n_bursts)
+            if notice then msg = msg .. "; " .. notice end
             say(msg)
             if n_action_missed > 0 then
                 log(string.format("%d missed by darktable's rating action (rated one by one)", n_action_missed))
@@ -1476,7 +1538,6 @@ end
 
 local preset_file_store, make_preset_controls = C.preset_file_store, C.make_preset_controls
 
-local step_label, make_section = C.step_label, C.make_section
 
 -- Panel -----------------------------------------------------------------------
 
@@ -1650,6 +1711,11 @@ local function install_panel()
         tooltip = _("Grouping tags only: the tag node whose children are the groups, e.g. Assisted Grouping|2026-01-01 12:00:00|Group. Blank uses the newest Assisted Grouping run on the selected photos.\nDefault: blank. Set it when the photos carry more than one grouping run."),
         text = "",
     }
+    local car_node_entry = dt.new_widget("entry") {
+        placeholder = _("Car tag node (blank = off)"),
+        tooltip = _("Keepers per car: the tag node whose children are car numbers, e.g. Rally|2026 from Assisted Tagging. Each group is split by car before keepers are picked; frames with no car tag share one pool per group.\nDefault: blank (off). Set it after Assisted Tagging has run on these photos."),
+        text = "",
+    }
 
     -- Check buttons by schema key, in panel order.
     local checks, check_order = {}, {}
@@ -1692,6 +1758,7 @@ local function install_panel()
         for key in pairs(combos) do s[key] = M.CHOICES[key][combos[key].selected] or shown[key] end
         for _, key in ipairs(check_order) do s[key] = checks[key].value and true or false end
         s.group_node = (group_node_entry.text or ""):match("^%s*(.-)%s*$")
+        s.car_tag_node = (car_node_entry.text or ""):match("^%s*(.-)%s*$")
         return s
     end
 
@@ -1700,6 +1767,7 @@ local function install_panel()
         for key in pairs(combos) do show_choice(key, s[key]) end
         for _, key in ipairs(check_order) do checks[key].value = s[key] end
         group_node_entry.text = s.group_node
+        car_node_entry.text = s.car_tag_node
     end
 
     clear_button = dt.new_widget("button") {
@@ -1795,9 +1863,13 @@ local function install_panel()
             group_support_combo,
             dt.new_widget("label") { label = _("grouping tag node"), halign = "start" },
             group_node_entry,
+            dt.new_widget("label") { label = _("car tag node"), halign = "start" },
+            car_node_entry,
         },
         option_checks,
         tag_checks,
+        { run_tag_check, action_button },
+        { why_button, report_button, clear_button },
     }
     local pages = {}
     for i, page in ipairs(M.PANEL_PAGES) do
@@ -1813,10 +1885,6 @@ local function install_panel()
         end,
         ctl.widget,
         C.paged_sections("assisted_culling", pages),
-        step_label(5, _("run")),
-        run_tag_check,
-        action_button,
-        make_section(nil, _("tools"), { why_button, report_button, clear_button }),
     }
 
     dt.register_lib(

@@ -17,7 +17,7 @@ end
 -- plugin_common.lua ---------------------------------------------------------------
 -- The same file in all three plugin repos; COMMON_HASH pins it. After changing it, copy it to the
 -- other two repos and put the hash this prints into their tests too.
-local COMMON_HASH = "ee1de49c"
+local COMMON_HASH = "66ba39a6"
 local script_dir = (arg and arg[0] or ""):match("^(.*)[/\\]") or "."
 local PC = dofile(script_dir .. "/plugin_common.lua")
 local function fnv1a(text)
@@ -235,14 +235,40 @@ for _, k in ipairs({ "keeper", "rejected", "overexposed", "underexposed", "eyes_
     if cd["tag_" .. k] ~= true then all_tags_on = false end
 end
 check("preset schema: every tag switch defaults on", all_tags_on, true)
-check("preset schema: 25 keys", #C.PRESET_SCHEMA, 25)
+check("preset schema: 26 keys", #C.PRESET_SCHEMA, 26)
 local page_missing, page_duplicate = PC.page_coverage(C.PANEL_PAGES, C.PANEL_OTHER_KEYS, C.PRESET_SCHEMA)
 check("PANEL_PAGES: every preset key is on one page or listed off-stack",
     table.concat(page_missing, " ") .. table.concat(page_duplicate, " "), "")
 local page_titles = {}
 for _, p in ipairs(C.PANEL_PAGES) do page_titles[#page_titles + 1] = p.title end
 check("PANEL_PAGES: titles match the README sections", table.concat(page_titles, ","),
-    "scoring,bursts,penalties & speed,tags written")
+    "scoring,bursts,penalties & speed,tags written,run,tools")
+
+local function pool_numbers(ids, key_of)
+    local n, out = C.number_groups(ids, key_of), {}
+    for i, id in ipairs(ids) do out[i] = n[id] end
+    return table.concat(out, " ")
+end
+local sk, s_split, s_carred = C.split_by_car({ "1", "2", "3", "4" }, { ["1"] = "g", ["2"] = "g", ["3"] = "g", ["4"] = "g" },
+    { ["1"] = "37", ["2"] = "86", ["3"] = "37" }, {})
+check("split_by_car: cars split a group, untagged frames share the group pool",
+    pool_numbers({ "1", "2", "3", "4" }, sk) .. "|" .. s_split .. "|" .. s_carred, "1 2 1 3|1|3")
+local sk2, _, s_carred2 = C.split_by_car({ "1", "2" }, {}, { ["1"] = "37", ["2"] = "37" }, {})
+check("split_by_car: a frame with no group key stays alone",
+    pool_numbers({ "1", "2" }, sk2) .. "|" .. s_carred2, "1 2|0")
+local sk3, s_split3, s_carred3 = C.split_by_car({ "1", "2", "3" }, { ["1"] = "g", ["2"] = "g", ["3"] = "g" },
+    { ["1"] = "37", ["2"] = "37", ["3"] = "86" }, { "3" })
+check("split_by_car: several cars → shared pool",
+    pool_numbers({ "1", "2", "3" }, sk3) .. "|" .. s_split3 .. "|" .. s_carred3, "1 1 2|1|2")
+local in_keys = { ["1"] = "g", ["2"] = "g" }
+local sk4, s_split4 = C.split_by_car({ "1", "2" }, in_keys, {}, {})
+check("split_by_car: no cars → keys unchanged",
+    tostring(sk4["1"] == in_keys["1"] and sk4["2"] == in_keys["2"]) .. "|" .. s_split4, "true|0")
+check("no_groups_notice: all singletons in native mode",
+    C.no_groups_notice("native", 5, 5), "no groups found: every frame judged alone (group first for keepers)")
+check("no_groups_notice: grouped selection is silent", C.no_groups_notice("tags", 5, 2), nil)
+check("no_groups_notice: none mode and single frame are silent",
+    tostring(C.no_groups_notice("none", 5, 5)) .. "|" .. tostring(C.no_groups_notice("native", 1, 1)), "nil|nil")
 check("preset schema: keeper margin defaults off", cd.keep_margin, "off")
 check("preset schema: graded non-keepers can be picked",
     C.preset_merge(C.PRESET_SCHEMA, { non_keeper = "graded" }).non_keeper, "graded")

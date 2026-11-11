@@ -77,19 +77,23 @@ def run_tests():
 
     # parse_manifest_row -----------------------------------------------------
     check("manifest: 4-column row keeps mask path",
-          S.parse_manifest_row(["1", "/a.jpg", "3", "/m.png"]), ("1", "/a.jpg", "3", "/m.png", "", "", 0.0, 0.0, 0.0))
+          S.parse_manifest_row(["1", "/a.jpg", "3", "/m.png"]), ("1", "/a.jpg", "3", "/m.png", "", "", 0.0, 0.0, 0.0, ""))
     check("manifest: 5-column row keeps shortlist flag",
-          S.parse_manifest_row(["1", "/a.jpg", "3", "", "0"]), ("1", "/a.jpg", "3", "", "0", "", 0.0, 0.0, 0.0))
+          S.parse_manifest_row(["1", "/a.jpg", "3", "", "0"]), ("1", "/a.jpg", "3", "", "0", "", 0.0, 0.0, 0.0, ""))
     check("manifest: 6-column row keeps edit time",
-          S.parse_manifest_row(["1", "/a.jpg", "3", "", "", "t"]), ("1", "/a.jpg", "3", "", "", "t", 0.0, 0.0, 0.0))
+          S.parse_manifest_row(["1", "/a.jpg", "3", "", "", "t"]), ("1", "/a.jpg", "3", "", "", "t", 0.0, 0.0, 0.0, ""))
     check("manifest: 3-column row gets empty mask path",
-          S.parse_manifest_row(["1", "/a.jpg", "3"]), ("1", "/a.jpg", "3", "", "", "", 0.0, 0.0, 0.0))
+          S.parse_manifest_row(["1", "/a.jpg", "3"]), ("1", "/a.jpg", "3", "", "", "", 0.0, 0.0, 0.0, ""))
     check("manifest: 8-column row keeps shutter and aperture",
           S.parse_manifest_row(["1", "/a.jpg", "3", "", "", "", "0.0080000004", "2.8"]),
-          ("1", "/a.jpg", "3", "", "", "", 0.0080000004, 2.8, 0.0))
+          ("1", "/a.jpg", "3", "", "", "", 0.0080000004, 2.8, 0.0, ""))
     check("manifest: 9-column row keeps focal length",
           S.parse_manifest_row(["1", "/a.jpg", "3", "", "", "", "0.004", "5.6", "400"]),
-          ("1", "/a.jpg", "3", "", "", "", 0.004, 5.6, 400.0))
+          ("1", "/a.jpg", "3", "", "", "", 0.004, 5.6, 400.0, ""))
+    check("manifest: 9-column row has no car",
+          S.parse_manifest_row(["1", "/a.jpg", "3", "", "", "", "0.004", "5.6", "400"])[-1], "")
+    check("manifest: 10-column row carries the car",
+          S.parse_manifest_row(["1", "/a.jpg", "3", "", "", "", "0.004", "5.6", "400", "37"])[-1], "37")
 
     # EXIF intent rules --------------------------------------------------------
     check("intent: 1/125 in subject bias is a pan",
@@ -542,8 +546,8 @@ def run_tests():
     check("graded: a stricter star scale drops non-keepers faster", graded(0.0, 2.0)["c"], (0, 0))
 
     # report_rows --------------------------------------------------------------
-    rep_manifest = [("1", "/p/a.jpg", "0", "", "", "", 0.0, 0.0, 0.0), ("2", "/p/b.jpg", "0", "", "", "", 0.0, 0.0, 0.0),
-                    ("3", "/p/c.jpg", "1", "", "", "", 0.0, 0.0, 0.0)]
+    rep_manifest = [("1", "/p/a.jpg", "0", "", "", "", 0.0, 0.0, 0.0, "37"), ("2", "/p/b.jpg", "0", "", "", "", 0.0, 0.0, 0.0, ""),
+                    ("3", "/p/c.jpg", "1", "", "", "", 0.0, 0.0, 0.0, "")]
     rep_results = [["2", "40.0", "blur", "0", "0", "leave", ""], ["1", "80.0", "", "0", "1", "4", "Subject|Car;Why|Keeper"],
                    ["3", "55.0", "", "1", "1", "3", ""]]
     rep = S.report_rows(rep_manifest, rep_results, lambda n: 1)
@@ -554,9 +558,10 @@ def run_tests():
     check("report: diagnostic tags carry through", rep[0][8], "Subject|Car;Why|Keeper")
     check("report: the folder is the eleventh column", rep[0][10], os.path.dirname("/p/a.jpg"))
     check("report: the reason column is the Why tag", (rep[0][11], rep[1][11]), ("Keeper", ""))
+    check("report: the car column is last", (rep[0][-1], rep[1][-1]), ("37", ""))
     check("report: one column per header", len(rep[0]), len(S.REPORT_HEADER))
     # frame 5 couldn't be read, so it has no result row; the allowance still counts it
-    unread_manifest = rep_manifest + [("5", "/p/e.jpg", "1", "", "", "", 0.0, 0.0, 0.0)]
+    unread_manifest = rep_manifest + [("5", "/p/e.jpg", "1", "", "", "", 0.0, 0.0, 0.0, "")]
     unread = S.report_rows(unread_manifest, rep_results, lambda n: n)
     check("report: the allowance counts unreadable frames", unread[2][9], "kept: rank 1 of 1, 2 allowed")
 

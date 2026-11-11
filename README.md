@@ -100,11 +100,13 @@ Every other setting lives in the panel and is saved with its [preset](#presets).
 
 ## Using it
 
-In lighttable, select a batch (a whole shoot or a single burst) and click **Cull selection** in the **Assisted Culling** panel on the right. Progress shows in darktable's message area; click the button again, or the X on the job in darktable's job area, to cancel.
+In lighttable, select a batch (a whole shoot or a single burst) and click **Cull selection** in the **Assisted Culling** panel on the right. Progress shows in darktable's message area; click the button again, or the X on the job in darktable's job area, to cancel. When the selection had no groups (every frame judged alone), the done message ends with a notice saying so; group first for keepers.
+
+Running all three plugins? [WORKFLOW.md](../darktable-assisted-grouping/WORKFLOW.md) says which order to pick and what to re-run after what.
 
 ### What you get
 
-Each frame gets a star rating, which ranks it against the rest of the batch, plus any of these tags:
+Each frame gets a star rating, which ranks it against the rest of the batch, plus any of these tags. With a car tag node set, a burst with two identified cars keeps a frame of each.
 
 | Tag | Meaning |
 |-----|---------|
@@ -161,7 +163,7 @@ A few things a re-run doesn't touch:
 
 Tick **Tag each run** to also stamp every frame a run writes with `Assisted Culling|Run|YYYY-MM-DD HH:MM`, so you can filter darktable down to one run's frames. Stamps accumulate, and **Clear culling marks** leaves them; remove old ones in darktable's tag manager.
 
-Each scoring run also writes `assisted_culling/last-run.csv` in darktable's config folder (the folder holding `assisted_culling.log`): one row per scored frame with its burst, rank in the burst, score, stars, keeper yes/no, flags, diagnostic tags, a `why` line ("kept: rank 1 of 4, 2 allowed", "not kept: rank 3 of 4, only 2 allowed or not eligible; flagged blur"), the file's folder and a `reason` column (the frame's `Why` tag: Keeper, Keeper by margin, Outranked, Graded or Not shortlisted). The allowance counts every frame of the burst, including frames that couldn't be read. Open it in a spreadsheet to see why a frame lost, or to tune thresholds from evidence. It is overwritten by the next run, but each run's copy is also kept as `assisted_culling/reports/YYYYMMDD-HHMMSS.csv` (newest 20), so two runs can be compared.
+Each scoring run also writes `assisted_culling/last-run.csv` in darktable's config folder (the folder holding `assisted_culling.log`): one row per scored frame with its burst, rank in the burst, score, stars, keeper yes/no, flags, diagnostic tags, a `why` line ("kept: rank 1 of 4, 2 allowed", "not kept: rank 3 of 4, only 2 allowed or not eligible; flagged blur"), the file's folder and a `reason` column (the frame's `Why` tag: Keeper, Keeper by margin, Outranked, Graded or Not shortlisted) and a last `car` column: the car number the frame was pooled under, blank when no car tag node was set or the frame had none. The allowance counts every frame of the burst, including frames that couldn't be read. Open it in a spreadsheet to see why a frame lost, or to tune thresholds from evidence. It is overwritten by the next run, but each run's copy is also kept as `assisted_culling/reports/YYYYMMDD-HHMMSS.csv` (newest 20), so two runs can be compared.
 
 While a run is going, **Clear culling marks** and the culling shortcut queue behind it instead of refusing. Each queued job keeps the selection and settings from when you clicked, and starts when the run before it finishes. Cancelling drops the queue. (The panel button turns into **Cancel culling** during a run, so a second culling run can only be queued with the shortcut.)
 
@@ -188,7 +190,7 @@ The **preset** picker at the top of the panel saves every panel setting (everyth
 
 ## Panel options
 
-Below the [preset](#presets) picker, a **page** combobox picks one of **1 scoring** (genre to non-keepers, below), **2 bursts**, **3 penalties & speed** and **4 tags written** to show at a time; the last page picked is remembered across restarts. **5 run** and **tools** stay below the page, always shown. darktable's reset button (↺ in the panel header) puts every setting back to the template defaults; nothing is saved until you update a preset.
+Below the [preset](#presets) picker are the page buttons **1 scoring ▸** (genre to non-keepers, below), **2 bursts ▸**, **3 penalties & speed ▸**, **4 tags written ▸**, **5 run ▸** and **6 tools ▸**: clicking one opens its contents below it (its label ends in **▾**) and folds the others; clicking the open one folds it. The open page is remembered across restarts. darktable's reset button (↺ in the panel header) puts every setting back to the template defaults; nothing is saved until you update a preset.
 
 ### Genre
 
@@ -305,6 +307,7 @@ Flags still cost a star each. **Star strictness** scales these steps too: strict
 
 - **grouping support** (Native groups, Grouping tags, None; default Native groups). What groups photos before keepers are picked, see [Grouping support](#grouping-support).
 - **Grouping tag node (blank = newest run)**. The tag node whose children are the groups in Grouping tags mode.
+- **Car tag node (blank = off)**. The tag node whose children are car numbers, e.g. the collection prefix from [Assisted Tagging](../darktable-assisted-tagging/README.md). Each group is split by car before keepers are picked; frames with no car tag share one pool per group.
 
 ### 3 penalties & speed
 
@@ -321,7 +324,7 @@ One switch per branch (default on): `Keeper`, `Rejected`, `Overexposed`, `Undere
 - **Tag each run** (default off). Stamps every frame a run writes with `Assisted Culling|Run|YYYY-MM-DD HH:MM`.
 - **Cull selection.** Scores the selected images and rates/tags them. Click again to cancel.
 
-### tools
+### 6 tools
 
 - **Why these ratings?** Explains the selected images from the last run's report. Changes nothing.
 - **Open last report.** Opens `last-run.csv` in your spreadsheet app.
@@ -369,6 +372,8 @@ Culling no longer clusters photos by capture time. Keepers are picked within gro
 - **Native groups** (default): darktable's own image groups. A photo's group is its group leader; members share one group even when the leader isn't in the selection.
 - **Grouping tags**: the children of an [Assisted Grouping](../darktable-assisted-grouping/README.md) tag node, e.g. `Assisted Grouping|2026-01-01 12:00:00|Group|NNNN`. The **Grouping tag node (blank = newest run)** entry names the node; blank uses the newest Assisted Grouping run found on the selected photos. Assisted Grouping must have **Write group tags** on, or there is nothing to find. A photo with several children under the node takes the first by name (the log lists them); a photo tagged only by an older run is alone.
 - **None**: every photo is its own group and is judged alone.
+
+The rally setup reads group tags; see [WORKFLOW.md](../darktable-assisted-grouping/WORKFLOW.md).
 
 A photo with no group is its own group, and a selection with no groups at all still runs. Groups are not size-checked: a coarse group (Assisted Grouping's burst gap set high, or its Camera or Parent layers joining different cars) makes culling pick one keeper across all of them. That is your grouping settings at work: tighten the grouping, switch to **None**, or fix the group. The log records the mechanism, how many photos landed in groups of 2 or more, and in Grouping tags mode the node used (or that it matched no selected photo).
 
@@ -449,7 +454,7 @@ The grouping-support changes have not run in darktable yet. Work through these s
 **Setup**
 
 1. **Install Python** as in [Install](#1-python-side). *Expect:* the requirements install with no errors.
-2. **Install the plugin** as in [Install](#3-darktable-side) and start darktable. *Expect:* an **Assisted Culling** panel on the right in lighttable, with a **page** combobox showing one of *1 scoring* to *4 tags written*, then *5 run* (with a **Cull selection** button) and *tools*. No `LUA ERROR` in the darktable log.
+2. **Install the plugin** as in [Install](#3-darktable-side) and start darktable. *Expect:* an **Assisted Culling** panel on the right in lighttable, with the page buttons *1 scoring ▾* (open, its settings below it) to *6 tools ▸*; opening *5 run* shows a **Cull selection** button. No `LUA ERROR` in the darktable log.
 3. **Set the plugins folder** in **preferences → lua options → plugins folder (holds the three assisted-* folders)** to the folder holding the repo, and leave the interpreter empty. *Expect:* runs find the repo's `.venv` without the interpreter preference.
 
 **One run per grouping mechanism**
