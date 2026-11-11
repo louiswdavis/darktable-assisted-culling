@@ -524,12 +524,14 @@ local rank_opts = {"universal", "binary", "relative"}
 local sharp_opts = {"center", "tiles_uniformity", "peak", "face_detect", "subject_focus", "sam_subject", "motion_aware"}
 local exp_opts = {"whole_frame", "subject_only", "strict", "none"}
 local keep_opts = {"single_best", "portrait_mode", "dynamic_burst", "keep_all"}
-local nk_opts = {"leave", "reject", "0", "1", "2", "3", "4", "5"}
+local nk_opts = {"leave", "reject", "0", "1", "2", "3", "4", "5", "graded"}
+-- also keep every frame within this % of its burst's best (the scorer's --keep-margin)
+local keep_margin_opts = {"off", "95", "90", "85", "80", "75"}
 -- multiplies every sharpness threshold a star needs (the scorer's --star-scale)
 local star_scale_opts = {"0.5", "0.75", "1", "1.25", "1.5", "2"}
 local group_support_opts = {"native", "tags", "none"}
 M.CHOICES = { genre = genre_opts, rank_mode = rank_opts, sharp_mode = sharp_opts, exp_mode = exp_opts,
-    keep_mode = keep_opts, non_keeper = nk_opts, star_scale = star_scale_opts, group_support = group_support_opts }
+    keep_mode = keep_opts, keep_margin = keep_margin_opts, non_keeper = nk_opts, star_scale = star_scale_opts, group_support = group_support_opts }
 
 -- The four modes each genre fills in. "custom" has none.
 M.GENRE_MODES = {
@@ -556,6 +558,7 @@ M.PRESET_SCHEMA = {
     { key = "sharp_mode", kind = "choice", choices = sharp_opts, default = "tiles_uniformity" },
     { key = "exp_mode", kind = "choice", choices = exp_opts, default = "strict" },
     { key = "keep_mode", kind = "choice", choices = keep_opts, default = "single_best" },
+    { key = "keep_margin", kind = "choice", choices = keep_margin_opts, default = "off" },
     { key = "non_keeper", kind = "choice", choices = nk_opts, default = "leave" },
     { key = "star_scale", kind = "choice", choices = star_scale_opts, default = "1" },
     { key = "group_support", kind = "choice", choices = group_support_opts, default = "native" },
@@ -1355,6 +1358,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             "--nk-mode", tostring(nk_mode),
             "--tag-only-flags", tag_only_flags(),
             "--star-scale", tostring(settings.star_scale or "1"),
+            "--keep-margin", tostring((tonumber(settings.keep_margin) or 0) / 100),
         }
         if fast_jpeg then argv[#argv + 1] = "--fast-jpeg" end
         if sharp_mode == "motion_aware" then
@@ -2335,12 +2339,16 @@ local function install_panel()
         _("How many of each burst are kept (the sharpest ones)."),
         { _("single best only"), _("portrait (1 or 2)"), _("dynamic (1 to 5)"), _("keep all (focus stack)") })
 
+    local keep_margin_combo = choice_combo("keep_margin", _("keeper margin"),
+        _("Also keeps every frame scoring within this share of its burst's sharpest frame, on top of the keepers count. 90% keeps any frame at least 90% as sharp as the best."),
+        { _("off"), _("within 95% of best"), _("within 90% of best"), _("within 85% of best"), _("within 80% of best"), _("within 75% of best") })
+
     local non_keeper_combo = choice_combo("non_keeper", _("non-keepers"),
-        _("What to do with images that are not kept. They get the Rejected tag unless tags written → Rejected is off."),
-        { _("leave alone"), _("reject (-1)"), _("0 stars"), _("1 star"), _("2 stars"), _("3 stars"), _("4 stars"), _("5 stars") })
+        _("What to do with images that are not kept. They get the Rejected tag unless tags written → Rejected is off.\ngraded: stars below the burst's lowest keeper by how close each frame is to the burst's best: 90%+ one star less, 75%+ two, 60%+ three, 45%+ four, else 0."),
+        { _("leave alone"), _("reject (-1)"), _("0 stars"), _("1 star"), _("2 stars"), _("3 stars"), _("4 stars"), _("5 stars"), _("graded by burst") })
 
     local star_scale_combo = choice_combo("star_scale", _("star strictness"),
-        _("Scales the sharpness every star needs, in universal and relative ranking. Stricter: fewer stars for the same frame. More generous: more stars. The scores themselves don't change."),
+        _("Scales the sharpness every star needs, in universal and relative ranking, and how fast graded non-keepers lose stars. Stricter: fewer stars for the same frame. More generous: more stars. The scores themselves don't change."),
         { _("much more generous (×0.5)"), _("more generous (×0.75)"), _("standard (×1)"), _("stricter (×1.25)"), _("much stricter (×1.5)"), _("strictest (×2)") })
 
     action_button = dt.new_widget("button") {
@@ -2509,7 +2517,7 @@ local function install_panel()
         end,
         ctl.widget,
         make_section(1, _("scoring"),
-            { genre_combo, rank_combo, sharp_combo, exp_combo, keep_combo, non_keeper_combo, star_scale_combo }),
+            { genre_combo, rank_combo, sharp_combo, exp_combo, keep_combo, keep_margin_combo, non_keeper_combo, star_scale_combo }),
         make_section(2, _("bursts"), {
             group_support_combo,
             dt.new_widget("label") { label = _("grouping tag node"), halign = "start" },

@@ -470,6 +470,23 @@ def run_tests():
     check("stars: a star scale under 1 is more generous", motion_stars(450.0, 0.5), 5)
     check("stars: a star scale over 1 is stricter", motion_stars(450.0, 2.0), 2)
 
+    # keeper margin and graded non-keepers ---------------------------------------
+    burst = {"a": 3000.0, "b": 2900.0, "c": 2400.0, "d": 1900.0, "e": 500.0}
+
+    def graded(margin, star_scale=1.0):
+        open(res_path, "w").close()
+        S.process_burst_logic("1", burst, {k: () for k in burst}, len(burst),
+                              Namespace(keep_mode="single_best", rank_mode="universal", nk_mode="graded",
+                                        keep_margin=margin, star_scale=star_scale), res_path)
+        rows = [line.split(",") for line in open(res_path).read().strip().splitlines()]
+        return {r[0]: (int(r[4]), int(r[5])) for r in rows}
+
+    check("keeper margin: frames within 95% of the best are kept too", graded(0.95),
+          {"a": (1, 5), "b": (1, 4), "c": (0, 2), "d": (0, 1), "e": (0, 0)})
+    check("keeper margin off: graded non-keepers step down from the keeper", graded(0.0),
+          {"a": (1, 5), "b": (0, 4), "c": (0, 3), "d": (0, 2), "e": (0, 0)})
+    check("graded: a stricter star scale drops non-keepers faster", graded(0.0, 2.0)["c"], (0, 0))
+
     # report_rows --------------------------------------------------------------
     rep_manifest = [("1", "/p/a.jpg", "0", "", "", "", 0.0, 0.0, 0.0), ("2", "/p/b.jpg", "0", "", "", "", 0.0, 0.0, 0.0),
                     ("3", "/p/c.jpg", "1", "", "", "", 0.0, 0.0, 0.0)]

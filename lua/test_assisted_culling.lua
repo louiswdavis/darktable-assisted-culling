@@ -192,7 +192,10 @@ for _, k in ipairs({ "keeper", "rejected", "overexposed", "underexposed", "eyes_
     if cd["tag_" .. k] ~= true then all_tags_on = false end
 end
 check("preset schema: every tag switch defaults on", all_tags_on, true)
-check("preset schema: 23 keys", #C.PRESET_SCHEMA, 23)
+check("preset schema: 24 keys", #C.PRESET_SCHEMA, 24)
+check("preset schema: keeper margin defaults off", cd.keep_margin, "off")
+check("preset schema: graded non-keepers can be picked",
+    C.preset_merge(C.PRESET_SCHEMA, { non_keeper = "graded" }).non_keeper, "graded")
 check("preset schema: star strictness defaults to standard", cd.star_scale, "1")
 check("preset schema: an unknown star strictness falls back",
     C.preset_merge(C.PRESET_SCHEMA, { star_scale = "3" }).star_scale, "1")

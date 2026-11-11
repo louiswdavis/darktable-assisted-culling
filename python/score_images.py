@@ -43,6 +43,9 @@ CLIP_PCT_FLAG = 0.02
 
 STAR_THRESHOLDS = [(95, 5), (85, 4), (75, 3), (60, 2), (45, 1), (0, 0)]
 RELATIVE_REFERENCE_PERCENTILE = 95
+# graded non-keepers: (share of the burst's best score, stars below the burst's lowest keeper);
+# a frame under the last share gets 0 stars
+GRADED_STEPS = [(0.90, 1), (0.75, 2), (0.60, 3), (0.45, 4)]
 
 TIER_THRESHOLDS = [
     (2700, 5),
@@ -989,6 +992,10 @@ def process_burst_logic(burst_id, burst_sharpness, burst_flags, burst_size, args
     sorted_members = sorted(burst_sharpness.keys(),
                             key=lambda i: (i in eligible, burst_sharpness[i]), reverse=True)
     keepers = set([i for i in sorted_members if i in eligible][:allowed])
+    best = max((burst_sharpness[i] for i in eligible), default=0.0)
+    margin = getattr(args, "keep_margin", 0.0)
+    if margin > 0 and best > 0:
+        keepers |= {i for i in eligible if burst_sharpness[i] >= margin * best}
 
     burst_keepers = [i for i in sorted_members if i in keepers]
     num_keepers = len(burst_keepers)
@@ -998,11 +1005,10 @@ def process_burst_logic(burst_id, burst_sharpness, burst_flags, burst_size, args
     star_scale = getattr(args, "star_scale", 1.0)
     tiers = MOTION_TIER_THRESHOLDS if getattr(args, "sharp_mode", "") == "motion_aware" else TIER_THRESHOLDS
 
-    burst_rows = []
+    rated = {}
     for img_id in sorted_members:
         is_keeper = img_id in keepers
         raw_score = burst_sharpness[img_id]
-        flags = burst_flags[img_id]
 
         if args.rank_mode == "relative":
             score = 100.0 * raw_score / reference if reference else 0.0
@@ -1028,14 +1034,27 @@ def process_burst_logic(burst_id, burst_sharpness, burst_flags, burst_size, args
                 stars = 0
             stars = max(0, stars - sum(FLAG_PENALTIES[f][1] for f in penalised[img_id]))
 
-        if is_keeper:
-            if args.keep_mode != "keep_all" and num_keepers > 1 and img_id not in top_40_keepers:
-                stars = max(0, stars - 1)
-        else:
+        if is_keeper and args.keep_mode != "keep_all" and num_keepers > 1 and img_id not in top_40_keepers:
+            stars = max(0, stars - 1)
+        rated[img_id] = stars
+
+    lowest_keeper = min((rated[i] for i in keepers), default=5)
+    burst_rows = []
+    for img_id in sorted_members:
+        is_keeper = img_id in keepers
+        raw_score = burst_sharpness[img_id]
+        flags = burst_flags[img_id]
+        stars = rated[img_id]
+        if not is_keeper:
             if args.nk_mode == "leave":
                 stars = "leave"
             elif args.nk_mode == "reject":
                 stars = -1
+            elif args.nk_mode == "graded":
+                share = (raw_score / best if best > 0 else 0.0) / star_scale
+                drop = next((d for t, d in GRADED_STEPS if share >= t), None)
+                stars = 0 if drop is None else max(0, lowest_keeper - drop)
+                stars = max(0, stars - sum(FLAG_PENALTIES[f][1] for f in penalised[img_id]))
             else:
                 try:
                     stars = int(args.nk_mode)
@@ -1084,7 +1103,8 @@ def report_rows(manifest, result_rows, keepers_per_burst) -> list:
         rows = sorted(by_burst.get(burst_id, []), key=lambda r: -float(r[1]))
         allowed = keepers_per_burst(burst_size[burst_id])
         for rank, (img_id, score, flags, _burst, keeper, stars, *rest) in enumerate(rows, 1):
-            why = (f"kept: rank {rank} of {len(rows)}, {allowed} allowed" if keeper == "1"
+            why = (f"kept: rank {rank} of {len(rows)}, {allowed} allowed" if keeper == "1" and rank <= allowed
+                   else f"kept: rank {rank} of {len(rows)}, within the keeper margin of the best" if keeper == "1"
                    else f"not kept: rank {rank} of {len(rows)}, only {allowed} allowed or not eligible")
             if flags:
                 why += f"; flagged {flags.replace(';', ', ')}"
@@ -1381,7 +1401,9 @@ if __name__ == "__main__":
                         help="Write id,x0,y0,x1,y1,cached SAM prompts to the results path instead of scoring")
     parser.add_argument("--star-scale", default=1.0, type=float,
                         help="Multiplies every sharpness threshold a star needs (universal and relative "
-                             "ranking): above 1 is stricter, below 1 more generous")
+                             "ranking) and the steps graded non-keepers drop by: above 1 is stricter, below 1 more generous")
+    parser.add_argument("--keep-margin", default=0.0, type=float,
+                        help="Also keep every eligible frame scoring at least this share of its burst's best (0 = off)")
     parser.add_argument("--detector", default="",
                         help="With --emit-saliency-points: YOLOX .onnx whose most prominent vehicle box "
                              "prompts SAM; frames without one fall back to the saliency point")

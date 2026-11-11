@@ -205,7 +205,7 @@ In every mode, keepers are picked within their own burst and non-keepers follow 
 - *binary (keepers top)*: every keeper starts at 5 stars and only flags lower it (eyes closed −1, over/underexposed −3).
 - *relative to selection*: tiers scale to the selection you're culling, so its sharpest frames get 5 stars even on a soft lens or in low light. The 5-star mark is the 95th percentile of the frames that could keep, so one freak frame can't flatten everyone else. Each sharpness scale is judged on its own: bursts that switched mode from EXIF, and SAM bursts with and without masks, don't share a 5-star mark. Ratings only appear once every burst is scored, even with *apply ratings while scoring* on.
 
-**Star strictness** (default *standard (×1)*) multiplies the sharpness every star needs in *universal* and *relative* ranking. *Stricter (×1.25)* to *strictest (×2)* hand out fewer stars for the same frames; *more generous (×0.75)* and *much more generous (×0.5)* hand out more. Scores and keeper picks don't change, and neither does *binary*. Changing it re-applies from the [score cache](#score-cache) without decoding again.
+**Star strictness** (default *standard (×1)*) multiplies the sharpness every star needs in *universal* and *relative* ranking, and how fast [graded non-keepers](#non-keepers) lose stars. *Stricter (×1.25)* to *strictest (×2)* hand out fewer stars for the same frames; *more generous (×0.75)* and *much more generous (×0.5)* hand out more. Scores and keeper picks don't change, and neither does *binary*. Changing it re-applies from the [score cache](#score-cache) without decoding again.
 
 ### Sharpness
 
@@ -277,9 +277,23 @@ It runs on the CPU and adds about a tenth of a second per frame. If the file is 
 
 How many frames per burst survive: *single best only*, *portrait (1 or 2)*, *dynamic (1 to 5)* (scales with burst size), or *keep all (focus stack)* for frames you'll merge rather than cull.
 
+**Keeper margin** (default *off*) keeps more: every frame scoring within 95%, 90%, 85%, 80% or 75% of its burst's sharpest frame is kept too, on top of the *keepers* count. A burst of near-identical sharp frames then keeps all of them, and a burst with one clear winner still keeps one. The extra keepers count as lower keepers, so they lose one star like any keeper outside the burst's top 40%. `last-run.csv` says "within the keeper margin of the best" for them.
+
 ### Non-keepers
 
-What happens to the frames that aren't kept: *leave alone*, *reject (-1)*, or a fixed star count from 0 to 5. They always get the `Rejected` tag regardless.
+What happens to the frames that aren't kept: *leave alone*, *reject (-1)*, a fixed star count from 0 to 5, or *graded by burst*. They always get the `Rejected` tag regardless.
+
+*graded by burst* rates each non-keeper below the burst's lowest keeper, by how sharp it is next to the burst's best frame:
+
+| Share of the best | Stars |
+|---|---|
+| 90% or more | one less than the lowest keeper |
+| 75% or more | two less |
+| 60% or more | three less |
+| 45% or more | four less |
+| below 45% | 0 |
+
+Flags still cost a star each. **Star strictness** scales these steps too: stricter drops non-keepers faster, more generous keeps them closer to the keeper. For a spread of ratings around each burst's best frame, use *graded by burst* with a keeper margin of 90%.
 
 ### 2 bursts
 
@@ -368,7 +382,7 @@ A cached score is only reused when everything that produced it is the same:
 
 | Changes the score (new entry) | Only uses the score (reused) |
 |-------------------------------|------------------------------|
-| the file itself (path, modified time, size) | ranking mode, star strictness |
+| the file itself (path, modified time, size) | ranking mode, star strictness, keeper margin |
 | sharpness mode, as adjusted by [shooting intent](#shooting-intent-from-exif) | keepers, non-keepers |
 | motorsport mode: the vehicle detector file, the frame's shutter speed and focal length | |
 | exposure mode | grouping support |
@@ -391,6 +405,7 @@ Everything you'd change per shoot is a panel option or a preference. What's left
   - `SHADOW_CLIP`, `HIGHLIGHT_CLIP` and `CLIP_PCT_FLAG` control exposure flagging.
   - `TIER_THRESHOLDS` (universal mode) and `STAR_THRESHOLDS` (binary and relative mode, as a percentage) turn sharpness into stars.
   - `RELATIVE_REFERENCE_PERCENTILE` sets which frame marks 5 stars in relative mode.
+  - `GRADED_STEPS` sets the shares of the burst's best that *graded by burst* non-keepers step down at.
   - `FLAG_PENALTIES` sets what each flag costs: points off the binary score (15 points is one star) and stars off in universal and relative mode.
   - `BLINK_MIN_FACE_PX` is the smallest face width judged for closed eyes.
   - `DETECTOR_MIN_SCORE` is the confidence a vehicle detection needs.
