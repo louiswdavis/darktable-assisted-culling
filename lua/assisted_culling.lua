@@ -9,11 +9,14 @@ local M = {}
 local THIS_DIR = (debug.getinfo(1, "S").source:sub(2):match("^(.*)[/\\]")) or "."
 
 -- plugin_common.lua lives beside this file; when this file was copied into lua/contrib by
--- hand it is found through the plugin folder preference instead.
+-- hand it is found through the plugins folder preference (or the old plugin folder one).
+-- C.plugin_folder isn't loaded yet, so both keys are read here directly.
 local function load_common()
     local dirs, tried = { THIS_DIR }, {}
     local ok_dt, dt0 = pcall(require, "darktable")
     if ok_dt then
+        local ok_r, root = pcall(dt0.preferences.read, "assisted_plugins", "plugins_root", "directory")
+        if ok_r and root and root ~= "" then dirs[#dirs + 1] = root .. "/darktable-assisted-culling/lua" end
         local ok_p, folder = pcall(dt0.preferences.read, "assisted_culling", "plugin_folder", "directory")
         if ok_p and folder and folder ~= "" then dirs[#dirs + 1] = folder .. "/lua" end
     end
@@ -24,7 +27,7 @@ local function load_common()
         tried[#tried + 1] = path
     end
     error("assisted_culling: plugin_common.lua not found (tried " .. table.concat(tried, ", ")
-        .. "). Copy it next to assisted_culling.lua, or set the plugin folder preference.")
+        .. "). Copy it next to assisted_culling.lua, or set the plugins folder preference.")
 end
 local C = load_common()
 
@@ -330,14 +333,7 @@ end
 local DETECTOR_FILE = "object_detection_yolox_2022nov.onnx"
 
 if dt.gui then
-    dt.preferences.register("assisted_culling", "python_bin", "file",
-        "Assisted Culling: Python interpreter",
-        "Python executable with opencv-python-headless, numpy, Pillow and rawpy installed (e.g. .venv\\Scripts\\python.exe). Empty = auto-detect the repo's .venv",
-        "")
-    dt.preferences.register("assisted_culling", "plugin_folder", "directory",
-        "Assisted Culling: plugin folder",
-        "The darktable-assisted-culling folder (holds python/, models/ and .venv). Empty = auto-detect. Subject tracking (SAM) uses models/" .. DETECTOR_FILE .. " from it when present, to outline the most prominent car, motorcycle or truck for SAM",
-        "")
+    C.register_shared_prefs(dt)
 end
 
 -- The settings a run reads: a copy of the panel's, taken when the run was clicked.
@@ -355,9 +351,11 @@ local settings = remembered_settings()
 
 local file_exists, read_file, first_existing = C.file_exists, C.read_file, C.first_existing
 
+-- Defined with the log buffer further down; the preference readers log deprecations.
+local log
+
 local function plugin_folder_pref()
-    local folder = (dt.preferences.read("assisted_culling", "plugin_folder", "directory") or ""):gsub("[/\\]+$", "")
-    return folder
+    return C.plugin_folder(dt, "assisted_culling", "darktable-assisted-culling", log)
 end
 
 -- The script is found from the plugin folder preference alone when it's set; a
@@ -367,7 +365,7 @@ local function score_script()
     if folder ~= "" then
         local script = folder .. "/python/score_images.py"
         if not (df.test_file(script, "e") or file_exists(script)) then
-            error("the plugin folder preference (" .. folder .. ") has no python/score_images.py; point it at the darktable-assisted-culling folder, or clear it to auto-detect", 0)
+            error("the plugins folder preference gives " .. folder .. ", which has no python/score_images.py; point it at the folder holding darktable-assisted-culling, or clear it to auto-detect", 0)
         end
         return script
     end
@@ -388,8 +386,8 @@ local function plugin_root(script)
 end
 
 local function python_bin(script)
-    local pref = dt.preferences.read("assisted_culling", "python_bin", "file")
-    if pref and pref ~= "" then return pref end
+    local pref = C.python_bin(dt, "assisted_culling", log)
+    if pref ~= "" then return pref end
 
     local root = plugin_root(script)
     local found = first_existing({
@@ -622,7 +620,7 @@ end
 -- two processes appending at once can overwrite each other's lines on Windows.
 local log_buffer = {}
 
-local function log(msg)
+function log(msg)
     log_buffer[#log_buffer + 1] = os.date("%H:%M:%S ") .. "lua: " .. msg
 end
 

@@ -11,6 +11,62 @@ local C = {}
 
 C.IS_WINDOWS = package.config:sub(1, 1) == "\\"
 
+-- Shared preferences ------------------------------------------------------------
+-- One Python interpreter and one plugins folder for all three plugins. The old
+-- per-plugin keys still work and log a deprecation line once per key.
+
+C.SHARED_GROUP = "assisted_plugins"
+
+-- Each plugin loads its own copy of this file, so the "registered" mark lives in
+-- package.loaded, which all scripts in darktable's Lua state share.
+local REGISTERED_MARK = "assisted_plugins.shared_prefs_registered"
+
+function C.register_shared_prefs(dt)
+    if package.loaded[REGISTERED_MARK] then return end
+    package.loaded[REGISTERED_MARK] = true
+    dt.preferences.register(C.SHARED_GROUP, "python_bin", "file",
+        "Python interpreter (.venv)",
+        "Python executable with every plugin's python/requirements.txt installed (e.g. .venv\\Scripts\\python.exe). Shared by Assisted Grouping, Culling and Tagging. Empty = auto-detect each plugin's .venv",
+        "")
+    dt.preferences.register(C.SHARED_GROUP, "plugins_root", "directory",
+        "plugins folder (holds the three assisted-* folders)",
+        "The folder holding darktable-assisted-grouping, darktable-assisted-culling and darktable-assisted-tagging. Empty = auto-detect",
+        "")
+end
+
+local deprecation_logged = {}
+
+local function read_pref(dt, group, name, kind)
+    local ok, value = pcall(dt.preferences.read, group, name, kind)
+    return (((ok and value) or ""):gsub("[/\\]+$", ""))
+end
+
+local function old_pref(dt, plugin_group, name, kind, shared_name, log)
+    local value = read_pref(dt, plugin_group, name, kind)
+    local key = plugin_group .. "/" .. name
+    if value ~= "" and log and not deprecation_logged[key] then
+        deprecation_logged[key] = true
+        log(string.format("preferences: %s is deprecated; set %s/%s", key, C.SHARED_GROUP, shared_name))
+    end
+    return value
+end
+
+-- The shared interpreter, else the plugin's old python_bin, else "" (auto-detect).
+function C.python_bin(dt, plugin_group, log)
+    local shared = read_pref(dt, C.SHARED_GROUP, "python_bin", "file")
+    if shared ~= "" then return shared end
+    return old_pref(dt, plugin_group, "python_bin", "file", "python_bin", log)
+end
+
+-- <plugins_root>/<folder_name>, else the plugin's old plugin_folder, else fallback ("" when nil).
+function C.plugin_folder(dt, plugin_group, folder_name, log, fallback)
+    local root = read_pref(dt, C.SHARED_GROUP, "plugins_root", "directory")
+    if root ~= "" then return root .. "/" .. folder_name end
+    local old = old_pref(dt, plugin_group, "plugin_folder", "directory", "plugins_root", log)
+    if old ~= "" then return old end
+    return fallback or ""
+end
+
 -- Group keys --------------------------------------------------------------------
 -- How culling and tagging read the groups grouping wrote (tags or native groups).
 
@@ -542,12 +598,13 @@ function C.preset_defaults(schema)
 end
 
 -- Every schema key set: the decoded value when valid, else the default. Returns the
--- settings and the keys whose stored value was unusable (missing keys aren't problems).
+-- settings and the keys whose stored value was unusable (missing keys aren't problems;
+-- a stored "" for a number or bool key counts as missing).
 function C.preset_merge(schema, decoded)
     local out, problems = {}, {}
     for _, item in ipairs(schema) do
         local v = decoded and decoded[item.key]
-        if v == nil then
+        if v == nil or (v == "" and (item.kind == "number" or item.kind == "bool")) then
             out[item.key] = item.default
         elseif preset_value_ok(item, v) then
             out[item.key] = v
@@ -647,7 +704,7 @@ end
 -- Optional store.copy_note(from, to) -> confirm text | nil, why and store.copy(from, to) -> ok, err:
 -- store new then asks first, and copies the selected preset's store (e.g. a folder) before writing.
 -- Returns ctl: ctl.widget (the box to put first in the panel), ctl.widgets, ctl.select(name),
--- ctl.refresh(), ctl.check_dirty(), ctl.name(), ctl.saved (settings last loaded or saved).
+-- ctl.refresh(), ctl.reload(), ctl.check_dirty(), ctl.name(), ctl.saved (settings last loaded or saved).
 function C.make_preset_controls(o)
     local ctl = { widgets = {} }
     local names, current, menu_actions = { "template" }, nil, {}
@@ -784,6 +841,14 @@ function C.make_preset_controls(o)
         hide_boxes()
         set_menu()
         if o.on_change then o.on_change(name, name == "template") end
+        ctl.check_dirty()
+        return true
+    end
+
+    -- Rereads the selected preset's file into the panel, dropping unsaved panel changes.
+    -- False (panel untouched) when the file can't be used.
+    function ctl.reload()
+        if not current or not load(current) then return false end
         ctl.check_dirty()
         return true
     end
