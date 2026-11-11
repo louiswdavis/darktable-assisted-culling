@@ -6,6 +6,8 @@ stress_test_cull.py — Stress test harness for the Assisted Culling pipeline (6
 import os
 import sys
 import csv
+import shutil
+import tempfile
 import time
 import tracemalloc
 from argparse import Namespace
@@ -47,9 +49,9 @@ def generate_mock_manifest(num_images=6000, tmp_dir="./"):
     return str(manifest_path), str(dummy_img_dir)
 
 def run_stress_test():
-    tmp_dir = "./stress_test_tmp"
-    os.makedirs(tmp_dir, exist_ok=True)
-    
+    tmp_dir = tempfile.mkdtemp(prefix="stress_test_cull_")
+    failed = False
+
     manifest_path, dummy_img_dir = generate_mock_manifest(6000, tmp_dir)
     results_path = os.path.join(tmp_dir, "stress_results.csv")
     progress_path = os.path.join(tmp_dir, "stress_progress.txt")
@@ -74,6 +76,7 @@ def run_stress_test():
         print(f"[Stress Test] CRITICAL ERROR: {e}")
         import traceback
         traceback.print_exc()
+        failed = True
 
     end_time = time.time()
     current_ram, peak_ram = tracemalloc.get_traced_memory()
@@ -91,15 +94,10 @@ def run_stress_test():
             line_count = sum(1 for _ in rf)
         print(f" Output Rows Written  : {line_count}")
 
-    # Cleanup test files
-    for p in Path(tmp_dir).glob("**/*"):
-        if p.is_file():
-            p.unlink()
-    try:
-        Path(dummy_img_dir).rmdir()
-        Path(tmp_dir).rmdir()
-    except Exception:
-        pass
+    shutil.rmtree(tmp_dir, ignore_errors=True)
+    if failed:
+        print("[Stress Test] FAILED.")
+        sys.exit(1)
     print("[Stress Test] Cleanup complete. Test passed successfully!")
 
 if __name__ == "__main__":
