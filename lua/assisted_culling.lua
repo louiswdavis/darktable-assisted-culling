@@ -222,13 +222,12 @@ function M.diag_tag_changes(have, wanted)
     return attach, detach
 end
 
--- wanted: the scorer's ";"-joined column 7; off: branch names turned off
--- (e.g. { Subject = true }). Returns column 7 without those branches, so
--- diag_tag_changes detaches them.
+-- wanted: the scorer's ";"-joined column 7; off: full relative names turned off
+-- (M.diag_off). Returns column 7 without them, so diag_tag_changes detaches them.
 function M.filter_diag(wanted, off)
     local kept = {}
     for rel in wanted:gmatch("[^;]+") do
-        if not off[rel:match("^[^|]+")] then kept[#kept + 1] = rel end
+        if not off[rel] then kept[#kept + 1] = rel end
     end
     return table.concat(kept, ";")
 end
@@ -292,13 +291,14 @@ M.PRESET_SCHEMA = {
     { key = "tag_underexposed", kind = "bool", default = true },
     { key = "tag_eyes_closed", kind = "bool", default = true },
     { key = "tag_subject", kind = "bool", default = true },
+    { key = "tag_subject_guessed", kind = "bool", default = true },
     { key = "tag_technique", kind = "bool", default = true },
     { key = "tag_scored", kind = "bool", default = true },
     { key = "tag_why", kind = "bool", default = true },
 }
 
 -- The panel's pages and the preset keys each page's widgets edit (C.page_coverage checks them).
--- Page 4 holds every `tag_` key of the schema (TAG_TOGGLES is declared after the darktable guard).
+-- Page 4 holds every `tag_` key of the schema.
 local tag_keys = {}
 for _, f in ipairs(M.PRESET_SCHEMA) do
     if f.key:sub(1, 4) == "tag_" then tag_keys[#tag_keys + 1] = f.key end
@@ -314,6 +314,75 @@ M.PANEL_PAGES = {
     { number = 6, title = "tools", keys = {} },
 }
 M.PANEL_OTHER_KEYS = {}
+
+-- One "tag_<key>" setting per row. Off = runs stop writing the row's tags and
+-- detach them from the images they process; ratings and keeper picks are
+-- unchanged. kind: output (flags and keeper picks), check (frames to look at by
+-- hand, written whatever the diagnostics say), diag (how the run decided).
+-- Keys match FLAGS names for the flag rows.
+M.TAG_TOGGLES = {
+    { key = "keeper", label = "Keeper", kind = "output", writes = { "Keeper" },
+      when = "the best frame (or frames) of its burst." },
+    { key = "rejected", label = "Rejected", kind = "output", writes = { "Rejected" },
+      when = "it lost to a sharper frame from the same burst. Its stars follow the non-keepers setting." },
+    { key = "overexposed", label = "Overexposed", kind = "output", writes = { "Overexposed" },
+      when = "blown highlights, judged by the exposure setting." },
+    { key = "underexposed", label = "Underexposed", kind = "output", writes = { "Underexposed" },
+      when = "crushed shadows, judged by the exposure setting." },
+    { key = "eyes_closed", label = "Eyes Closed", kind = "output", writes = { "Eyes Closed" },
+      when = "face & eyes sharpness only: a face big enough to judge shows no open eyes. Dark sunglasses trigger it too." },
+    { key = "subject_guessed", label = "Subject guessed", kind = "check", writes = { "Subject|Vehicle|Guessed" },
+      when = "subject tracking (SAM) only. The vehicle detector found nothing, so SAM got the guessed subject point: check these frames by hand." },
+    { key = "subject", label = "Subject", kind = "diag", writes = { "Subject|Vehicle|Detected" },
+      when = "subject tracking (SAM) only. Detected: the vehicle detector found the car SAM was pointed at." },
+    { key = "technique", label = "Technique", kind = "diag", writes = { "Technique|Panning", "Technique|Shallow DoF", "Technique|Motion Blur", "Technique|Missed Pan" },
+      when = "the burst's EXIF switched its sharpness mode: panning at 1/125 s or slower, shallow DoF at f/4 or wider. Motorsport mode tags each frame instead: Panning (car sharp, background streaked), Motion Blur (whole frame blurred in one line), Missed Pan (car blurred across the pan)." },
+    { key = "scored", label = "Scored", kind = "diag", writes = { "Scored|Masked", "Scored|Subject bias" },
+      when = "subject tracking (SAM) only. Masked: the burst was ranked on SAM masks. Subject bias: a shortlisted frame got no mask, so the burst fell back." },
+    { key = "why", label = "Why", kind = "diag",
+      writes = { "Why|Keeper", "Why|Keeper by margin", "Why|Outranked", "Why|Graded", "Why|Not shortlisted" },
+      when = "every scored frame, saying how it was decided. Keeper: kept by rank. Keeper by margin: kept by the keeper margin. Outranked: lost to a sharper frame (left or rejected). Graded: lost and rated by burst. Not shortlisted: subject tracking (SAM) left it out of the shortlist. Filter on one to step through, say, every frame that lost to the margin." },
+}
+
+-- Headings of the tags-written page, in order; each TAG_TOGGLES row's `kind` is one of these.
+M.TAG_KINDS = {
+    { kind = "output", label = "outputs" },
+    { kind = "check", label = "checks" },
+    { kind = "diag", label = "how it decided" },
+}
+
+-- TAG_TOGGLES rows grouped by TAG_KINDS order, file order within a kind.
+function M.tag_rows_in_order()
+    local rows = {}
+    for _i, k in ipairs(M.TAG_KINDS) do
+        for _j, t in ipairs(M.TAG_TOGGLES) do
+            if t.kind == k.kind then rows[#rows + 1] = t end
+        end
+    end
+    return rows
+end
+
+-- enabled: tag_<key> switches by key. Returns the relative names (column 7 form)
+-- of every switched-off non-output row, for filter_diag.
+function M.diag_off(enabled)
+    local off = {}
+    for _i, t in ipairs(M.TAG_TOGGLES) do
+        if t.kind ~= "output" and not enabled[t.key] then
+            for _j, rel in ipairs(t.writes) do off[rel] = true end
+        end
+    end
+    return off
+end
+
+-- Returns preset text that holds tag_subject_guessed, copied from tag_subject when
+-- absent (an old preset keeps its Subject choice for Guessed), and the list of keys
+-- copied; text that does not decode or needs no copy comes back unchanged, copied nil.
+function M.upgrade_preset_text(text)
+    local decoded = M.preset_decode(text)
+    if not decoded or decoded.tag_subject_guessed ~= nil or decoded.tag_subject == nil then return text end
+    decoded.tag_subject_guessed = decoded.tag_subject
+    return M.preset_encode(M.PRESET_SCHEMA, decoded), { "tag_subject_guessed" }
+end
 
 local ok, dt = pcall(require, "darktable")
 if not ok then return M end
@@ -401,6 +470,7 @@ local function remembered_settings()
     if not f then return M.preset_defaults(M.PRESET_SCHEMA) end
     local text = f:read("a")
     f:close()
+    text = M.upgrade_preset_text(text)
     return (M.preset_merge(M.PRESET_SCHEMA, M.preset_decode(text) or {}))
 end
 local settings = remembered_settings()
@@ -626,31 +696,6 @@ local FLAGS = {
 }
 local ALL_TAGS = { TAG_KEEPER, TAG_REJECT, TAG_CULLED }
 for _, f in ipairs(FLAGS) do ALL_TAGS[#ALL_TAGS + 1] = f.tag end
-
--- One "tag_<key>" setting per branch under "Assisted Culling|". Off = runs
--- stop writing it and detach it from the images they process; ratings and
--- keeper picks are unchanged. Keys match FLAGS names for the flag branches.
-local TAG_TOGGLES = {
-    { key = "keeper", label = "Keeper", writes = { "Keeper" },
-      when = "the best frame (or frames) of its burst." },
-    { key = "rejected", label = "Rejected", writes = { "Rejected" },
-      when = "it lost to a sharper frame from the same burst. Its stars follow the non-keepers setting." },
-    { key = "overexposed", label = "Overexposed", writes = { "Overexposed" },
-      when = "blown highlights, judged by the exposure setting." },
-    { key = "underexposed", label = "Underexposed", writes = { "Underexposed" },
-      when = "crushed shadows, judged by the exposure setting." },
-    { key = "eyes_closed", label = "Eyes Closed", writes = { "Eyes Closed" },
-      when = "face & eyes sharpness only: a face big enough to judge shows no open eyes. Dark sunglasses trigger it too." },
-    { key = "subject", label = "Subject", diag = true, writes = { "Subject|Vehicle|Detected", "Subject|Vehicle|Guessed" },
-      when = "subject tracking (SAM) only. Detected: the vehicle detector found the car SAM was pointed at. Guessed: SAM got the guessed subject point instead." },
-    { key = "technique", label = "Technique", diag = true, writes = { "Technique|Panning", "Technique|Shallow DoF", "Technique|Motion Blur", "Technique|Missed Pan" },
-      when = "the burst's EXIF switched its sharpness mode: panning at 1/125 s or slower, shallow DoF at f/4 or wider. Motorsport mode tags each frame instead: Panning (car sharp, background streaked), Motion Blur (whole frame blurred in one line), Missed Pan (car blurred across the pan)." },
-    { key = "scored", label = "Scored", diag = true, writes = { "Scored|Masked", "Scored|Subject bias" },
-      when = "subject tracking (SAM) only. Masked: the burst was ranked on SAM masks. Subject bias: a shortlisted frame got no mask, so the burst fell back." },
-    { key = "why", label = "Why", diag = true,
-      writes = { "Why|Keeper", "Why|Keeper by margin", "Why|Outranked", "Why|Graded", "Why|Not shortlisted" },
-      when = "every scored frame, saying how it was decided. Keeper: kept by rank. Keeper by margin: kept by the keeper margin. Outranked: lost to a sharper frame (left or rejected). Graded: lost and rated by burst. Not shortlisted: subject tracking (SAM) left it out of the shortlist. Filter on one to step through, say, every frame that lost to the margin." },
-}
 
 local function tag_enabled(key)
     return settings["tag_" .. key]
@@ -1111,11 +1156,9 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         local rating_batch = nil
 
         -- read once per run
-        local tag_on, diag_off = {}, {}
-        for _, t in ipairs(TAG_TOGGLES) do
-            tag_on[t.key] = tag_enabled(t.key)
-            if t.diag and not tag_on[t.key] then diag_off[t.label] = true end
-        end
+        local tag_on = {}
+        for _, t in ipairs(M.TAG_TOGGLES) do tag_on[t.key] = tag_enabled(t.key) end
+        local diag_off = M.diag_off(tag_on)
         local diag_tag_objs = {}
 
         local function apply_to_image(img, want_rating, is_keeper, flags, diag)
@@ -1492,15 +1535,15 @@ function M.clear_marks(images)
         dt.print(_("Assisted Culling: select some images first"))
         return
     end
-    local found, any_diag = {}, false
+    local found, saw_tag = {}, false
     for _, name in ipairs(ALL_TAGS) do
         local t = tags.find(name)
         if t then table.insert(found, { tag = t, name = name }) end
     end
     for i = 1, #tags do
-        if M.is_diag_tag(tags[i].name) then any_diag = true; break end
+        if M.is_diag_tag(tags[i].name) then saw_tag = true; break end
     end
-    if #found == 0 and not any_diag then
+    if #found == 0 and not saw_tag then
         dt.print("Assisted Culling: nothing to clear; no Assisted Culling tags exist yet.")
         return
     end
@@ -1756,7 +1799,13 @@ local function install_panel()
     end
 
     local tag_checks = {}
-    for _i, t in ipairs(TAG_TOGGLES) do
+    local kind_labels, last_kind = {}, nil
+    for _i, k in ipairs(M.TAG_KINDS) do kind_labels[k.kind] = k.label end
+    for _i, t in ipairs(M.tag_rows_in_order()) do
+        if t.kind ~= last_kind then
+            tag_checks[#tag_checks + 1] = dt.new_widget("section_label") { label = _(kind_labels[t.kind]) }
+            last_kind = t.kind
+        end
         tag_checks[#tag_checks + 1] = check("tag_" .. t.key, t.label,
             string.format(_("Writes: %s\nWhen: %s\nOff: stops writing it and removes it from images on the next run. Ratings and keeper picks are unchanged."),
                 "Assisted Culling|" .. table.concat(t.writes, ", Assisted Culling|"), _(t.when)))
@@ -1853,10 +1902,23 @@ local function install_panel()
         end
     end
 
+    local store = preset_file_store(dt.configuration.config_dir .. "/assisted_culling/presets")
+    local raw_read = store.read
+    store.read = function(name)
+        local text = raw_read(name)
+        if not text then return text end
+        local upgraded, copied = M.upgrade_preset_text(text)
+        if copied then
+            log("preset " .. name .. ": tag_subject_guessed copied from tag_subject (old preset)")
+            if not is_running then flush_log() end
+        end
+        return upgraded
+    end
+
     ctl = make_preset_controls({
         prefix = "Assisted Culling",
         schema = M.PRESET_SCHEMA,
-        store = preset_file_store(dt.configuration.config_dir .. "/assisted_culling/presets"),
+        store = store,
         read_panel = read_panel,
         show = show_panel,
         remember = function(name) dt.preferences.write("assisted_culling", "preset", "string", name) end,

@@ -133,9 +133,9 @@ Frames are also tagged with how they were judged, so you can spot-check the scor
 
 #### Choosing which tags are written
 
-Every branch above has its own switch under **tags written** in the panel, saved with the [preset](#presets) and all on in `template`. Each switch's tooltip names the tags it writes. Turn off the ones you don't use to keep darktable's tag list short:
+Every row above has its own switch under **tags written** in the panel (headings *outputs*, *checks*, *how it decided*), saved with the [preset](#presets) as `tag_<row>` keys (including `tag_subject_guessed`, default on) and all on in `template`. Each switch's tooltip names the tags it writes. Turn off the ones you don't use to keep darktable's tag list short:
 
-- **Off** = the next run stops writing that branch and removes it from the images it processes. A branch that was never written never shows up in the tag list.
+- **Off** = the next run stops writing that row's tags and removes them from the images it processes. Switching *Subject* off drops `Detected` only; `Guessed` has its own switch. A tag that was never written never shows up in the tag list.
 - **Stars and keeper picks don't change.** The tags only report the decision; flags still cost stars per *"… lowers stars"*.
 - Images outside the run keep their old tags; select them and use **Clear culling marks**. darktable keeps tag names nobody uses any more in its tag list; delete them in the tagging module's dictionary.
 - `Locked` is yours and has no switch. The `Run` stamp stays the panel checkbox.
@@ -317,7 +317,13 @@ Flags still cost a star each. **Star strictness** scales these steps too: strict
 
 ### 4 tags written
 
-One switch per branch (default on): `Keeper`, `Rejected`, `Overexposed`, `Underexposed`, `Eyes Closed`, `Subject`, `Technique`, `Scored`, `Why`. Off = runs stop writing that branch and remove it from the images they process; images outside the run keep it until **Clear culling marks**. Ratings and keeper picks don't change. Fewer tag writes also apply results faster. See [Choosing which tags are written](#choosing-which-tags-are-written).
+One switch per row (default on), under three headings:
+
+- **outputs**: `Keeper`, `Rejected`, `Overexposed`, `Underexposed`, `Eyes Closed`.
+- **checks**: `Subject guessed` (writes `Subject|Vehicle|Guessed`: frames to look at by hand).
+- **how it decided**: `Subject` (writes `Subject|Vehicle|Detected`), `Technique`, `Scored`, `Why`.
+
+A check is written whatever the diagnostics say; only its own switch stops it. Off = runs stop writing that row and remove it from the images they process; images outside the run keep it until **Clear culling marks**. Ratings and keeper picks don't change. Fewer tag writes also apply results faster. A preset saved before `Subject guessed` existed loads with it set to whatever `Subject` was, and the panel load logs it (`tag_subject_guessed copied from tag_subject (old preset)`). See [Choosing which tags are written](#choosing-which-tags-are-written).
 
 ### 5 run
 
@@ -473,7 +479,8 @@ Use a selection with at least two bursts of 3+ frames each.
 8. **Cancel.** Start a run on a large selection and click the button while it shows **Cancel culling**. *Expect:* the run stops; frames already done keep their changes. Repeat with the X on the job in darktable's job area. *Expect:* the button shows **Cancelling...** until the run has stopped, then **Cull selection** again; a new run started straight after works normally.
 9. **Why these ratings?** with nothing selected. *Expect:* "Assisted Culling: select some images first".
 10. **Clear culling marks** on the selection. *Expect:* the plugin's tags are gone; star ratings are unchanged.
-11. **Tag switches.** Cull a batch with every tag on and note the stars. Under **tags written** in the panel, turn off *Subject* and *Rejected*, then cull the same batch again. *Expect:* the stars and keepers are the same as before; no image in the batch has an `Assisted Culling|Subject|…` or `Assisted Culling|Rejected` tag; `Keeper`, the flags, `Technique`, `Scored` and `Why` are still there. Filter on `Assisted Culling|Why|Outranked`: every match is a non-keeper. Turn off *Why* and cull again: the `Why` tags are gone from the batch. No `LUA ERROR`.
+11. **Tag switches.** Cull a batch with every tag on and note the stars. Under **tags written** in the panel, turn off *Subject* and *Rejected*, then cull the same batch again. *Expect:* the stars and keepers are the same as before; no image in the batch has an `Assisted Culling|Subject|Vehicle|Detected` or `Assisted Culling|Rejected` tag; `Keeper`, the flags, `Subject|Vehicle|Guessed`, `Technique`, `Scored` and `Why` are still there. Filter on `Assisted Culling|Why|Outranked`: every match is a non-keeper. Turn off *Why* and cull again: the `Why` tags are gone from the batch. No `LUA ERROR`.
+12. **Checks survive diagnostics off.** Turn off *Subject*, *Technique*, *Scored* and *Why* (leave *Subject guessed* on) and cull a burst where the vehicle detector finds nothing. *Expect:* `Assisted Culling|Subject|Vehicle|Guessed` is still written and no `Detected`, `Technique`, `Scored` or `Why` tags appear.
 
 ## Development
 

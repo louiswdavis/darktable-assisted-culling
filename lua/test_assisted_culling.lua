@@ -117,16 +117,53 @@ attach = C.diag_tag_changes({}, "Keeper;Subject|Animal|Bird")
 check("diag tags: only diagnostic folders can be written; new subject kinds need no code",
     table.concat(attach, ","), "Assisted Culling|Subject|Animal|Bird")
 
-check("filter_diag: drops the branches turned off",
-    C.filter_diag("Subject|Vehicle|Car;Scored|Masked;Technique|Panning", { Subject = true, Technique = true }),
+check("filter_diag: drops the names turned off",
+    C.filter_diag("Subject|Vehicle|Car;Scored|Masked;Technique|Panning", { ["Subject|Vehicle|Car"] = true, ["Technique|Panning"] = true }),
     "Scored|Masked")
 check("filter_diag: nothing off keeps the column", C.filter_diag("Subject|Vehicle|Car;Scored|Masked", {}),
     "Subject|Vehicle|Car;Scored|Masked")
-check("filter_diag: matches the branch name, not a prefix of it",
-    C.filter_diag("Scored|Masked", { Score = true }), "Scored|Masked")
-attach, detach = C.diag_tag_changes(have, C.filter_diag("Subject|Vehicle|Car;Scored|Masked", { Subject = true }))
+check("filter_diag: matches the full name, not a prefix of it",
+    C.filter_diag("Scored|Masked", { Scored = true }), "Scored|Masked")
+check("filter_diag: exact names",
+    C.filter_diag("Subject|Vehicle|Guessed;Why|Keeper;Technique|Panning", { ["Subject|Vehicle|Detected"] = true, ["Why|Keeper"] = true }),
+    "Subject|Vehicle|Guessed;Technique|Panning")
+local off_subject = C.diag_off({ subject = false, subject_guessed = true, technique = true, scored = true, why = true })
+check("diag_off: subject off drops Detected only",
+    tostring(off_subject["Subject|Vehicle|Detected"]) .. "/" .. tostring(off_subject["Subject|Vehicle|Guessed"]), "true/nil")
+local off_check = C.diag_off({ subject = true, subject_guessed = false })
+check("diag_off: a check switched off drops its name", tostring(off_check["Subject|Vehicle|Guessed"]), "true")
+check("diag_off: output rows never filter",
+    next(C.diag_off({ keeper = false, rejected = false, subject = true, subject_guessed = true, technique = true, scored = true, why = true })), nil)
+attach, detach = C.diag_tag_changes(have, C.filter_diag("Subject|Vehicle|Car;Scored|Masked", { ["Subject|Vehicle|Car"] = true }))
 check("filter_diag + diag_tag_changes: an off branch is detached, not attached",
     table.concat(attach, ",") .. "/" .. table.concat(detach, ","), "/Assisted Culling|Subject|Vehicle|Guessed")
+
+local kind_ok = {}
+for _, k in ipairs(C.TAG_KINDS) do kind_ok[k.kind] = true end
+local bad_kind = {}
+for _, t in ipairs(C.TAG_TOGGLES) do
+    if not kind_ok[t.kind] then bad_kind[#bad_kind + 1] = t.key end
+end
+check("TAG_TOGGLES: every row has a kind in TAG_KINDS", table.concat(bad_kind, ","), "")
+local order = {}
+for _, t in ipairs(C.tag_rows_in_order()) do order[#order + 1] = t.key end
+check("tag_rows_in_order: outputs, checks, then diagnostics", table.concat(order, ","),
+    "keeper,rejected,overexposed,underexposed,eyes_closed,subject_guessed,subject,technique,scored,why")
+
+local old_off = C.preset_encode(C.PRESET_SCHEMA, { tag_subject = false })
+old_off = old_off:gsub('%s*"tag_subject_guessed"%s*:%s*[a-z]+%s*,?', "")
+local up, copied = C.upgrade_preset_text(old_off)
+check("upgrade_preset_text: tag_subject false gives Guessed off",
+    tostring(C.preset_decode(up).tag_subject_guessed) .. "/" .. table.concat(copied or {}, ","), "false/tag_subject_guessed")
+local old_on = old_off:gsub('"tag_subject"%s*:%s*false', '"tag_subject": true')
+up, copied = C.upgrade_preset_text(old_on)
+check("upgrade_preset_text: tag_subject true gives Guessed on",
+    tostring(C.preset_decode(up).tag_subject_guessed) .. "/" .. table.concat(copied or {}, ","), "true/tag_subject_guessed")
+local full = C.preset_encode(C.PRESET_SCHEMA, { tag_subject = false, tag_subject_guessed = true })
+up, copied = C.upgrade_preset_text(full)
+check("upgrade_preset_text: no-op when tag_subject_guessed is present", tostring(up == full) .. "/" .. tostring(copied), "true/nil")
+up, copied = C.upgrade_preset_text("not json {")
+check("upgrade_preset_text: no-op on text that is not JSON", up .. "/" .. tostring(copied), "not json {/nil")
 
 local flags = C.parse_flags("overexposed;eyes_closed")
 check("parse_flags reads every flag", tostring(flags.overexposed and flags.eyes_closed), "true")
@@ -237,11 +274,11 @@ check("preset schema: switch defaults", string.format("%s %s %s %s %s %s", cd.ru
     cd.fast_jpeg_decode, cd.penalise_overexposed, cd.penalise_underexposed, cd.penalise_eyes_closed),
     "false false true true true true")
 local all_tags_on = true
-for _, k in ipairs({ "keeper", "rejected", "overexposed", "underexposed", "eyes_closed", "subject", "technique", "scored", "why" }) do
+for _, k in ipairs({ "keeper", "rejected", "overexposed", "underexposed", "eyes_closed", "subject", "subject_guessed", "technique", "scored", "why" }) do
     if cd["tag_" .. k] ~= true then all_tags_on = false end
 end
 check("preset schema: every tag switch defaults on", all_tags_on, true)
-check("preset schema: 26 keys", #C.PRESET_SCHEMA, 26)
+check("preset schema: 27 keys", #C.PRESET_SCHEMA, 27)
 local page_missing, page_duplicate = PC.page_coverage(C.PANEL_PAGES, C.PANEL_OTHER_KEYS, C.PRESET_SCHEMA)
 check("PANEL_PAGES: every preset key is on one page or listed off-stack",
     table.concat(page_missing, " ") .. table.concat(page_duplicate, " "), "")

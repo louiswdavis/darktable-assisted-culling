@@ -607,6 +607,11 @@ def run_tests():
     with open(common.__file__, "rb") as f:
         digest = hashlib.sha256(f.read().replace(b"\r\n", b"\n")).hexdigest()
     check("common.py matches the shared copy", digest, COMMON_SHA256)
+    # Shared byte for byte with the tagging repo: bump VEHICLE_DETECT_SHA256 there too.
+    VEHICLE_DETECT_SHA256 = "b1c2d1d6da0d9458a24108990f3a2c53c5b2ac294127adf391f4e966a0997180"
+    with open(os.path.join(os.path.dirname(common.__file__), "vehicle_detect.py"), "rb") as f:
+        digest = hashlib.sha256(f.read().replace(b"\r\n", b"\n")).hexdigest()
+    check("vehicle_detect.py matches the shared copy", digest, VEHICLE_DETECT_SHA256)
     check("common: RAW_EXTENSIONS is the one score_images uses", S.RAW_EXTENSIONS is common.RAW_EXTENSIONS, True)
 
     # eval_culling.py keeps its own copy of the motion tags (it imports no cv2/numpy) -----
