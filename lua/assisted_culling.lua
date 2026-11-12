@@ -982,7 +982,9 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             local detector = plugin_root(sc_script) .. "/models/" .. DETECTOR_FILE
             if not file_exists(detector) then detector = "" end
             local points_argv = { sc_script, MANIFEST_PATH, POINTS_PATH, "--emit-saliency-points" }
-            if detector ~= "" then table.move({ "--detector", detector }, 1, 2, #points_argv + 1, points_argv) end
+            if detector ~= "" then
+                table.move({ "--detector", detector, "--detections", C.detections_path(dt) }, 1, 4, #points_argv + 1, points_argv)
+            end
             table.move({
                 "--keep-mode", tostring(keep_mode),
                 "--exp-mode", tostring(exp_mode),
@@ -1108,7 +1110,9 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         if fast_jpeg then argv[#argv + 1] = "--fast-jpeg" end
         if sharp_mode == "motion_aware" then
             local detector = plugin_root(sc_script) .. "/models/" .. DETECTOR_FILE
-            if file_exists(detector) then table.move({ "--detector", detector }, 1, 2, #argv + 1, argv) end
+            if file_exists(detector) then
+                table.move({ "--detector", detector, "--detections", C.detections_path(dt) }, 1, 4, #argv + 1, argv)
+            end
         end
         if sam_model then
             table.move({ "--prescores", PRESCORE_PATH, "--sam-model", sam_model }, 1, 4, #argv + 1, argv)

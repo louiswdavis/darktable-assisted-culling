@@ -17,7 +17,7 @@ end
 -- plugin_common.lua ---------------------------------------------------------------
 -- The same file in all three plugin repos; COMMON_HASH pins it. After changing it, copy it to the
 -- other two repos and put the hash this prints into their tests too.
-local COMMON_HASH = "66ba39a6"
+local COMMON_HASH = "fccf444e"
 local script_dir = (arg and arg[0] or ""):match("^(.*)[/\\]") or "."
 local PC = dofile(script_dir .. "/plugin_common.lua")
 local function fnv1a(text)
@@ -34,6 +34,8 @@ check("shell_quote: POSIX escapes single quotes", PC.shell_quote("a'b", false), 
 check("parse_csv_line: quoted comma and doubled quote", PC.parse_csv_line('1,"a ""x"", b.jpg",3\r', 3)[2], 'a "x", b.jpg')
 check("parse_csv_line: wrong field count is nil", PC.parse_csv_line("a,b", 3), nil)
 check("lead_rank: full-size JPEG beats RAW", PC.lead_rank("x.JPG") > PC.lead_rank("x.nef"), true)
+check("detections_path: <config_dir>/assisted_plugins/detections.sqlite, backslashes folded",
+    PC.detections_path({ configuration = { config_dir = "C:\\Users\\me\\dt" } }), "C:/Users/me/dt/assisted_plugins/detections.sqlite")
 do -- temp_base / sweep_temp: leftovers older than max_age go, newer ones and other prefixes stay
     local dir = os.tmpname()
     os.remove(dir)

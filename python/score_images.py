@@ -9,7 +9,6 @@ for id,x0,y0,x1,y1,cached SAM prompts (the SAM pre-pass), not results.
 import argparse
 import csv
 import gc
-import io
 import json
 import os
 import re
@@ -23,7 +22,6 @@ from pathlib import Path
 try:
     import numpy as np
     import cv2
-    from PIL import Image, ImageOps
 except ImportError as _e:
     print(
         f"Missing Python package '{_e.name or _e}' in {sys.executable}. "
@@ -33,6 +31,11 @@ except ImportError as _e:
     sys.exit(3)
 
 from common import RAW_EXTENSIONS, atomic_write  # noqa: E402  (stdlib-only module beside this file)
+# Decoding and vehicle detection are shared byte for byte with the tagging plugin.
+import vehicle_detect  # noqa: E402
+from vehicle_detect import (  # noqa: E402
+    COCO_NAMES, DetectionCache, boxes_in, decode_rgb, detect, detection_key, file_key, load_detector,
+)
 # Star tables, keeper rules and the per-burst rating live in rating.py (stdlib only), so
 # eval_culling.py can replay them on a finished run without cv2.
 from rating import (  # noqa: E402,F401
@@ -55,26 +58,8 @@ def frame_flags(exposure: str, eyes_closed: bool = False) -> tuple:
 SALIENCY_GRID = 5
 
 
-def _open_rgb(source, fast_jpeg: bool) -> tuple:
-    """(rgb array upright per EXIF orientation, whether the file carried a rotation)."""
-    img = Image.open(source)
-    if fast_jpeg:
-        try:
-            img.draft("RGB", (MAX_DIM, MAX_DIM))
-        except Exception:
-            pass
-    rotated = img.getexif().get(0x0112, 1) not in (0, 1)
-    return np.array(ImageOps.exif_transpose(img).convert("RGB")), rotated
-
-
-# LibRaw's sizes.flip codes → the np.rot90 turns (counter-clockwise) that make the image upright
-_RAW_FLIP_TURNS = {3: 2, 5: 1, 6: 3}
-
-
-def load_image(filepath: str, fast_jpeg: bool = False) -> np.ndarray:
-    """Decoded image, downscaled and upright, so it matches the orientation
-    darktable's own pipeline (and therefore the SAM masks) uses."""
-    rgb = decode_image(filepath, fast_jpeg)
+def downscale(rgb: np.ndarray) -> np.ndarray:
+    """The frame at most MAX_DIM on its long edge."""
     h, w = rgb.shape[:2]
     scale = MAX_DIM / max(h, w)
     if scale < 1:
@@ -82,30 +67,10 @@ def load_image(filepath: str, fast_jpeg: bool = False) -> np.ndarray:
     return rgb
 
 
-def decode_image(filepath: str, fast_jpeg: bool = False) -> np.ndarray:
-    """Decoded image, upright, at the size the file holds it: a JPEG at full
-    size (fast_jpeg lets it decode near MAX_DIM), a RAW's embedded preview at
-    its own size, or a half-size RAW render when there is no usable preview."""
-    ext = Path(filepath).suffix.lower()
-    if ext in RAW_EXTENSIONS:
-        import rawpy
-        with rawpy.imread(filepath) as raw:
-            try:
-                thumb = raw.extract_thumb()
-                if thumb.format == rawpy.ThumbFormat.JPEG:
-                    rgb, rotated = _open_rgb(io.BytesIO(thumb.data), fast_jpeg)
-                elif thumb.format == rawpy.ThumbFormat.BITMAP:
-                    rgb, rotated = thumb.data, False
-                else:
-                    raise ValueError("Unsupported thumbnail")
-                # embedded previews are usually stored unrotated; the raw header says how to turn them
-                if not rotated:
-                    rgb = np.ascontiguousarray(np.rot90(rgb, _RAW_FLIP_TURNS.get(raw.sizes.flip, 0)))
-            except Exception:
-                rgb = raw.postprocess(half_size=True, use_camera_wb=True, no_auto_bright=True)
-    else:
-        rgb, _ = _open_rgb(filepath, fast_jpeg)
-    return rgb
+def load_image(filepath: str, fast_jpeg: bool = False) -> np.ndarray:
+    """Decoded image, downscaled and upright, so it matches the orientation
+    darktable's own pipeline (and therefore the SAM masks) uses."""
+    return downscale(decode_rgb(filepath, fast_jpeg))
 
 
 def saliency_point(rgb: np.ndarray, grid: int = SALIENCY_GRID) -> tuple:
@@ -138,51 +103,20 @@ def saliency_point(rgb: np.ndarray, grid: int = SALIENCY_GRID) -> tuple:
     return ((c + 0.5) / grid, (r + 0.5) / grid)
 
 
-# YOLOX as exported by opencv_zoo (object_detection_yolox_2022nov.onnx): RGB 0–255
-# letterboxed top-left onto a 114-grey 640² canvas; raw per-anchor grid outputs.
-DETECTOR_INPUT = 640
-DETECTOR_STRIDES = (8, 16, 32)
+# Vehicle boxes come from a vehicle_detect entry (one per frame, shared with the tagging
+# plugin through --detections): every vehicle candidate from CANDIDATE_MIN_SCORE up, in the
+# pixels of the frame the detector saw. Culling's own threshold applies on read.
 DETECTOR_MIN_SCORE = 0.35
-DETECTOR_NMS = 0.5
-VEHICLE_CLASSES = [2, 3, 7]  # COCO car, motorcycle, truck (race cars are often called trucks)
 
 _DETECTORS: dict = {}
 
 
-def _detector(model_path: str):
+def detector_for(model_path: str):
+    """The loaded Detector for a model path, read once per process. vehicle_detect.InputError
+    when the file is missing or of no known family."""
     if model_path not in _DETECTORS:
-        if not os.path.isfile(model_path):
-            raise FileNotFoundError(f"object detector model not found: {model_path}")
-        _DETECTORS[model_path] = cv2.dnn.readNet(model_path)
+        _DETECTORS[model_path] = load_detector(model_path)
     return _DETECTORS[model_path]
-
-
-def _yolox_anchors(size: int = DETECTOR_INPUT) -> tuple:
-    grids, strides = [], []
-    for s in DETECTOR_STRIDES:
-        n = size // s
-        xv, yv = np.meshgrid(np.arange(n), np.arange(n))
-        grids.append(np.stack((xv, yv), 2).reshape(-1, 2))
-        strides.append(np.full((n * n, 1), s))
-    return np.concatenate(grids), np.concatenate(strides)
-
-
-def decode_vehicles(raw: np.ndarray, scale: float) -> list:
-    """Raw YOLOX output (anchors × 85) → [(x0, y0, x1, y1, score, coco_class)]
-    vehicle boxes in source pixels after NMS. `scale` is the letterbox resize factor."""
-    grid, stride = _yolox_anchors()
-    xy = (raw[:, :2] + grid) * stride
-    wh = np.exp(raw[:, 2:4]) * stride
-    cls = raw[:, 4:5] * raw[:, 5:][:, VEHICLE_CLASSES]
-    score, best = cls.max(axis=1), cls.argmax(axis=1)
-    keep = score >= DETECTOR_MIN_SCORE
-    if not keep.any():
-        return []
-    xy, wh, score, best = xy[keep] / scale, wh[keep] / scale, score[keep], best[keep]
-    tl = xy - wh / 2
-    picked = cv2.dnn.NMSBoxes(np.hstack([tl, wh]).tolist(), score.tolist(), DETECTOR_MIN_SCORE, DETECTOR_NMS)
-    return [(tl[i, 0], tl[i, 1], tl[i, 0] + wh[i, 0], tl[i, 1] + wh[i, 1], float(score[i]),
-             VEHICLE_CLASSES[best[i]]) for i in np.asarray(picked).reshape(-1)]
 
 
 def pick_vehicle(boxes: list, w: int, h: int):
@@ -195,23 +129,13 @@ def pick_vehicle(boxes: list, w: int, h: int):
              min(max(x1 / w, 0.0), 1.0), min(max(y1 / h, 0.0), 1.0)), coco)
 
 
-COCO_NAMES = {0: "person", 1: "bicycle", 2: "car", 3: "motorcycle", 4: "airplane", 5: "bus",
-               6: "train", 7: "truck", 8: "boat"}
-
-
-def strongest_detections(raw: np.ndarray, scale: float, w: int, h: int) -> str:
-    """For the log when no vehicle passes: the strongest detection of any
-    class, and the strongest vehicle one, each with its size in the frame."""
-    _, stride = _yolox_anchors()
-    cls = raw[:, 4:5] * raw[:, 5:]
-
-    def describe(i, c):
-        bw, bh = np.exp(raw[i, 2:4]) * stride[i, 0] / scale
-        return f"{COCO_NAMES.get(c, f'class {c}')} {cls[i, c]:.2f} ({bw / w:.2f}x{bh / h:.2f} of frame)"
-
-    i, c = np.unravel_index(np.argmax(cls), cls.shape)
-    vi, vc = np.unravel_index(np.argmax(cls[:, VEHICLE_CLASSES]), (len(cls), len(VEHICLE_CLASSES)))
-    return f"strongest {describe(i, c)}, strongest vehicle {describe(vi, VEHICLE_CLASSES[vc])}"
+def strongest_detections(boxes: list, w: int, h: int) -> str:
+    """For the log when no vehicle passes: the strongest vehicle the entry holds (only vehicle
+    classes are stored, from CANDIDATE_MIN_SCORE up), with its size in the frame."""
+    if not boxes:
+        return f"nothing at {vehicle_detect.CANDIDATE_MIN_SCORE}"
+    x0, y0, x1, y1, score, c = max(boxes, key=lambda b: b[4])
+    return f"strongest vehicle {COCO_NAMES.get(c, f'class {c}')} {score:.2f} ({(x1 - x0) / w:.2f}x{(y1 - y0) / h:.2f} of frame)"
 
 
 def subject_tag(coco) -> str:
@@ -221,20 +145,16 @@ def subject_tag(coco) -> str:
     return "Subject|Vehicle|" + ("Detected" if coco is not None else "Guessed")
 
 
-def vehicle_box(rgb: np.ndarray, model_path: str) -> tuple:
+def vehicle_box(rgb: np.ndarray, entry: dict) -> tuple:
     """(box as frame fractions or None, COCO class or None, log note: "" when a
-    vehicle was found)."""
+    vehicle was found). `entry` is the frame's stored detection; its boxes are
+    rescaled to `rgb` and those at DETECTOR_MIN_SCORE or more compete."""
     h, w = rgb.shape[:2]
-    scale = min(DETECTOR_INPUT / h, DETECTOR_INPUT / w)
-    canvas = np.full((DETECTOR_INPUT, DETECTOR_INPUT, 3), 114.0, np.float32)
-    canvas[:int(h * scale), :int(w * scale)] = cv2.resize(rgb, (int(w * scale), int(h * scale)))
-    net = _detector(model_path)
-    net.setInput(np.transpose(canvas, (2, 0, 1))[np.newaxis])
-    raw = net.forward(net.getUnconnectedOutLayersNames())[0][0]
-    found = pick_vehicle(decode_vehicles(raw, scale), w, h)
+    boxes = boxes_in(entry, w, h)
+    found = pick_vehicle([b for b in boxes if b[4] >= DETECTOR_MIN_SCORE], w, h)
     if found:
         return found[0], found[1], ""
-    return None, None, f"no vehicle at {DETECTOR_MIN_SCORE}: {strongest_detections(raw, scale, w, h)}"
+    return None, None, f"no vehicle at {DETECTOR_MIN_SCORE}: {strongest_detections(boxes, w, h)}"
 
 
 _CASCADES: dict = {}
@@ -444,11 +364,13 @@ def cancel_requested(progress_path: str) -> bool:
     return Path(progress_path + ".cancel").exists()
 
 
-def _init_worker():
+def _init_worker(detector_path: str = ""):
     try:
         cv2.setNumThreads(1)
     except Exception:
         pass
+    if detector_path:
+        detector_for(detector_path)  # read once per worker, not once per frame
 
 
 SHORTLIST_MIN = 3
@@ -527,8 +449,7 @@ def technique_tag(burst_mode: str) -> str:
 # no version to bump. test_score_images.py fails when a module constant is in neither
 # tuple, so a new constant must be filed here.
 CACHE_INPUTS = (
-    "MAX_DIM", "SHADOW_CLIP", "HIGHLIGHT_CLIP", "CLIP_PCT_FLAG", "SALIENCY_GRID",
-    "DETECTOR_INPUT", "DETECTOR_STRIDES", "DETECTOR_MIN_SCORE", "DETECTOR_NMS", "VEHICLE_CLASSES",
+    "MAX_DIM", "SHADOW_CLIP", "HIGHLIGHT_CLIP", "CLIP_PCT_FLAG", "SALIENCY_GRID", "DETECTOR_MIN_SCORE",
     "BLINK_MIN_FACE_PX", "EYE_SEARCH_TOP", "MASK_ASPECT_TOLERANCE", "UNIFORMITY_MIN_CONTRAST", "EXIF_SLACK",
     "SUBJECT_PAD", "SUBJECT_CROP_MAX", "NORM_MIN_CONTRAST", "MOTION_GRID", "STREAK_COHERENCE", "STREAK_ANGLE_TOL",
     "SUBJECT_STREAK_MAX", "STREAK_SHARE", "STREAK_SHARE_SLOW", "STREAK_SHARE_FAST", "PAN_REACH", "FAST_SHUTTER",
@@ -559,8 +480,9 @@ def _jsonable(v):
 
 
 def cache_fingerprint() -> str:
-    """12 hex chars over CACHE_INPUTS' values and the decoder versions (OpenCV, Pillow,
-    rawpy, numpy). Part of every cache key, so any of them changing misses the cache."""
+    """12 hex chars over CACHE_INPUTS' values, vehicle_detect's detection fingerprint and the
+    decoder versions (OpenCV, Pillow, rawpy, numpy). Part of every cache key, so any of them
+    changing misses the cache."""
     global _FINGERPRINT
     if _FINGERPRINT:
         return _FINGERPRINT
@@ -573,19 +495,10 @@ def cache_fingerprint() -> str:
         rawpy_version = "none"
     g = globals()
     bits = {name: _jsonable(g[name]) for name in CACHE_INPUTS}
+    bits["detection"] = vehicle_detect.detection_fingerprint()
     bits["versions"] = [cv2.__version__, PIL.__version__, rawpy_version, np.__version__]
     _FINGERPRINT = hashlib.sha1(json.dumps(bits, sort_keys=True, default=str).encode()).hexdigest()[:12]
     return _FINGERPRINT
-
-
-def file_key(filepath: str):
-    """[path, mtime_ns, size], or None if the file can't be stat'ed (it then
-    isn't cached, and the decode reports the real error)."""
-    try:
-        st = os.stat(filepath)
-    except OSError:
-        return None
-    return [os.path.abspath(filepath), st.st_mtime_ns, st.st_size]
 
 
 class ScoreCache:
@@ -645,10 +558,11 @@ class ScoreCache:
 
 
 def detector_key(detector: str):
-    """The detector model's identity for stage-A keys; "" when there's none."""
+    """The detector model's identity (family, file name, size, sha1) for cache keys;
+    "" when there's none."""
     if not detector:
         return ""
-    return file_key(detector)
+    return detector_for(detector).id
 
 
 def masked_key(filepath: str, args, prompt, edited: str):
@@ -795,15 +709,17 @@ def classify_motion(tiles: list, box, share_needed: float) -> tuple:
     return "missed_pan", straight
 
 
-def motion_aware_score(filepath: str, rgb: np.ndarray, detector: str, exposure: float, focal: float) -> tuple:
+def motion_aware_score(filepath: str, rgb: np.ndarray, entry, exposure: float, focal: float,
+                       full=None) -> tuple:
     """(score, class, straightness, log detail) for one frame. rgb is the
-    MAX_DIM frame; the car is cut from a full-size decode. No detector or no
-    vehicle → the centre third stands in for the car."""
+    MAX_DIM frame; the car is cut from a full-size decode (`full` when the
+    caller has one). entry is the frame's stored detection, None without a
+    detector. No detector or no vehicle → the centre third stands in for the car."""
     box, note = None, "no detector"
-    if detector:
-        box, _, note = vehicle_box(rgb, detector)
+    if entry is not None:
+        box, _, note = vehicle_box(rgb, entry)
     region = box or CENTRE_BOX
-    crop = subject_crop(decode_image(filepath), region)
+    crop = subject_crop(decode_rgb(filepath) if full is None else full, region)
     subject = normalised_sharpness(crop)
     cls, straight = classify_motion(motion_tiles(cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)), region,
                                     streak_share_needed(exposure, focal))
@@ -828,13 +744,29 @@ def lift_motion_blur(scores: dict, motion: dict) -> dict:
     return out
 
 
+def frame_entry(rgb: np.ndarray, detector: str, detections):
+    """(the frame's detection entry or None without a detector, the entry when it was
+    detected here or None when `detections` was the stored one): the parent writes
+    only fresh entries to the shared cache."""
+    if not detector:
+        return None, None
+    if detections is not None:
+        return detections, None
+    fresh = detect(rgb, detector_for(detector))
+    return fresh, fresh
+
+
 def process_single_image(filepath: str, sharp_mode: str, exp_mode: str, cancel_path: str = "",
                          fast_jpeg: bool = False, mask_path: str = "", detector: str = "",
-                         exposure: float = 0.0, focal: float = 0.0):
+                         exposure: float = 0.0, focal: float = 0.0, detections=None):
+    """(filepath, score, flags, error, fresh detection entry or None). The detector sees
+    the frame as decoded; scoring sees it downscaled to MAX_DIM."""
     if cancel_path and os.path.exists(cancel_path):
-        return filepath, None, None, "cancelled"
+        return filepath, None, None, "cancelled", None
     try:
-        rgb = load_image(filepath, fast_jpeg)
+        full = decode_rgb(filepath, fast_jpeg)
+        entry, fresh = frame_entry(full, detector if sharp_mode == "motion_aware" else "", detections)
+        rgb = downscale(full)
         eyes_closed = False
         if sharp_mode == "face_detect":
             sharp, eyes_closed = face_detect_score(rgb)
@@ -844,30 +776,34 @@ def process_single_image(filepath: str, sharp_mode: str, exp_mode: str, cancel_p
             masked = _masked_sharpness(gray, mask_path) if mask_path else None
             sharp = (masked, sharpness_score(rgb, "subject_focus"))
         elif sharp_mode == "motion_aware":
-            sharp = motion_aware_score(filepath, rgb, detector, exposure, focal)
+            # a fast_jpeg decode is near MAX_DIM, so the car is cut from a second, full decode
+            sharp = motion_aware_score(filepath, rgb, entry, exposure, focal, None if fast_jpeg else full)
         else:
             sharp = sharpness_score(rgb, sharp_mode, mask_path)
-        return filepath, sharp, frame_flags(exposure_status(rgb, exp_mode), eyes_closed), None
+        return filepath, sharp, frame_flags(exposure_status(rgb, exp_mode), eyes_closed), None, fresh
     except Exception as e:
-        return filepath, None, None, str(e)
+        return filepath, None, None, str(e), None
 
 
 def process_single_saliency(filepath: str, fast_jpeg: bool = False, exp_mode: str = "whole_frame",
-                            detector: str = ""):
+                            detector: str = "", detections=None):
     """The SAM prompt is a vehicle box (x0, y0, x1, y1) when `detector` finds one,
-    else the saliency point (x, y). The last two fields are the subject tag
-    ("" without a detector) and the detector's log note."""
+    else the saliency point (x, y). Then the subject tag ("" without a detector),
+    the detector's log note and the fresh detection entry (None when `detections`
+    was the stored one or there is no detector)."""
     try:
-        rgb = load_image(filepath, fast_jpeg)
-        if detector:
-            prompt, coco, note = vehicle_box(rgb, detector)
+        full = decode_rgb(filepath, fast_jpeg)
+        entry, fresh = frame_entry(full, detector, detections)
+        rgb = downscale(full)
+        if entry is not None:
+            prompt, coco, note = vehicle_box(rgb, entry)
             subject = subject_tag(coco)
         else:
             prompt, subject, note = None, "", ""
         return (filepath, prompt or saliency_point(rgb), sharpness_score(rgb, "subject_focus"),
-                exposure_status(rgb, exp_mode), None, subject, note)
+                exposure_status(rgb, exp_mode), None, subject, note, fresh)
     except Exception as e:
-        return filepath, None, None, None, str(e), "", ""
+        return filepath, None, None, None, str(e), "", "", None
 
 
 PRESCORE_FAILED = "failed"
@@ -902,9 +838,7 @@ def emit_saliency_points(manifest, args, cache):
     prescores = getattr(args, "prescores", "")
     exp_mode = getattr(args, "exp_mode", "whole_frame")
     detector = getattr(args, "detector", "")
-    if detector:
-        _detector(detector)  # a missing or unreadable model fails the run, not each frame
-    det_key = detector_key(detector)
+    det_key = detector_key(detector)  # loads the model: a missing or unreadable one fails the run, not each frame
     with open(args.results, "w", newline="", encoding="utf-8"):
         pass
     # opened once for the whole stage; darktable reads it only after the stage's done file
@@ -961,9 +895,15 @@ def emit_saliency_points(manifest, args, cache):
         f"detector {detector or 'off'}")
 
     workers = max(1, (os.cpu_count() or 2) - 1)
-    with concurrent.futures.ProcessPoolExecutor(max_workers=workers, initializer=_init_worker) as executor:
+    stored, detected = {}, 0  # filepath → detection entry already in the shared cache; frames detected here
+    if detector:
+        stored = {row[1]: hit for row in to_decode for hit in [detections.get(detection_key(row[1], detector_for(detector)))]
+                  if hit is not None}
+    with concurrent.futures.ProcessPoolExecutor(max_workers=workers, initializer=_init_worker,
+                                                initargs=(detector,)) as executor:
         future_to_id = {
-            executor.submit(process_single_saliency, row[1], args.fast_jpeg, exp_mode, detector): row[0]
+            executor.submit(process_single_saliency, row[1], args.fast_jpeg, exp_mode, detector,
+                            stored.get(row[1])): row[0]
             for row in to_decode
         }
         for future in concurrent.futures.as_completed(future_to_id):
@@ -974,7 +914,10 @@ def emit_saliency_points(manifest, args, cache):
                 executor.shutdown(wait=False, cancel_futures=True)
                 sys.exit(130)
             image_id = future_to_id[future]
-            filepath, prompt, heuristic, exposure, err, subject, note = future.result()
+            filepath, prompt, heuristic, exposure, err, subject, note, fresh = future.result()
+            if fresh is not None:
+                detections.put(fresh, detection_key(filepath, detector_for(detector)))
+                detected += 1
             if err:
                 log(f"skip saliency {image_id} ({filepath}): {err}")
                 prompt = None
@@ -986,6 +929,8 @@ def emit_saliency_points(manifest, args, cache):
             record(image_id, prompt, heuristic, exposure, subject)
     if pre_file:
         pre_file.close()
+    if detector:
+        log(f"detections: {len(stored)} cached, {detected} detected")
     log("finding subjects: done")
 
 
@@ -1104,18 +1049,20 @@ def main(args):
         return
 
     cache = ScoreCache(getattr(args, "cache", ""))
+    detections = DetectionCache(getattr(args, "detections", ""))  # shared with tagging; "" = detect every run
     try:
         if getattr(args, "emit_saliency_points", False):
-            emit_saliency_points(manifest, args, cache)
+            emit_saliency_points(manifest, args, cache, detections)
         else:
-            score_manifest(manifest, args, cache)
+            score_manifest(manifest, args, cache, detections)
             if getattr(args, "report", ""):
                 write_report(manifest, args)
     finally:
         cache.close()
+        detections.close()
 
 
-def score_manifest(manifest, args, cache):
+def score_manifest(manifest, args, cache, detections):
     total_images = len(manifest)
     burst_groups = {}
     candidates_of = {}  # burst → shortlisted ids, only when the manifest carries a shortlist
@@ -1220,15 +1167,15 @@ def score_manifest(manifest, args, cache):
     # thresholds are part of the key without storing shutter or aperture
     motion = args.sharp_mode == "motion_aware"
     detector = getattr(args, "detector", "") if motion else ""
-    if detector:
-        _detector(detector)  # a missing or corrupt model fails the run here, not the centre third on every frame
+    det_key = detector_key(detector)  # loads the model: a missing or corrupt one fails the run here, not the centre third on every frame
     motion_of = {}  # burst → {id: (class, straightness)}, motion_aware only
+    det_hits = det_fresh = 0
 
     def score_key(filepath, burst_id, image_id):
         key = ("score", file_key(filepath), mode_of[burst_id], args.exp_mode, args.fast_jpeg)
         if motion:
             # the EXIF prior and the detector change the class, so they key it
-            key += (detector_key(detector), [round(v, 6) for v in shot_of[image_id]])
+            key += (det_key, [round(v, 6) for v in shot_of[image_id]])
         return key
 
     def keep_motion(burst_id, image_id, cls, straight):
@@ -1246,7 +1193,8 @@ def score_manifest(manifest, args, cache):
             masked = None if sharp[0] is None else float(sharp[0])
             cache.put({"masked": masked}, *masked_key(filepath, args, prescored[image_id][2], edited))
 
-    with concurrent.futures.ProcessPoolExecutor(max_workers=workers, initializer=_init_worker) as executor:
+    with concurrent.futures.ProcessPoolExecutor(max_workers=workers, initializer=_init_worker,
+                                                initargs=(detector,)) as executor:
         future_to_item = {}
         for burst_id, items in burst_groups.items():
             for image_id, filepath, mask_path, shortlisted, edited in items:
@@ -1271,8 +1219,11 @@ def score_manifest(manifest, args, cache):
                     processed_count += 1
                     burst_completion[burst_id] += 1
                     continue
+                stored = detections.get(detection_key(filepath, detector_for(detector))) if detector else None
+                det_hits += stored is not None
                 fut = executor.submit(process_single_image, filepath, mode_of[burst_id], args.exp_mode,
-                                      cancel_path, args.fast_jpeg, mask_path, detector, *shot_of[image_id])
+                                      cancel_path, args.fast_jpeg, mask_path, detector, *shot_of[image_id],
+                                      detections=stored)
                 future_to_item[fut] = (burst_id, image_id, filepath, mask_path, edited)
         log(f"scoring: {total_images} frames in {total_bursts} bursts, {processed_count} from cache or stage A, "
             f"{len(future_to_item)} to decode, sharpness {args.sharp_mode}")
@@ -1288,9 +1239,12 @@ def score_manifest(manifest, args, cache):
 
             burst_id, image_id, filepath, mask_path, edited = future_to_item[future]
             try:
-                _, sharp, flags, err = future.result()
+                _, sharp, flags, err, fresh = future.result()
             except concurrent.futures.CancelledError:
                 continue
+            if fresh is not None:
+                detections.put(fresh, detection_key(filepath, detector_for(detector)))
+                det_fresh += 1
             if err == "cancelled":
                 executor.shutdown(wait=False, cancel_futures=True)
                 sys.exit(130)
@@ -1318,6 +1272,8 @@ def score_manifest(manifest, args, cache):
                 last_progress = now
                 write_progress(args.progress, processed_count, total_images, completed_bursts, total_bursts)
 
+    if detector:
+        log(f"detections: {det_hits} cached, {det_fresh} detected")
     references = relative_references(relative_scores)
     for (mode, masked), values in relative_scores.items():
         label = f"{mode}{' masked' if masked else ''} ({len(values)} frames)"
@@ -1357,8 +1313,11 @@ if __name__ == "__main__":
     parser.add_argument("--keep-margin", default=0.0, type=float,
                         help="Also keep every eligible frame scoring at least this share of its burst's best (0 = off)")
     parser.add_argument("--detector", default="",
-                        help="With --emit-saliency-points: YOLOX .onnx whose most prominent vehicle box "
-                             "prompts SAM; frames without one fall back to the saliency point")
+                        help="object detector .onnx (YOLOX, D-FINE or RT-DETR) whose most prominent vehicle box "
+                             "prompts SAM (--emit-saliency-points) or locates the car (motion_aware); "
+                             "frames without one fall back to the saliency point or the centre third")
+    parser.add_argument("--detections", default="",
+                        help="SQLite cache of per-frame detections shared with the tagging plugin (empty = detect every run)")
     parser.add_argument("--prescores", default="",
                         help="sam_subject: per-frame fallback scores written by the saliency pass "
                              "and read by the scoring pass, so frames outside the shortlist decode once")

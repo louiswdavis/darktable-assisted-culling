@@ -149,9 +149,11 @@ def _yolox_run(detector: Detector, canvas: np.ndarray, scale: float, w: int, h: 
     return np.column_stack([tl, tl + wh, score, coco])
 
 
-# D-FINE / RT-DETR exported with the post-processor: inputs `images` (1×3×640×640, RGB 0–1)
-# and `orig_target_sizes` (1×2), outputs `labels`, `boxes` (xyxy in input pixels), `scores`.
-# Deformable attention is not in cv2.dnn, so this family runs through onnxruntime.
+# D-FINE / RT-DETR through onnxruntime (deformable attention is not in cv2.dnn), fed the 640²
+# canvas as RGB 0–1. Two export shapes: with the post-processor (inputs `images` and
+# `orig_target_sizes` 1×2; outputs `labels`, `boxes` xyxy in input pixels, `scores`) or the
+# transformers export (onnx-community/dfine_*-ONNX: one image input; outputs `logits` 1×Q×80
+# and `pred_boxes` 1×Q×4 as normalised cx,cy,w,h), which gets sigmoid and the box conversion here.
 def _detr_load(data: bytes):
     import onnxruntime  # lazy: culling installs it only once the DETR family is the default
     return onnxruntime.InferenceSession(data, providers=["CPUExecutionProvider"])
@@ -159,15 +161,24 @@ def _detr_load(data: bytes):
 
 def _detr_run(detector: Detector, canvas: np.ndarray, scale: float, w: int, h: int) -> np.ndarray:
     """Rows [x0, y0, x1, y1, score, coco] in source pixels for the family's classes at
-    CANDIDATE_MIN_SCORE or above; the export's own post-processing has already done NMS."""
+    CANDIDATE_MIN_SCORE or above; set prediction needs no NMS, one box per query."""
     session = detector.net
     names = {i.name for i in session.get_inputs()}
-    size_name = next((n for n in names if "size" in n), "orig_target_sizes")
+    size_name = next((n for n in names if "size" in n), None)
     image_name = next((n for n in names if n != size_name), "images")
-    feeds = {image_name: (np.transpose(canvas, (2, 0, 1))[np.newaxis] / 255.0).astype(np.float32),
-             size_name: np.array([[canvas.shape[1], canvas.shape[0]]], np.int64)}
+    feeds = {image_name: (np.transpose(canvas, (2, 0, 1))[np.newaxis] / 255.0).astype(np.float32)}
+    if size_name:
+        feeds[size_name] = np.array([[canvas.shape[1], canvas.shape[0]]], np.int64)
     out = dict(zip([o.name for o in session.get_outputs()], session.run(None, feeds)))
-    labels, boxes, scores = np.asarray(out["labels"])[0], np.asarray(out["boxes"])[0], np.asarray(out["scores"])[0]
+    if "logits" in out:
+        classes = sorted(detector.classes)
+        probs = 1.0 / (1.0 + np.exp(-np.asarray(out["logits"], np.float64)[0][:, classes]))  # Q × vehicle classes
+        labels = np.array(classes)[probs.argmax(axis=1)]
+        scores = probs.max(axis=1)
+        cxcywh = np.asarray(out["pred_boxes"], np.float64)[0] * np.array([canvas.shape[1], canvas.shape[0]] * 2)
+        boxes = np.column_stack([cxcywh[:, :2] - cxcywh[:, 2:] / 2, cxcywh[:, :2] + cxcywh[:, 2:] / 2])
+    else:
+        labels, boxes, scores = np.asarray(out["labels"])[0], np.asarray(out["boxes"])[0], np.asarray(out["scores"])[0]
     keep = (scores >= CANDIDATE_MIN_SCORE) & np.isin(labels, list(detector.classes))
     if not keep.any():
         return np.zeros((0, 6))

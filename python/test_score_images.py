@@ -10,6 +10,7 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import score_images as S
+import vehicle_detect as VD
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # check names hold arrows; a cp1252 console would crash on them
 failures = 0
@@ -38,28 +39,19 @@ def run_tests():
     flat = np.full((90, 90, 3), 128, dtype=np.uint8)
     check("saliency: flat frame falls back to frame centre", S.saliency_point(flat), (0.5, 0.5))
 
-    # decode_vehicles / pick_vehicle -------------------------------------------
-    raw = np.zeros((8400, 85), np.float32)
-    raw[410, :4] = (0.5, 0.5, np.log(5), np.log(5))   # stride-8 cell (10, 5): 40 px box centred (84, 44)
-    raw[410, 4], raw[410, 5 + 2] = 0.9, 1.0          # a car
-    raw[411, :4] = (-0.5, 0.5, np.log(5), np.log(5))  # the same box, weaker: NMS drops it
-    raw[411, 4], raw[411, 5 + 2] = 0.6, 1.0
-    raw[500, :4] = (0.5, 0.5, np.log(5), np.log(5))
-    raw[500, 4], raw[500, 5 + 0] = 0.9, 1.0          # a person: not a vehicle
-    boxes = S.decode_vehicles(raw, 0.5)
-    check("detector: one vehicle survives class filter and NMS", len(boxes), 1)
-    check("detector: box mapped back to source pixels",
-          [round(float(v), 1) for v in boxes[0][:5]], [128.0, 48.0, 208.0, 128.0, 0.9])
-    check("detector: box keeps its COCO class", boxes[0][5], 2)
-    check("detector: nothing above threshold → no boxes", S.decode_vehicles(np.zeros((8400, 85), np.float32), 1.0), [])
-
-    weak = np.zeros((8400, 85), np.float32)
-    weak[410, :4] = (0.5, 0.5, np.log(5), np.log(5))  # 40 px box at scale 0.5 → 80 px of a 400 px frame
-    weak[410, 4], weak[410, 5 + 2] = 0.5, 0.4         # a car at 0.20, under the threshold
-    weak[500, 4], weak[500, 5 + 0] = 0.9, 0.5         # a person at 0.45
-    check("detector log: names the strongest detection and the strongest vehicle",
-          S.strongest_detections(weak, 0.5, 400, 400),
-          "strongest person 0.45 (0.04x0.04 of frame), strongest vehicle car 0.20 (0.20x0.20 of frame)")
+    # vehicle_box / strongest_detections (shared detection entries) --------------
+    # the detector saw the full 3200x1600 frame; the worker scores a 1600x800 downscale
+    entry = {"frame": [3200, 1600], "detector": "fake", "boxes": [[800, 400, 1600, 800, 0.9, 2]]}
+    check("vehicle_box: the stored box is rescaled to the frame scored, as fractions",
+          S.vehicle_box(np.zeros((800, 1600, 3), np.uint8), entry), ((0.25, 0.25, 0.5, 0.5), 2, ""))
+    weak = {"frame": [400, 400], "detector": "fake", "boxes": [[160, 160, 240, 240, 0.2, 2]]}
+    check("vehicle_box: under DETECTOR_MIN_SCORE → none, the log names the strongest vehicle",
+          S.vehicle_box(np.zeros((400, 400, 3), np.uint8), weak),
+          (None, None, f"no vehicle at {S.DETECTOR_MIN_SCORE}: strongest vehicle car 0.20 (0.20x0.20 of frame)"))
+    check("vehicle_box: an entry with no boxes → none",
+          S.vehicle_box(np.zeros((400, 400, 3), np.uint8), {"frame": [400, 400], "detector": "fake", "boxes": []})[2],
+          f"no vehicle at {S.DETECTOR_MIN_SCORE}: nothing at {VD.CANDIDATE_MIN_SCORE}")
+    check("MAX_DIM is the shared module's fast-JPEG draft size", S.MAX_DIM, VD.FAST_JPEG_DIM)
 
     small_sure = (10, 10, 30, 30, 0.95, 2)
     big_unsure = (100, 50, 300, 250, 0.5, 7)
@@ -316,9 +308,21 @@ def run_tests():
         S.main(Namespace(manifest=man_a, results=points_p, progress="", emit_saliency_points=True,
                          keep_mode="single_best", exp_mode="whole_frame", fast_jpeg=False, prescores="",
                          detector=os.path.join(tmp, "missing.onnx")))
-        check("stage A: missing detector model fails the run", "no error", "FileNotFoundError")
-    except FileNotFoundError:
-        check("stage A: missing detector model fails the run", "FileNotFoundError", "FileNotFoundError")
+        check("stage A: missing detector model fails the run", "no error", "InputError")
+    except VD.InputError:
+        check("stage A: missing detector model fails the run", "InputError", "InputError")
+
+    # shared detections: a worker handed a stored entry never runs the detector (AC1)
+    def detector_ran(rgb, detector):
+        raise AssertionError("detector ran")
+    saved_detect, S.detect = S.detect, detector_ran
+    try:
+        stored = {"frame": [400, 400], "detector": "fake", "boxes": [[100, 100, 300, 300, 0.9, 2]]}
+        out = S.process_single_saliency(frames[0], False, "whole_frame", "fake.onnx", stored)
+    finally:
+        S.detect = saved_detect
+    check("shared detections: a stored entry skips the detector and is not handed back",
+          (out[4], out[1], out[5], out[7]), (None, (0.25, 0.25, 0.75, 0.75), "Subject|Vehicle|Detected", None))
 
     # stage C: point non-shortlisted rows at files that don't exist; they must still score
     man_c = os.path.join(tmp, "c.csv")
@@ -608,7 +612,7 @@ def run_tests():
         digest = hashlib.sha256(f.read().replace(b"\r\n", b"\n")).hexdigest()
     check("common.py matches the shared copy", digest, COMMON_SHA256)
     # Shared byte for byte with the tagging repo: bump VEHICLE_DETECT_SHA256 there too.
-    VEHICLE_DETECT_SHA256 = "b1c2d1d6da0d9458a24108990f3a2c53c5b2ac294127adf391f4e966a0997180"
+    VEHICLE_DETECT_SHA256 = "547899a8663134130c51c0302ea0e7c24e21b19d79c355a56767d15d98346966"
     with open(os.path.join(os.path.dirname(common.__file__), "vehicle_detect.py"), "rb") as f:
         digest = hashlib.sha256(f.read().replace(b"\r\n", b"\n")).hexdigest()
     check("vehicle_detect.py matches the shared copy", digest, VEHICLE_DETECT_SHA256)

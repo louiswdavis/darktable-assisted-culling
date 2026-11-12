@@ -274,6 +274,8 @@ On each shortlisted frame, YOLOX finds cars, motorcycles and trucks (race cars a
 
 It runs on the CPU and adds about a tenth of a second per frame. If the file is missing or isn't a model, the run stops and says so. Remove the file from `models/` to switch it off.
 
+Vehicle boxes are cached in `assisted_plugins/detections.sqlite` in darktable's config directory, shared with the tagging plugin so a frame both plugins see is detected once. The key is the file (path, modified time, size), the detector model file and a fingerprint of the shared detector code, so a new detector or a `vehicle_detect.py` change re-detects everything once; rows unused for 90 days are dropped. Delete the file to start over. The tagging plugin's `compare_detectors.py` measures a second detector against YOLOX on your own photos; switching this plugin to a `dfine_*.onnx` or `rtdetr*.onnx` file (`DETECTOR_FILE` in `lua/assisted_culling.lua`) needs `onnxruntime` in this venv.
+
 ### Exposure
 
 - *whole frame*: checks the whole frame for clipping.
@@ -453,7 +455,7 @@ These are sensible starting points, not tuned defaults. Run a real shoot through
 - Apart from *subject tracking (SAM)* and *face & eyes* (when a face is found), every sharpness mode is a classical whole-frame or patch-grid heuristic. A frame with a sharp background and a soft subject can outscore the frame you'd actually keep.
 - The SAM preprocessing (1024 px input, normalisation, prompt format) mirrors darktable's own `src/common/ai/segmentation.c` defaults, because `darktable.ai` doesn't expose a model's attributes to Lua. A mask model with a non-default input size would segment poorly; every image then falls back to *subject bias*, and the plugin reports how many did.
 - SAM sees each image through darktable's pipeline (rotated, cropped, lens-corrected), while the scorer reads the original file, turned upright from its EXIF orientation. A darkroom crop that changes the aspect ratio is detected and that image falls back; a crop that keeps the ratio isn't, so on cropped edits the mask can sit off the subject. Cull before you crop.
-- The vehicle detector sees the same downscaled copy as the scorer (800 px on the long side), so a very small, distant car can be missed. That frame then uses the point guess.
+- The vehicle detector sees the full frame scaled to its 640 px input, so a very small, distant car can be missed. That frame then uses the point guess.
 
 ## Acceptance checklist
 

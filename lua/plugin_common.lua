@@ -293,6 +293,11 @@ function C.library_key(dt)
     return C.fnv1a(path)
 end
 
+-- The per-frame vehicle detection cache culling and tagging share (python creates the folder).
+function C.detections_path(dt)
+    return (dt.configuration.config_dir .. "/assisted_plugins/detections.sqlite"):gsub("\\", "/"):gsub("/+", "/")
+end
+
 -- Drops a ledger's entries (numeric keys: image ids) whose image `exists(id)` no longer
 -- finds. Returns how many went, and whether the prune was skipped: when no id at all
 -- resolves the lookup is what failed, not every image gone.
