@@ -1912,8 +1912,13 @@ local function install_panel()
         local text = raw_read(name)
         if not text then return text end
         local upgraded, copied = M.upgrade_preset_text(text)
+        -- saved back, so the upgrade (and its log line) happens once
         if copied then
-            log("preset " .. name .. ": tag_subject_guessed copied from tag_subject (old preset)")
+            if store.write(name, upgraded) then
+                log("preset " .. name .. ": tag_subject_guessed copied from tag_subject (old preset)")
+            else
+                log("preset " .. name .. ": couldn't save the upgraded preset to " .. store.path(name))
+            end
             if not is_running then flush_log() end
         end
         return upgraded
