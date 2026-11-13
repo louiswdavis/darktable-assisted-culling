@@ -89,12 +89,9 @@ Windows without Administrator rights or Developer Mode: copy `assisted_culling.l
 
 ### 4. Point the plugin at the repo
 
-Start darktable, open **preferences → lua options**, and set:
+Start darktable, open **preferences → lua options**, and set **plugins folder (holds the three assisted-* folders)** to the folder that holds `darktable-assisted-culling` (and the other assisted plugins). `python/score_images.py`, `models/` and `.venv` are found inside `darktable-assisted-culling`. A folder whose `darktable-assisted-culling` has no `python/score_images.py` is an error. The preference is shared by the assisted plugins; the older per-plugin **Assisted Culling: plugin folder** preference still works, and the log says once to move it.
 
-- **Python interpreter (.venv)**: the venv's `python.exe` / `bin/python`. On Windows the plugin runs the `pythonw.exe` beside it through `python/launch.py`, so no console window opens and no `.vbs`/`.bat` is written (antivirus behaviour checks such as Bitdefender Advanced Threat Defense flag that chain). A venv or python.org install has both files.
-- **plugins folder (holds the three assisted-* folders)**: the folder that holds `darktable-assisted-culling` (and the other assisted plugins). `python/score_images.py`, `models/` and `.venv` are found inside `darktable-assisted-culling`, so the interpreter preference above is only needed if your Python lives elsewhere. A folder whose `darktable-assisted-culling` has no `python/score_images.py` is an error.
-
-Both are shared by the assisted plugins; the older per-plugin **Assisted Culling: plugin folder** and **python interpreter** preferences still work, and the log says once to move them.
+There is no interpreter preference: the plugin runs its own `.venv` (else `python`/`python3` on `PATH`), because each assisted plugin has different requirements. On Windows it runs the `pythonw.exe` beside the venv's `python.exe` through `python/launch.py`, so no console window opens and no `.vbs`/`.bat` is written (antivirus behaviour checks such as Bitdefender Advanced Threat Defense flag that chain).
 
 Every other setting lives in the panel and is saved with its [preset](#presets).
 
@@ -344,7 +341,6 @@ All under **preferences → lua options**. Everything else is a panel setting sa
 
 | Preference | Default | What it does |
 |------------|---------|--------------|
-| Python interpreter (.venv) (`assisted_plugins/python_bin`) | empty | Python with the requirements installed; shared by the assisted plugins. The old `assisted_culling/python_bin` is still read and logged as deprecated |
 | plugins folder (`assisted_plugins/plugins_root`) | empty (auto-detect) | The folder holding the assisted-* repos; this plugin uses `<plugins folder>/darktable-assisted-culling`, where `python/`, `models/` and `.venv` are found. The old `assisted_culling/plugin_folder` (this repo's folder) is still read and logged as deprecated. Its `models/` detector enables the [vehicle detector](#vehicle-detector) in SAM mode |
 
 ## How it works
@@ -444,7 +440,7 @@ These are sensible starting points, not tuned defaults. Run a real shoot through
 
 - **The panel isn't there.** Start darktable with `-d lua` and look for `LUA ERROR` in the log. On Windows the log is `Documents\Darktable\darktable-log.txt`.
 - **Every run writes a log** to `assisted_culling.log` in darktable's config directory (e.g. `%LOCALAPPDATA%\darktable` on Windows); the run before it is kept as `assisted_culling.prev.log`. It has the settings, the scorer commands, every message shown on screen, each burst's shortlist, sharpness mode and keepers, and in SAM mode one line per segmented frame with its prompt and the exact error if SAM failed on it. Start here when a result looks wrong.
-- **"no results" or "scorer produced no ratings".** The scorer failed; its output is at the end of the run log. The usual cause is the interpreter preference pointing at a Python without the requirements installed.
+- **"no results" or "scorer produced no ratings".** The scorer failed; its output is at the end of the run log. The usual cause is a `darktable-assisted-culling/.venv` without `python/requirements.txt` installed.
 - **"SAM masked 0 of N shortlisted frames".** Look for the `SAM … failed:` lines in the run log for the error on each frame.
 - **"score cache … is unreadable".** The cache file is damaged. Delete `assisted_culling/scores.sqlite` in darktable's config directory; the next run rebuilds it.
 - **Scores look stale after editing `score_images.py`.** A constant change re-scores by itself (see Tuning); a code-only change doesn't. Delete the cache file.
@@ -465,7 +461,7 @@ The grouping-support changes have not run in darktable yet. Work through these s
 
 1. **Install Python** as in [Install](#1-python-side). *Expect:* the requirements install with no errors.
 2. **Install the plugin** as in [Install](#3-darktable-side) and start darktable. *Expect:* an **Assisted Culling** panel on the right in lighttable, with the page buttons *1 scoring ▾* (open, its settings below it) to *6 tools ▸*; opening *5 run* shows a **Cull selection** button. No `LUA ERROR` in the darktable log.
-3. **Set the plugins folder** in **preferences → lua options → plugins folder (holds the three assisted-* folders)** to the folder holding the repo, and leave the interpreter empty. *Expect:* runs find the repo's `.venv` without the interpreter preference.
+3. **Set the plugins folder** in **preferences → lua options → plugins folder (holds the three assisted-* folders)** to the folder holding the repo. *Expect:* runs find the repo's `.venv`.
 
 **One run per grouping mechanism**
 

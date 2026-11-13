@@ -12,8 +12,9 @@ local C = {}
 C.IS_WINDOWS = package.config:sub(1, 1) == "\\"
 
 -- Shared preferences ------------------------------------------------------------
--- One Python interpreter and one plugins folder for all three plugins. The old
--- per-plugin keys still work and log a deprecation line once per key.
+-- One plugins folder for all three plugins. The old per-plugin key still works and
+-- logs a deprecation line once. There is no interpreter preference: each plugin runs
+-- its own .venv, since their requirements differ.
 
 C.SHARED_GROUP = "assisted_plugins"
 
@@ -24,10 +25,6 @@ local REGISTERED_MARK = "assisted_plugins.shared_prefs_registered"
 function C.register_shared_prefs(dt)
     if package.loaded[REGISTERED_MARK] then return end
     package.loaded[REGISTERED_MARK] = true
-    dt.preferences.register(C.SHARED_GROUP, "python_bin", "file",
-        "Python interpreter (.venv)",
-        "Python executable with every plugin's python/requirements.txt installed (e.g. .venv\\Scripts\\python.exe). Shared by Assisted Grouping, Culling and Tagging. Empty = auto-detect each plugin's .venv",
-        "")
     dt.preferences.register(C.SHARED_GROUP, "plugins_root", "directory",
         "plugins folder (holds the three assisted-* folders)",
         "The folder holding darktable-assisted-grouping, darktable-assisted-culling and darktable-assisted-tagging. Empty = auto-detect",
@@ -49,13 +46,6 @@ local function old_pref(dt, plugin_group, name, kind, shared_name, log)
         log(string.format("preferences: %s is deprecated; set %s/%s", key, C.SHARED_GROUP, shared_name))
     end
     return value
-end
-
--- The shared interpreter, else the plugin's old python_bin, else "" (auto-detect).
-function C.python_bin(dt, plugin_group, log)
-    local shared = read_pref(dt, C.SHARED_GROUP, "python_bin", "file")
-    if shared ~= "" then return shared end
-    return old_pref(dt, plugin_group, "python_bin", "file", "python_bin", log)
 end
 
 -- <plugins_root>/<folder_name>, else the plugin's old plugin_folder, else fallback ("" when nil).

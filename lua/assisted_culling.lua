@@ -512,9 +512,6 @@ local function plugin_root(script)
 end
 
 local function python_bin(script)
-    local pref = C.python_bin(dt, "assisted_culling", log)
-    if pref ~= "" then return pref end
-
     local root = plugin_root(script)
     local found = first_existing({
         root .. "/.venv/Scripts/python.exe",
@@ -1473,7 +1470,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             local tail = read_log_tail()
             if #tail > 300 then tail = tail:sub(#tail - 299) end
             notify_error(_("Assisted Culling: no ratings came back from the scorer. ")
-                .. (tail ~= "" and tail or _("Check the Python interpreter and score_images.py paths in preferences → Lua options.")))
+                .. (tail ~= "" and tail or _("Check the plugins folder in preferences → Lua options, and that darktable-assisted-culling/.venv has python/requirements.txt installed.")))
         else
             local msg = string.format("Assisted Culling: done. %d keepers, %d not kept", stats.keepers, stats.others)
             for _, f in ipairs(FLAGS) do
