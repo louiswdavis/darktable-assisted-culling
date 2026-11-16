@@ -196,6 +196,16 @@ def run_tests():
     check("why: graded non-keepers", why_of(ns={"nk_mode": "graded"}), {"a": "Keeper", "b": "Graded", "c": "Graded"})
     check("why: a frame outside the shortlist", why_of(eligible={"a", "b"}),
           {"a": "Keeper", "b": "Outranked", "c": "Not shortlisted"})
+    check("why: a no-vehicle frame is left alone, the next frame keeps", why_of(no_vehicle={"a"}),
+          {"a": "No vehicle", "b": "Keeper", "c": "Outranked"})
+    check("why: an all-no-vehicle burst is left alone", set(why_of(no_vehicle={"a", "b", "c"}).values()), {"No vehicle"})
+    open(res_path, "w").close()
+    S.process_burst_logic("1", {"a": 9.0, "b": 8.8}, {"a": (), "b": ()}, 2, Namespace(
+        keep_mode="single_best", rank_mode="universal", nk_mode="leave"), res_path)
+    close_rows = {r[0]: r for r in (line.strip().split(",") for line in open(res_path))}
+    check("why: two near-identical frames are a close call, one still keeps",
+          ({k: r[6] for k, r in close_rows.items()}, close_rows["a"][4], close_rows["b"][4]),
+          ({"a": "Why|Close call", "b": "Why|Close call"}, "1", "0"))
     open(res_path, "w").close()
     S.process_burst_logic("1", {"a": 9.0}, {"a": ()}, 1, Namespace(keep_mode="single_best", rank_mode="universal",
                           nk_mode="leave"), res_path, diag_tags={"a": ["Scored|Masked"]})
@@ -562,8 +572,37 @@ def run_tests():
     check("report: diagnostic tags carry through", rep[0][8], "Subject|Car;Why|Keeper")
     check("report: the folder is the eleventh column", rep[0][10], os.path.dirname("/p/a.jpg"))
     check("report: the reason column is the Why tag", (rep[0][11], rep[1][11]), ("Keeper", ""))
-    check("report: the car column is last", (rep[0][-1], rep[1][-1]), ("37", ""))
+    check("report: the car column is twelfth", (rep[0][12], rep[1][12]), ("37", ""))
     check("report: one column per header", len(rep[0]), len(S.REPORT_HEADER))
+    check("report: direction is last, blank without a detector", rep[0][-1], "")
+    check("report: direction per burst", S.report_rows(rep_manifest, rep_results, lambda n: 1, {"0": "left"})[0][-1],
+          "left")
+
+    # framing_flags --------------------------------------------------------------
+    def det(*boxes):
+        return {"frame": [1000, 500], "detector": "t", "boxes": [list(b) + [0.9, 3] for b in boxes]}
+
+    # a car crossing left to right, a 200x100 box; the last frame reaches the right (leading) edge
+    crossing = [S.frame_boxes(det((x, 200, x + 200, 300))) for x in (100, 300, 500, 800)]
+    direction, flags = S.framing_flags(crossing)
+    check("framing: direction follows the box", direction, "right")
+    check("framing: touching the leading edge is cut off", flags, [(), (), (), ("cut_off",)])
+    # going left, the same last frame touches the trailing edge by 0: not cut off
+    direction, flags = S.framing_flags(list(reversed(crossing)))
+    check("framing: touching the trailing edge is fine", (direction, flags[0]), ("left", ()))
+    # going left, 30 of 200 px past the trailing (right) edge is over CUT_TRAILING_SHARE
+    past_trailing = [S.frame_boxes(det((830, 200, 1030, 300)))] + list(reversed(crossing))[1:]
+    check("framing: well past the trailing edge is cut off", S.framing_flags(past_trailing),
+          ("left", [("cut_off",), (), (), ()]))
+    check("framing: under 3 boxes is unknown", S.travel_direction(S.burst_targets(crossing[:2])), "unknown")
+    check("framing: a frame-filling car is never cut off",
+          S.is_cut_off((0.0, 0.0, 1.0, 0.9, 0.9), "right"), False)
+    # a nearer car covering half of the target in frame 2
+    blocked = crossing[:1] + [S.frame_boxes(det((300, 200, 500, 300), (380, 150, 700, 400)))] + crossing[2:3]
+    check("framing: a larger box over the target is blocked", S.framing_flags(blocked)[1], [(), ("blocked",), ()])
+    check("framing: no detections, no flags", S.framing_flags([[], []]), ("unknown", [(), ()]))
+    check("framing: a shared cut_off costs nothing",
+          S.penalised_flags({"a": ("cut_off",), "b": ("cut_off",)}), {"a": (), "b": ()})
     # frame 5 couldn't be read, so it has no result row; the allowance still counts it
     unread_manifest = rep_manifest + [("5", "/p/e.jpg", "1", "", "", "", 0.0, 0.0, 0.0, "")]
     unread = S.report_rows(unread_manifest, rep_results, lambda n: n)

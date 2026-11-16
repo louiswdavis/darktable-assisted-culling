@@ -180,7 +180,8 @@ def frame_of(row: dict, sharp_mode: str) -> dict:
     if "score" in row:  # what a --suggest replay needs
         frame.update({"score": float(row["score"] or 0.0),
                       "flags": tuple(f for f in (row.get("flags") or "").split(";") if f),
-                      "of": int(row.get("of") or 0), "eligible": reason != "Not shortlisted",
+                      "of": int(row.get("of") or 0), "eligible": reason not in ("Not shortlisted", "No vehicle"),
+                      "no_vehicle": reason == "No vehicle",
                       "masked": "Scored|Masked" in tags})
     return frame
 
@@ -206,7 +207,8 @@ def replay(frames: list, settings, sharp_mode: str) -> list:
     """The report's frames rated again under settings, by rating.rate_burst: same scores,
     same bursts, same shortlist, other keepers and stars. frames must be a whole run's rows
     (the relative reference spans the run). Tag-only flags are not in the report, so every
-    flag counts; a burst's unreadable frames are not either, so `of` is its size. A burst
+    flag counts; a burst's unreadable frames are not either, so `of` is its size. Frames the
+    run left alone for no vehicle stay left alone. A burst
     is scored in one mode: the one EXIF switched it to when any of its frames says so."""
     bursts = {}
     for f in frames:
@@ -224,7 +226,8 @@ def replay(frames: list, settings, sharp_mode: str) -> list:
         _members, keepers, stars_of, _reasons = rate_burst(
             {f["path"]: f["score"] for f in burst_frames}, {f["path"]: f["flags"] for f in burst_frames},
             first["of"] or len(burst_frames), settings, {f["path"] for f in burst_frames if f["eligible"]},
-            references.get((mode_of[burst], first["masked"])), mode_of[burst])
+            references.get((mode_of[burst], first["masked"])), mode_of[burst],
+            {f["path"] for f in burst_frames if f["no_vehicle"]})
         kept = set(keepers)
         for f in burst_frames:
             stars = stars_of[f["path"]]

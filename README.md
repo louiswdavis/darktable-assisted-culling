@@ -112,6 +112,8 @@ Each frame gets a star rating, which ranks it against the rest of the batch, plu
 | `Assisted Culling\|Overexposed` | Blown highlights |
 | `Assisted Culling\|Underexposed` | Crushed shadows |
 | `Assisted Culling\|Eyes Closed` | *face & eyes* mode only: a face big enough to judge, with no open eyes found. Dark sunglasses trigger it too. |
+| `Assisted Culling\|Cut Off` | *motorsport* mode with the vehicle detector only: the car touches the frame edge it is driving towards, or more than a tenth of it runs past another edge. The direction comes from the car's box moving across the burst (unknown when it moves under 5% of the frame width or fewer than 3 frames have a car; then both side edges count as leading). A car filling 60% of the frame or more is a tight crop and never flagged. |
+| `Assisted Culling\|Blocked` | *motorsport* mode with the vehicle detector only: a larger (nearer) vehicle box covers more than a quarter of the car. The car is the box closest in size to the burst's typical car, so a car passing close in front isn't taken for it. |
 
 Frames are also tagged with how they were judged, so you can spot-check the scorer:
 
@@ -125,6 +127,8 @@ Frames are also tagged with how they were judged, so you can spot-check the scor
 | `Assisted Culling\|Technique\|Motion Blur` / `…\|Missed Pan` | *motorsport* only: the frame is blurred in one straight line, or the car is blurred across the pan (see [Motorsport](#motorsport-subject--motion)) |
 | `Assisted Culling\|Why\|Keeper` / `…\|Keeper by margin` | Every scored frame gets one `Why` tag saying how it was decided. Kept by rank, or kept by the [keeper margin](#keeper-margin). |
 | `Assisted Culling\|Why\|Outranked` / `…\|Graded` / `…\|Not shortlisted` | Lost to a sharper frame (left alone or rejected), lost and rated by burst (*graded by burst*), or left out of the SAM shortlist. Filter on one to step through, say, every frame the margin kept. |
+| `Assisted Culling\|Why\|Close call` | The burst's last keeper and the best frame that lost scored within 5% of each other. Both get this tag in place of Keeper / Outranked; the keeper is still kept and rated as usual. Check both by eye. |
+| `Assisted Culling\|Why\|No vehicle` | Only with **Leave frames with no vehicle** on (penalties & speed page; default off), in motorsport or SAM sharpness with the vehicle detector installed. The detector found no car, so the frame is never a keeper, keeps its rating and gets no Rejected tag. A burst with no car in any frame is left alone. Other sharpness modes never run the detector, so they never write it. |
 
 `Subject` is grouped by kind (`Vehicle` today), leaving room for other detectors later.
 
@@ -141,7 +145,7 @@ Filter on these in darktable's **collections** module (tag → Assisted Culling)
 
 ### Flags cost stars, never the keeper
 
-Overexposed, Underexposed and Eyes Closed each take one star off. They never decide which frame is kept; that's sharpness alone.
+Overexposed, Underexposed, Eyes Closed, Cut Off and Blocked each take one star off. They never decide which frame is kept; that's sharpness alone.
 
 Two safeguards keep deliberate shots from being punished:
 
@@ -160,7 +164,7 @@ A few things a re-run doesn't touch:
 
 Tick **Tag each run** to also stamp every frame a run writes with `Assisted Culling|Run|YYYY-MM-DD HH:MM`, so you can filter darktable down to one run's frames. Stamps accumulate, and **Clear culling marks** leaves them; remove old ones in darktable's tag manager.
 
-Each scoring run also writes `assisted_culling/last-run.csv` in darktable's config folder (the folder holding `assisted_culling.log`): one row per scored frame with its burst, rank in the burst, score, stars, keeper yes/no, flags, diagnostic tags, a `why` line ("kept: rank 1 of 4, 2 allowed", "not kept: rank 3 of 4, only 2 allowed or not eligible; flagged blur"), the file's folder and a `reason` column (the frame's `Why` tag: Keeper, Keeper by margin, Outranked, Graded or Not shortlisted) and a last `car` column: the first car tag on the frame under the car tag node, blank when no node was set or the frame had none (frames carrying several cars stay in their shared pool). The allowance counts every frame of the burst, including frames that couldn't be read. Open it in a spreadsheet to see why a frame lost, or to tune thresholds from evidence. It is overwritten by the next run, but each run's copy is also kept as `assisted_culling/reports/YYYYMMDD-HHMMSS.csv` (newest 20), so two runs can be compared.
+Each scoring run also writes `assisted_culling/last-run.csv` in darktable's config folder (the folder holding `assisted_culling.log`): one row per scored frame with its burst, rank in the burst, score, stars, keeper yes/no, flags, diagnostic tags, a `why` line ("kept: rank 1 of 4, 2 allowed", "not kept: rank 3 of 4, only 2 allowed or not eligible; flagged blur"), the file's folder and a `reason` column (the frame's `Why` tag: Keeper, Keeper by margin, Outranked, Graded, Not shortlisted, No vehicle or Close call) and a `car` column: the first car tag on the frame under the car tag node, blank when no node was set or the frame had none (frames carrying several cars stay in their shared pool). A final `direction` column holds the burst's travel direction (left, right or unknown) in motorsport mode with the vehicle detector, blank otherwise. The allowance counts every frame of the burst, including frames that couldn't be read. Open it in a spreadsheet to see why a frame lost, or to tune thresholds from evidence. It is overwritten by the next run, but each run's copy is also kept as `assisted_culling/reports/YYYYMMDD-HHMMSS.csv` (newest 20), so two runs can be compared.
 
 While a run is going, **Clear culling marks** and the culling shortcut queue behind it instead of refusing. Each queued job keeps the selection and settings from when you clicked, and starts when the run before it finishes. Cancelling drops the queue. (The panel button turns into **Cancel culling** during a run, so a second culling run can only be queued with the shortcut.)
 
@@ -318,7 +322,7 @@ Flags still cost a star each. **Star strictness** scales these steps too: strict
 
 One switch per row (default on), under three headings:
 
-- **outputs**: `Keeper`, `Rejected`, `Overexposed`, `Underexposed`, `Eyes Closed`.
+- **outputs**: `Keeper`, `Rejected`, `Overexposed`, `Underexposed`, `Eyes Closed`, `Cut Off`, `Blocked`.
 - **checks**: `Subject guessed` (writes `Subject|Vehicle|Guessed`: frames to look at by hand).
 - **how it decided**: `Subject` (writes `Subject|Vehicle|Detected`), `Technique`, `Scored`, `Why`.
 

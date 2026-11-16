@@ -11,6 +11,9 @@ RELATIVE_MIN_FRAMES = 5
 # graded non-keepers: (share of the burst's best score, stars below the burst's lowest keeper);
 # a frame under the last share gets 0 stars
 GRADED_STEPS = [(0.90, 1), (0.75, 2), (0.60, 3), (0.45, 4)]
+# the last frame kept by rank and the best frame that wasn't kept are a close call
+# when the dropped one scores at least this share of the kept one
+CLOSE_CALL_SHARE = 0.95
 
 # universal tiers for the Laplacian-variance modes (subject_focus, subject_peak, center,
 # face_detect, sam_subject); modes on another scale have their own table in
@@ -45,6 +48,8 @@ FLAG_PENALTIES = {
     "overexposed": (30, 1),
     "underexposed": (30, 1),
     "eyes_closed": (15, 1),
+    "cut_off": (15, 1),  # car cut by the frame edge (score_images.framing_flags, motion_aware only)
+    "blocked": (15, 1),  # car hidden behind a nearer vehicle
 }
 
 
@@ -100,8 +105,19 @@ def star_tier(value: float, table: list, scale: float = 1.0) -> int:
     return 0
 
 
+def close_call(burst_sharpness: dict, ranked_keepers: list, losers: list) -> set:
+    """The last frame kept by rank and the best eligible frame not kept, when the second
+    scores at least CLOSE_CALL_SHARE of the first; else empty. Both lists best first."""
+    if not ranked_keepers or not losers:
+        return set()
+    kept, lost = ranked_keepers[-1], losers[0]
+    if burst_sharpness[kept] > 0 and burst_sharpness[lost] >= CLOSE_CALL_SHARE * burst_sharpness[kept]:
+        return {kept, lost}
+    return set()
+
+
 def rate_burst(burst_sharpness: dict, burst_flags: dict, burst_size: int, settings,
-               eligible=None, reference=None, mode=None) -> tuple:
+               eligible=None, reference=None, mode=None, no_vehicle=frozenset()) -> tuple:
     """(members best first, keepers best first, id → stars, id → Why reason) for one
     burst. settings carries keep_mode, rank_mode and nk_mode, plus optional
     keep_margin (share of the burst's best a frame needs to keep as well, 0 = off),
@@ -110,13 +126,15 @@ def rate_burst(burst_sharpness: dict, burst_flags: dict, burst_size: int, settin
     the relative mode's selection-wide sharpness for 100 points
     (relative_references); None means the group was too small for one and the
     burst takes universal tiers. mode is the burst's sharp mode (settings.sharp_mode
-    when not given) and picks its tier table."""
+    when not given) and picks its tier table. no_vehicle frames (the detector found no
+    car) are never keepers and keep their rating ("leave"), whatever the other settings."""
     if not burst_sharpness:
         return [], [], {}, {}
 
     allowed = keepers_allowed(settings.keep_mode, burst_size)
     if eligible is None:
         eligible = set(burst_sharpness)
+    eligible = set(eligible) - set(no_vehicle)
 
     sorted_members = sorted(burst_sharpness.keys(),
                             key=lambda i: (i in eligible, burst_sharpness[i]), reverse=True)
@@ -156,10 +174,15 @@ def rate_burst(burst_sharpness: dict, burst_flags: dict, burst_size: int, settin
         rated[img_id] = stars
 
     lowest_keeper = min((rated[i] for i in keepers), default=5)
+    close = close_call(burst_sharpness, [i for i in sorted_members if i in ranked],
+                       [i for i in sorted_members if i in eligible and i not in keepers])
     stars_of, reason_of = {}, {}
     for img_id in sorted_members:
         is_keeper = img_id in keepers
         stars = rated[img_id]
+        if img_id in no_vehicle:
+            stars_of[img_id], reason_of[img_id] = "leave", "No vehicle"
+            continue
         if not is_keeper:
             if settings.nk_mode == "leave":
                 stars = "leave"
@@ -177,7 +200,8 @@ def rate_burst(burst_sharpness: dict, burst_flags: dict, burst_size: int, settin
                 except ValueError:
                     stars = 0
         stars_of[img_id] = stars
-        reason_of[img_id] = (("Keeper" if img_id in ranked else "Keeper by margin") if is_keeper
+        reason_of[img_id] = ("Close call" if img_id in close
+                             else ("Keeper" if img_id in ranked else "Keeper by margin") if is_keeper
                              else "Not shortlisted" if img_id not in eligible
                              else "Graded" if settings.nk_mode == "graded" else "Outranked")
     return sorted_members, burst_keepers, stars_of, reason_of

@@ -2,18 +2,14 @@
 
 Ideas worth doing deliberately later, not bolted onto whatever's being fixed today.
 
-Sources: the shared backlog (`../docs/superpowers/specs/backlog/darktable-plugins-tickets/`, numbered tickets) and three research notes from 2026-11-15 in `../docs/superpowers/research/`:
-- `2026-11-15-unbuilt-ideas-harvest.md`: ideas found in old specs, audits and plans that the code doesn't have yet
-- `2026-11-15-competitors-and-ux.md`: what Aftershoot, Narrative Select, Lightroom Assisted Culling and others do
-- `2026-11-15-model-candidates.md`: models that would run under cv2.dnn or onnxruntime
-- `2026-11-15-how-culling-tools-work.md`: how those tools score focus, pick keepers and learn from the user (patents, papers, vendor docs)
+Background for the items below came from desk research in November 2026: unbuilt ideas found in old specs and audits; what Aftershoot, Narrative Select, Lightroom Assisted Culling and others do; models that run under cv2.dnn or onnxruntime; and how those tools score focus, pick keepers and learn from the user (patents, papers, vendor docs). What matters is written out in each item.
 
-Competitor figures in those notes are vendor claims and have not been checked. No tool publishes its algorithm, and no independent motorsport test exists.
+Competitor figures are vendor claims and have not been checked. No tool publishes its algorithm, and no independent motorsport test exists.
 
 ## Score the car the shooter aimed at
 
 - **Targeted car.** Aftershoot's sports/racing mode is said to check that the *intended* car is sharp, not any car (vendor claim). Pick the vehicle box nearest the camera's AF point from EXIF (maker notes; no plugin reads them yet), falling back to the box nearest the frame centre. A frame where the targeted car is soft but a background car is sharp scores low. Effort S–M; AF-point fields differ per maker.
-  Route (`../docs/superpowers/research/2026-11-16-af-point-metadata.md`, not tested on real files):
+  Route (from reading the exiv2 and exiftool tag docs; not tested on real files):
   - **Sony first:** maker-note `FocusLocation` holds width, height, X and Y in pixels, readable in Python through exiv2 (`Exif.Sony1.FocusLocation`).
   - Normalise to X/width, Y/height, then apply EXIF orientation and any crop.
   - Before trusting it, check ZV-E10 files in Flexible Spot, Tracking and Wide modes: one unverified forum reply says the tag may follow the detected subject.
@@ -37,12 +33,12 @@ Own ideas (round 5, not researched or tested), cheapest first:
 - **Something in front of the car.** A person box or another car's box covering a large share of
   the targeted car → lower rank, unless every frame in the burst has it. Effort S once the
   targeted car exists.
-- **Room ahead of the car.** Direction of travel from the view label (ticket 26) or the streak
+- **Room ahead of the car.** Direction of travel from the view label (front, side, rear; see view-aware ranking under Models to try) or the streak
   direction: more space in front of the car than behind is the usual composition. Weak
   tie-breaker only. Effort S–M.
 - **Peak moments.** SigLIP zero-shot for "car airborne", "wheel lifted", "flames from exhaust",
   "spray / dust plume" → `Moment|…` tags and a tie-breaker inside a burst. Shares the SigLIP 2
-  model with ticket 26. Unproven; effort M.
+  model with view-aware ranking. Unproven; effort M.
 
 ## Keep separate scores until the rating step
 
@@ -69,17 +65,17 @@ A run that writes scores (and the `Why` reason tags) but no stars or rejects. Le
 
 ## One strictness setting
 
-Keep margin, star strictness and tier tables (ticket 04) behind one slider from "keep more" to "keep fewer", with the separate settings still in the settings file. Ticket 19 (`eval_culling.py --suggest`, still open) could pick the slider's points from past hand ratings.
+Keep margin, star strictness and the per-mode star tier tables behind one slider from "keep more" to "keep fewer", with the separate settings still in the settings file. `eval_culling.py --suggest` (next section, still open) could pick the slider's points from past hand ratings.
 
-## Learn from hand ratings (ticket 19)
+## Learn from hand ratings
 
-Still open: `eval_culling.py` exists, `--suggest` does not. Search a small grid of settings against the ratings changed by hand on past shoots and print the best few. Second stage: a small ranker trained on "kept frame beats dropped frame" pairs inside a burst (see ticket 19).
+Still open: `eval_culling.py` exists, `--suggest` does not. Search a small grid of settings against the ratings changed by hand on past shoots and print the best few. Second stage: a small ranker trained on "kept frame beats dropped frame" pairs inside a burst.
 
 How the second stage could work: every keeper the user swaps by hand is a pair (chosen beats dropped). Fit a Bradley-Terry model over the existing score fields (arXiv 1803.07212), so the ranker learns weights, not pixels. Make it opt-in with a reset button: a 2023 AAAI study found personalised aesthetic models can do worse than the general one.
 
 ## More than one keeper per car, when frames differ
 
-Today each car gets one keeper. Apple's keeper patent (US10671895) ranks a burst, drops frames under a quality floor, then keeps extra frames only when they look different enough from the ones already kept, up to 3. For culling: keep a second or third frame of a car only if it's a different view or moment (embedding distance over a threshold). Check it against the one-keeper rule in ticket 15 before building; it could be a setting ("up to N per car").
+Today each car gets one keeper. Apple's keeper patent (US10671895) ranks a burst, drops frames under a quality floor, then keeps extra frames only when they look different enough from the ones already kept, up to 3. For culling: keep a second or third frame of a car only if it's a different view or moment (embedding distance over a threshold). Check it against the one-keeper-per-car rule before building; it could be a setting ("up to N per car").
 
 ## Keeper per track
 
@@ -95,22 +91,22 @@ with the number hidden is worth less to a shooter selling per-driver photos.
 
 ## Models to try
 
-From `2026-11-15-model-candidates.md`, best first:
-1. **CLIP-IQA+ (ONNX) on the subject crop** for a sharpness/quality score (ticket 14). Its weights are non-commercial: local use only.
-2. **SigLIP 2 zero-shot view** (front, side, rear) for view-aware ranking (ticket 26; throwaway test is ticket 27).
-3. **Self-trained keeper classifier**, once ticket 11's eval data exists.
-4. **RF-DETR nano/small** beside D-FINE in `compare_detectors` (Apache-2.0, ticket 13).
+Best first:
+1. **CLIP-IQA+ (ONNX) on the subject crop** as a second sharpness/quality judge beside the Laplacian score. Its weights are non-commercial: local use only.
+2. **SigLIP 2 zero-shot view** (front, side, rear) for view-aware ranking: prefer the view the shooter usually keeps. Run a throwaway test of colour and view prompts on real frames first.
+3. **Self-trained keeper classifier**, once eval data built from the user's own picks exists.
+4. **RF-DETR nano/small** beside D-FINE in `compare_detectors` (Apache-2.0), as a candidate upgrade for the detector both plugins share.
 
 Rejected for licence: YOLO11/26 and YOLO-seg (AGPL).
 
-Also from `2026-11-15-how-culling-tools-work.md`:
+Also:
 - don't ship **pyiqa**: its licence is PolyForm Noncommercial plus NTU S-Lab. Port single models with their own licences instead.
 - **Q-Align** is a 7B model, too heavy for a lighttable plugin.
 - **NIMA MobileNet** (Apache, Keras, no ONNX) is weak; use it only as a tie-breaker, if at all.
 
 ## Faster runs on Windows
 
-No published CPU timings exist for the newer models (`../docs/superpowers/research/2026-11-16-af-point-metadata.md`), so measure first.
+No published CPU timings exist for the newer models, so measure first.
 - **Time each stage** in the report (detect, segment, score per frame), so the slow step is known
   before anything is changed
 - **GPU through onnxruntime**: the DirectML provider still works but ONNX Runtime has put it in

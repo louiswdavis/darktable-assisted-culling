@@ -285,11 +285,16 @@ M.PRESET_SCHEMA = {
     { key = "penalise_overexposed", kind = "bool", default = true },
     { key = "penalise_underexposed", kind = "bool", default = true },
     { key = "penalise_eyes_closed", kind = "bool", default = true },
+    { key = "penalise_cut_off", kind = "bool", default = true },
+    { key = "penalise_blocked", kind = "bool", default = true },
+    { key = "no_vehicle_leave", kind = "bool", default = false },
     { key = "tag_keeper", kind = "bool", default = true },
     { key = "tag_rejected", kind = "bool", default = true },
     { key = "tag_overexposed", kind = "bool", default = true },
     { key = "tag_underexposed", kind = "bool", default = true },
     { key = "tag_eyes_closed", kind = "bool", default = true },
+    { key = "tag_cut_off", kind = "bool", default = true },
+    { key = "tag_blocked", kind = "bool", default = true },
     { key = "tag_subject", kind = "bool", default = true },
     { key = "tag_subject_guessed", kind = "bool", default = true },
     { key = "tag_technique", kind = "bool", default = true },
@@ -308,7 +313,8 @@ M.PANEL_PAGES = {
         "keep_margin", "non_keeper", "star_scale" } },
     { number = 2, title = "bursts", keys = { "group_support", "group_node", "car_tag_node" } },
     { number = 3, title = "penalties & speed", keys = { "apply_while_scoring", "fast_jpeg_decode",
-        "penalise_overexposed", "penalise_underexposed", "penalise_eyes_closed" } },
+        "penalise_overexposed", "penalise_underexposed", "penalise_eyes_closed", "penalise_cut_off",
+        "penalise_blocked", "no_vehicle_leave" } },
     { number = 4, title = "tags written", keys = tag_keys },
     { number = 5, title = "run", keys = { "run_tag" } },
     { number = 6, title = "tools", keys = {} },
@@ -331,6 +337,10 @@ M.TAG_TOGGLES = {
       when = "crushed shadows, judged by the exposure setting." },
     { key = "eyes_closed", label = "Eyes Closed", kind = "output", writes = { "Eyes Closed" },
       when = "face & eyes sharpness only: a face big enough to judge shows no open eyes. Dark sunglasses trigger it too." },
+    { key = "cut_off", label = "Cut Off", kind = "output", writes = { "Cut Off" },
+      when = "motorsport sharpness with a vehicle detector only: the car touches the frame edge it is driving towards, or runs well past another edge. Not when every frame of the burst is cut off, or the car fills most of the frame." },
+    { key = "blocked", label = "Blocked", kind = "output", writes = { "Blocked" },
+      when = "motorsport sharpness with a vehicle detector only: a nearer vehicle covers over a quarter of the car. Not when every frame of the burst is blocked." },
     { key = "subject_guessed", label = "Subject guessed", kind = "check", writes = { "Subject|Vehicle|Guessed" },
       when = "subject tracking (SAM) only. The vehicle detector found nothing, so SAM got the guessed subject point: check these frames by hand." },
     { key = "subject", label = "Subject", kind = "diag", writes = { "Subject|Vehicle|Detected" },
@@ -340,8 +350,9 @@ M.TAG_TOGGLES = {
     { key = "scored", label = "Scored", kind = "diag", writes = { "Scored|Masked", "Scored|Subject bias" },
       when = "subject tracking (SAM) only. Masked: the burst was ranked on SAM masks. Subject bias: a shortlisted frame got no mask, so the burst fell back." },
     { key = "why", label = "Why", kind = "diag",
-      writes = { "Why|Keeper", "Why|Keeper by margin", "Why|Outranked", "Why|Graded", "Why|Not shortlisted" },
-      when = "every scored frame, saying how it was decided. Keeper: kept by rank. Keeper by margin: kept by the keeper margin. Outranked: lost to a sharper frame (left or rejected). Graded: lost and rated by burst. Not shortlisted: subject tracking (SAM) left it out of the shortlist. Filter on one to step through, say, every frame that lost to the margin." },
+      writes = { "Why|Keeper", "Why|Keeper by margin", "Why|Outranked", "Why|Graded", "Why|Not shortlisted",
+          "Why|No vehicle", "Why|Close call" },
+      when = "every scored frame, saying how it was decided. Keeper: kept by rank. Keeper by margin: kept by the keeper margin. Outranked: lost to a sharper frame (left or rejected). Graded: lost and rated by burst. Not shortlisted: subject tracking (SAM) left it out of the shortlist. No vehicle: the detector found no car, so the frame kept its rating (only with \"Leave frames with no vehicle\" on). Close call: the last keeper and the best frame that lost scored within 5% of each other; the keeper is still kept, but check both. Filter on one to step through, say, every frame that lost to the margin." },
 }
 
 -- Headings of the tags-written page, in order; each TAG_TOGGLES row's `kind` is one of these.
@@ -690,6 +701,8 @@ local FLAGS = {
     { name = "overexposed", tag = "Assisted Culling|Overexposed", summary = "overexposed" },
     { name = "underexposed", tag = "Assisted Culling|Underexposed", summary = "underexposed" },
     { name = "eyes_closed", tag = "Assisted Culling|Eyes Closed", summary = "with eyes closed" },
+    { name = "cut_off", tag = "Assisted Culling|Cut Off", summary = "cut off" },
+    { name = "blocked", tag = "Assisted Culling|Blocked", summary = "blocked" },
 }
 local ALL_TAGS = { TAG_KEEPER, TAG_REJECT, TAG_CULLED }
 for _, f in ipairs(FLAGS) do ALL_TAGS[#ALL_TAGS + 1] = f.tag end
@@ -1105,6 +1118,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             "--keep-margin", tostring((tonumber(settings.keep_margin) or 0) / 100),
         }
         if fast_jpeg then argv[#argv + 1] = "--fast-jpeg" end
+        if settings.no_vehicle_leave then argv[#argv + 1] = "--no-vehicle-leave" end
         if sharp_mode == "motion_aware" then
             local detector = plugin_root(sc_script) .. "/models/" .. DETECTOR_FILE
             if file_exists(detector) then
@@ -1162,7 +1176,8 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         local diag_off = M.diag_off(tag_on)
         local diag_tag_objs = {}
 
-        local function apply_to_image(img, want_rating, is_keeper, flags, diag)
+        -- left_alone: a frame left alone for no vehicle is neither keeper nor rejected
+        local function apply_to_image(img, want_rating, is_keeper, flags, diag, left_alone)
             local writes = 0
             local have = tags_of(img)
 
@@ -1177,7 +1192,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             end
 
             writes = writes + sync_tag(img, have, TAG_KEEPER, is_keeper and tag_on.keeper)
-            writes = writes + sync_tag(img, have, TAG_REJECT, not is_keeper and tag_on.rejected)
+            writes = writes + sync_tag(img, have, TAG_REJECT, not is_keeper and not left_alone and tag_on.rejected)
             for _, f in ipairs(FLAGS) do
                 writes = writes + sync_tag(img, have, f.tag, flags[f.name] == true and tag_on[f.name])
             end
@@ -1225,7 +1240,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             local writes = 0
             for _, img in ipairs(group) do
                 local ok_apply, res = pcall(apply_to_image, img, want_rating, is_keeper, flags,
-                    M.filter_diag(parts[7], diag_off))
+                    M.filter_diag(parts[7], diag_off), diag:find(";Why|No vehicle;", 1, true) ~= nil)
                 if ok_apply then
                     applied_total = applied_total + 1
                     writes = writes + res
@@ -1798,6 +1813,8 @@ local function install_panel()
         option_checks[#option_checks + 1] = check("penalise_" .. f.name, string.format(_("%s lowers stars"), label),
             string.format(_("On: %s images get one star less. Off: they're still tagged %s (if it's on under tags written) but keep their rating.\nDefault: on. Turn off for styles where it's the point (low-key, high-key)."), label, label))
     end
+    option_checks[#option_checks + 1] = check("no_vehicle_leave", _("Leave frames with no vehicle"),
+        _("Motorsport and subject tracking (SAM) sharpness only, when the vehicle detector is installed. A frame where it finds no car is never a keeper, keeps its rating and gets Why|No vehicle, instead of being scored on the centre of the frame. A burst with no car in any frame is left alone.\nDefault: off. Turn on for car shoots once you've checked a run's No vehicle frames really are empty."))
 
     local tag_checks = {}
     local kind_labels, last_kind = {}, nil
