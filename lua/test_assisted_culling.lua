@@ -275,12 +275,15 @@ check("preset schema: mode defaults", string.format("%s %s %s %s %s %s %s [%s]",
 check("preset schema: switch defaults", string.format("%s %s %s %s %s %s", cd.run_tag, cd.apply_while_scoring,
     cd.fast_jpeg_decode, cd.penalise_overexposed, cd.penalise_underexposed, cd.penalise_eyes_closed),
     "false false true true true true")
-local all_tags_on = true
-for _, k in ipairs({ "keeper", "rejected", "overexposed", "underexposed", "eyes_closed", "cut_off", "blocked", "blank", "subject", "subject_guessed", "technique", "scored", "why" }) do
-    if cd["tag_" .. k] ~= true then all_tags_on = false end
+-- read from the schema, so a new tag_ switch needs no list edit here
+local tags_off, schema_seen, schema_twice = {}, {}, {}
+for _, s in ipairs(C.PRESET_SCHEMA) do
+    if s.key:match("^tag_") and cd[s.key] ~= true then tags_off[#tags_off + 1] = s.key end
+    if schema_seen[s.key] then schema_twice[#schema_twice + 1] = s.key end
+    schema_seen[s.key] = true
 end
-check("preset schema: every tag switch defaults on", all_tags_on, true)
-check("preset schema: 34 keys", #C.PRESET_SCHEMA, 34)
+check("preset schema: every tag switch defaults on", table.concat(tags_off, ","), "")
+check("preset schema: no key twice", table.concat(schema_twice, ","), "")
 local page_missing, page_duplicate = PC.page_coverage(C.PANEL_PAGES, C.PANEL_OTHER_KEYS, C.PRESET_SCHEMA)
 check("PANEL_PAGES: every preset key is on one page or listed off-stack",
     table.concat(page_missing, " ") .. table.concat(page_duplicate, " "), "")
