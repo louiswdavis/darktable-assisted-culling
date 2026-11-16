@@ -1,4 +1,4 @@
-FAIL plugin_common.lua matches COMMON_HASH (copy it to the other repos after a change): got 503716c8, want 069ea47d
+ok   plugin_common.lua matches COMMON_HASH (copy it to the other repos after a change)
 ok   shell_quote: Windows escapes quotes, keeps %
 ok   shell_quote: POSIX escapes single quotes
 ok   parse_csv_line: quoted comma and doubled quote
@@ -157,4 +157,4 @@ ok   genre modes: a changed mode no longer matches
 ok   genre modes: custom never matches
 ok   preset schema: a label for a choice falls back
 
-1 test(s) failed
+all tests passed
