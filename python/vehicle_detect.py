@@ -33,7 +33,7 @@ DETECTOR_INPUT = 640
 DETECTOR_STRIDES = (8, 16, 32)
 DETECTOR_NMS = 0.5
 CANDIDATE_MIN_SCORE = 0.03  # every NMS survivor this strong is stored; plugins filter higher
-DETECT_VERSION = 1  # bump when decode or inference behaviour changes, so cached boxes are redone
+DETECT_VERSION = 2  # bump when decode or inference behaviour changes, so cached boxes are redone
 CACHE_MAX_AGE_DAYS = 90
 FAST_JPEG_DIM = 800  # Pillow draft target when fast_jpeg is on (culling's MAX_DIM)
 
@@ -176,7 +176,8 @@ def _detr_load(data: bytes):
 
 def _detr_run(detector: Detector, canvas: np.ndarray, scale: float, w: int, h: int) -> np.ndarray:
     """Rows [x0, y0, x1, y1, score, coco] in source pixels for the family's classes at
-    CANDIDATE_MIN_SCORE or above; set prediction needs no NMS, one box per query."""
+    CANDIDATE_MIN_SCORE or above. Not one box per car: two queries can box the same car (car and
+    truck, or a strong and a weak score), so detect() runs NMS on these too."""
     session = detector.net
     names = {i.name for i in session.get_inputs()}
     size_name = next((n for n in names if "size" in n), None)
@@ -202,9 +203,9 @@ def _detr_run(detector: Detector, canvas: np.ndarray, scale: float, w: int, h: i
 
 FAMILIES = {
     "yolox": {"match": lambda name: name.startswith("object_detection_yolox_"), "load": _yolox_load,
-              "run": _yolox_run, "classes": frozenset({2, 3, 7}), "nms": True},  # COCO car, motorcycle, truck
+              "run": _yolox_run, "classes": frozenset({2, 3, 7})},  # COCO car, motorcycle, truck
     "detr": {"match": lambda name: name.startswith("dfine_") or name.startswith("rtdetr"), "load": _detr_load,
-             "run": _detr_run, "classes": frozenset({2, 3, 7}), "nms": False},
+             "run": _detr_run, "classes": frozenset({2, 3, 7})},
 }
 
 
@@ -257,12 +258,9 @@ def detect(rgb: np.ndarray, detector: Detector) -> dict:
     canvas = np.full((DETECTOR_INPUT, DETECTOR_INPUT, 3), 114.0, np.float32)
     canvas[:int(h * scale), :int(w * scale)] = cv2.resize(rgb, (int(w * scale), int(h * scale)),
                                                           interpolation=cv2.INTER_AREA)
-    family = FAMILIES[detector.family]
-    rows = [b for b in np.asarray(family["run"](detector, canvas, scale, w, h)).reshape(-1, 6).tolist()
+    rows = [b for b in np.asarray(FAMILIES[detector.family]["run"](detector, canvas, scale, w, h)).reshape(-1, 6).tolist()
             if b[4] >= CANDIDATE_MIN_SCORE]
-    if family["nms"]:
-        rows = nms(rows, DETECTOR_NMS)
-    rows = sorted(([float(v) for v in b[:5]] + [int(b[5])] for b in rows), key=lambda b: b[4], reverse=True)
+    rows = nms(rows, DETECTOR_NMS)
     return {"frame": [w, h], "detector": detector.id, "boxes": rows}
 
 

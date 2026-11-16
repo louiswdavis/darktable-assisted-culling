@@ -651,7 +651,7 @@ def run_tests():
         digest = hashlib.sha256(f.read().replace(b"\r\n", b"\n")).hexdigest()
     check("common.py matches the shared copy", digest, COMMON_SHA256)
     # Shared byte for byte with the tagging repo: bump VEHICLE_DETECT_SHA256 there too.
-    VEHICLE_DETECT_SHA256 = "ae7047e0f54c3bb607cf6cbd36f9fe29bcef07c981c6be66a8e7a2216fda13ba"
+    VEHICLE_DETECT_SHA256 = "fc181a26478de85d3d7a6a23c42a61c980e6b390532464faaef2de7ef260c29e"
     with open(os.path.join(os.path.dirname(common.__file__), "vehicle_detect.py"), "rb") as f:
         digest = hashlib.sha256(f.read().replace(b"\r\n", b"\n")).hexdigest()
     check("vehicle_detect.py matches the shared copy", digest, VEHICLE_DETECT_SHA256)
