@@ -1,0 +1,160 @@
+FAIL plugin_common.lua matches COMMON_HASH (copy it to the other repos after a change): got 503716c8, want 069ea47d
+ok   shell_quote: Windows escapes quotes, keeps %
+ok   shell_quote: POSIX escapes single quotes
+ok   parse_csv_line: quoted comma and doubled quote
+ok   parse_csv_line: wrong field count is nil
+ok   lead_rank: full-size JPEG beats RAW
+ok   detections_path: <config_dir>/assisted_plugins/detections.sqlite, backslashes folded
+ok   temp_base: <dir>/<prefix><epoch>_<seq>_
+ok   sweep_temp: removes only this prefix's stale files
+ok   sweep_temp: newer file kept
+ok   sweep_temp: other prefix kept
+ok   newest_group_node picks the greatest stamp
+ok   newest_group_node ignores other tags
+ok   newest_group_node with empty input
+ok   tag_group_keys reads immediate children only
+ok   tag_group_keys takes the first child by name
+ok   tag_group_keys reports the photo
+ok   tag_group_keys leaves unmatched photos out
+ok   native_group_keys maps leaders
+ok   number_groups shares and separates
+ok   number_groups with no keys at all
+ok   csv_line quotes and joins fields
+ok   csv_line doubles embedded quotes
+ok   parse_csv_line splits into 6 fields
+ok   parse_csv_line field 2 keeps spaces
+ok   parse_csv_line rejects wrong field count
+ok   parse_csv_line drops csv.writer's trailing \r
+ok   parse_prompt: empty corner is a point
+ok   parse_prompt: four numbers are a box
+ok   parse_prompt: half a corner is malformed
+ok   parse_prompt: non-number is malformed
+ok   diag tags: attaches what's new
+ok   diag tags: detaches stale ones, never Keeper or the user's own
+ok   diag tags: empty column (or preference off) detaches every diagnostic tag
+ok   diag tags: only diagnostic folders can be written; new subject kinds need no code
+ok   filter_diag: drops the names turned off
+ok   filter_diag: nothing off keeps the column
+ok   filter_diag: matches the full name, not a prefix of it
+ok   filter_diag: exact names
+ok   diag_off: subject off drops Detected only
+ok   diag_off: a check switched off drops its name
+ok   diag_off: output rows never filter
+ok   filter_diag + diag_tag_changes: an off branch is detached, not attached
+ok   TAG_TOGGLES: every row has a kind in TAG_KINDS
+ok   tag_rows_in_order: outputs, checks, then diagnostics
+ok   upgrade_preset_text: tag_subject false gives Guessed off
+ok   upgrade_preset_text: tag_subject true gives Guessed on
+ok   upgrade_preset_text: no-op when tag_subject_guessed is present
+ok   upgrade_preset_text: no-op on text that is not JSON
+ok   parse_flags reads every flag
+ok   parse_flags: empty field is no flags
+ok   parse_report_line: quoted commas and doubled quotes
+ok   parse_report_line: field count
+ok   parse_report_line: empty trailing field kept
+ok   explain_report: one line for the matching frame
+ok   explain_report: a left-alone non-keeper says so
+ok   explain_report: names frames the run had no row for
+ok   explain_report: a keeper shows its stars
+ok   explain_report: a RAW finds its pair's row
+ok   explain_report: the RAW isn't reported missing
+ok   explain_report: a selected pair gives one line
+ok   explain_report: a same-named file in another folder doesn't match
+ok   explain_report: a 12-column report adds the reason
+ok   explain_report: 13-column report row is read
+ok   is_diag_tag: Why tags are diagnostics
+ok   explain_report: no row in its folder is missing
+ok   shot_stem drops the extension, any case
+ok   shot_stem keeps inner dots
+ok   shot_stem with no extension
+ok   is_raw on ARW
+ok   is_raw on JPG
+ok   collapse_shots: RAW+JPEG pair is one shot, scored from the JPEG
+ok   collapse_shots: JPEG first keeps it as lead
+ok   collapse_shots: duplicates of one file are one shot
+ok   collapse_shots: same stem in another folder stays separate
+ok   collapse_shots: the swapped lead keeps the shot's position
+ok   collapse_shots: the RAW is no longer a lead
+ok   collapse_shots: a Pentax PEF pair is scored from the JPEG
+ok   collapse_shots: RAW, JPEG and a duplicate are one shot led by the JPEG
+ok   collapse_shots: a RAW leads over a format the scorer can't open full size
+ok   pythonw_of: venv python.exe
+ok   pythonw_of: case-insensitive
+ok   pythonw_of: bare python on PATH
+ok   pythonw_of: other launcher is refused
+ok   preset decode string
+ok   preset decode true
+ok   preset decode float
+ok   preset decode false
+ok   preset decode negative
+ok   preset decode version
+ok   preset decode BOM
+ok   preset decode empty object
+ok   preset decode null drops key
+ok   preset decode \u escape
+ok   preset decode surrogate pair
+ok   preset decode escapes
+ok   preset decode rejects trailing comma
+ok   preset decode rejects nested object
+ok   preset decode rejects array
+ok   preset decode rejects trailing junk
+ok   preset decode rejects empty text
+ok   preset decode rejects missing colon
+ok   preset decode rejects unterminated string
+ok   preset decode rejects bare word
+ok   preset decode rejects not an object
+ok   preset encode version first
+ok   preset encode schema order
+ok   preset encode ends with newline
+ok   preset round trip string
+ok   preset round trip bool
+ok   preset round trip number
+ok   preset round trip choice
+ok   preset encode whole number
+ok   preset merge missing key uses default
+ok   preset merge keeps valid value
+ok   preset merge string for number falls back
+ok   preset merge label for choice falls back
+ok   preset merge drops unknown key
+ok   preset merge lists problems
+ok   preset merge missing keys are not problems
+ok   preset defaults
+ok   preset equal same values
+ok   preset equal bool flipped
+ok   preset name trimmed
+ok   preset name empty
+ok   preset name blank
+ok   preset name nil
+ok   preset name reserved
+ok   preset name slash
+ok   preset name colon
+ok   preset name quote
+ok   preset order
+ok   preset order empty
+ok   preset schema: mode defaults
+ok   preset schema: switch defaults
+ok   preset schema: every tag switch defaults on
+ok   preset schema: 32 keys
+ok   PANEL_PAGES: every preset key is on one page or listed off-stack
+ok   PANEL_PAGES: titles match the README sections
+ok   split_by_car: cars split a group, untagged frames share the group pool
+ok   split_by_car: a frame with no group key stays alone
+ok   split_by_car: several cars → shared pool
+ok   split_by_car: no cars → keys unchanged
+ok   no_groups_notice: all singletons in native mode
+ok   no_groups_notice: grouped selection is silent
+ok   no_groups_notice: none mode and single frame are silent
+ok   preset schema: keeper margin defaults off
+ok   preset schema: graded non-keepers can be picked
+ok   preset schema: star strictness defaults to standard
+ok   preset schema: an unknown star strictness falls back
+ok   sharp modes: motorsport is offered
+ok   genre modes: sport uses motorsport sharpness
+ok   genre modes: portrait sharpness
+ok   genre modes: macro keepers
+ok   genre modes: landscape defaults match
+ok   genre modes: a changed mode no longer matches
+ok   genre modes: custom never matches
+ok   preset schema: a label for a choice falls back
+
+1 test(s) failed

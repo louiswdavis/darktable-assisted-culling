@@ -1,0 +1,67 @@
+ok   ranks: ties share their mean rank
+ok   spearman: identical order is +1
+ok   spearman: reversed order is -1
+ok   spearman: under 3 pairs is n/a
+ok   spearman: a constant side is n/a
+ok   parse_rating: attribute form
+ok   parse_rating: element form
+ok   parse_rating: -1 is a reject
+ok   parse_rating: no rating
+ok   photos: RAW with a JPEG beside it is skipped, sorted
+ok   photos: a file is taken as given
+ok   sidecar_rating: paired RAW's sidecar found from the JPEG
+ok   sidecar_rating: own sidecar
+ok   sidecar_rating: none
+ok   sidecar_truth: five rated shots
+ok   read_report: rows
+ok   frame_of: leave is unrated
+ok   frame_of: motion class from the Technique tag
+ok   frame_of: Panning in subject_focus means the burst switched to subject_peak
+ok   frame_of: no switch outside subject_focus
+ok   shot_key: rows outside the given photos drop
+ok   evaluate: b3 has no hand rating
+ok   evaluate: picks are rated 1+ and not rejected
+ok   evaluate: hits
+ok   evaluate: false keepers
+ok   evaluate: unrated frames leave the correlation
+ok   evaluate: rejected counts
+ok   evaluate: per burst keys
+ok   evaluate: burst B spearman is n/a with 2 rated frames
+ok   evaluate: motion classes
+ok   evaluate: modes
+ok   evaluate: pick threshold 4 narrows the picks
+ok   render: same input, same text
+ok   render: overall line
+ok   read_truth_csv: bare name keys on the stem
+ok   read_truth_csv: reject column
+ok   read_truth_csv: -1 rating is a reject
+ok   read_truth_csv: full path keys on its folder
+ok   lookup_truth: bare name matches a path
+ok   write_snapshot: rated photos only
+ok   write_snapshot: reads back the same truth
+ok   cli: exit 0
+ok   cli: prints the summary
+ok   cli: --out holds the same text
+ok   cli: missing report exits 1 with a hint
+ok   settings_of: margin off is 0, scale is a float
+ok   settings_of: margin 90 is 0.9
+ok   read_report --suggest: score, flags, of, eligible
+ok   replay: single_best keeps one per burst
+ok   replay: leave non-keepers
+ok   replay: keeper stars from the universal tiers
+ok   replay: same stars as rate_burst on the burst
+ok   replay: a margin keeps a2 as well and grades a3
+ok   suggest: top 3
+ok   suggest: every choice names every panel setting
+ok   suggest: best first
+ok   suggest: scores the hand-rated frames only
+ok   preset_json: a custom preset with the run's sharpness mode
+ok   render_suggestions: one shoot warns
+ok   render_suggestions: two shoots do not
+ok   render_suggestions: numbered with the preset
+ok   cli: --suggest needs --sharp-mode
+ok   cli: --suggest with a second --shoot
+ok   cli: --write-preset writes the first suggestion
+ok   cli: --shoot alone works and an existing preset file is refused
+
+all ok
