@@ -47,7 +47,7 @@ def run_tests():
     weak = {"frame": [400, 400], "detector": "fake", "boxes": [[160, 160, 240, 240, 0.2, 2]]}
     check("vehicle_box: under DETECTOR_MIN_SCORE → none, the log names the strongest vehicle",
           S.vehicle_box(np.zeros((400, 400, 3), np.uint8), weak),
-          (None, None, f"no vehicle at {S.DETECTOR_MIN_SCORE}: strongest vehicle car 0.20 (0.20x0.20 of frame)"))
+          (None, None, f"no vehicle at {S.DETECTOR_MIN_SCORE}: strongest vehicle 0.20 (0.20x0.20 of frame)"))
     check("vehicle_box: an entry with no boxes → none",
           S.vehicle_box(np.zeros((400, 400, 3), np.uint8), {"frame": [400, 400], "detector": "fake", "boxes": []})[2],
           f"no vehicle at {S.DETECTOR_MIN_SCORE}: nothing at {VD.CANDIDATE_MIN_SCORE}")

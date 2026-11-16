@@ -34,7 +34,7 @@ from common import RAW_EXTENSIONS, atomic_write  # noqa: E402  (stdlib-only modu
 # Decoding and vehicle detection are shared byte for byte with the tagging plugin.
 import vehicle_detect  # noqa: E402
 from vehicle_detect import (  # noqa: E402
-    COCO_NAMES, DetectionCache, boxes_in, decode_rgb, detect, detection_key, file_key, load_detector,
+    DetectionCache, boxes_in, decode_rgb, detect, detection_key, file_key, load_detector,
 )
 # Star tables, keeper rules and the per-burst rating live in rating.py (stdlib only), so
 # eval_culling.py can replay them on a finished run without cv2.
@@ -131,11 +131,12 @@ def pick_vehicle(boxes: list, w: int, h: int):
 
 def strongest_detections(boxes: list, w: int, h: int) -> str:
     """For the log when no vehicle passes: the strongest vehicle the entry holds (only vehicle
-    classes are stored, from CANDIDATE_MIN_SCORE up), with its size in the frame."""
+    classes are stored, from CANDIDATE_MIN_SCORE up), with its size in the frame. The detector's
+    class is left out: it names side-on cars "motorcycle", and nothing else reads it."""
     if not boxes:
         return f"nothing at {vehicle_detect.CANDIDATE_MIN_SCORE}"
-    x0, y0, x1, y1, score, c = max(boxes, key=lambda b: b[4])
-    return f"strongest vehicle {COCO_NAMES.get(c, f'class {c}')} {score:.2f} ({(x1 - x0) / w:.2f}x{(y1 - y0) / h:.2f} of frame)"
+    x0, y0, x1, y1, score, _ = max(boxes, key=lambda b: b[4])
+    return f"strongest vehicle {score:.2f} ({(x1 - x0) / w:.2f}x{(y1 - y0) / h:.2f} of frame)"
 
 
 def subject_tag(coco) -> str:
@@ -557,7 +558,7 @@ CACHE_INPUTS = (
 CACHE_NEUTRAL = (
     "RAW_EXTENSIONS", "STAR_THRESHOLDS", "RELATIVE_REFERENCE_PERCENTILE", "RELATIVE_MIN_FRAMES", "GRADED_STEPS",
     "TIER_THRESHOLDS", "PEAK_TIER_THRESHOLDS", "UNIFORMITY_TIER_THRESHOLDS", "TIER_THRESHOLDS_BY_MODE",
-    "FLAG_PENALTIES", "COCO_NAMES", "SHORTLIST_MIN", "PANNING_SHUTTER", "SHALLOW_DOF_APERTURE",
+    "FLAG_PENALTIES", "SHORTLIST_MIN", "PANNING_SHUTTER", "SHALLOW_DOF_APERTURE",
     "SCORE_CACHE_MAX_AGE_DAYS", "SCORE_CACHE_COMMIT_EVERY", "CACHE_INPUTS", "CACHE_NEUTRAL",
     "MOTION_TIER_THRESHOLDS", "MOTION_TAGS", "PRESCORE_FAILED", "REPORT_HEADER", "REPORT_ARCHIVE_KEEP", "WHY_REASONS",
 )
