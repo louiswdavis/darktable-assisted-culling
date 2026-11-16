@@ -134,7 +134,7 @@ ok   preset order empty
 ok   preset schema: mode defaults
 ok   preset schema: switch defaults
 ok   preset schema: every tag switch defaults on
-ok   preset schema: 32 keys
+ok   preset schema: 34 keys
 ok   PANEL_PAGES: every preset key is on one page or listed off-stack
 ok   PANEL_PAGES: titles match the README sections
 ok   split_by_car: cars split a group, untagged frames share the group pool
@@ -147,6 +147,7 @@ ok   no_groups_notice: none mode and single frame are silent
 ok   preset schema: keeper margin defaults off
 ok   preset schema: graded non-keepers can be picked
 ok   preset schema: star strictness defaults to standard
+ok   preset schema: blank frames default to 95%
 ok   preset schema: an unknown star strictness falls back
 ok   sharp modes: motorsport is offered
 ok   genre modes: sport uses motorsport sharpness
