@@ -218,6 +218,41 @@ def run_tests():
     # flags: listed in column 3, each costs its stars, and they stack -------------
     check("frame_flags: exposure ok and eyes open is no flags", S.frame_flags("ok"), ())
     check("frame_flags: both problems", S.frame_flags("overexposed", True), ("overexposed", "eyes_closed"))
+    check("frame_flags: blank comes last", S.frame_flags("underexposed", blank=True), ("underexposed", "blank"))
+
+    # blank frames: one flat colour, always rejected -------------------------------
+    blank_rng = np.random.default_rng(36)
+
+    def flat(colour):
+        """A 120 × 160 frame of one colour with ±4 of sensor noise."""
+        noise = blank_rng.integers(-4, 5, (120, 160, 3))
+        return np.clip(np.array(colour) + noise, 0, 255).astype(np.uint8)
+
+    check("is_blank: black, white and flat red are blank",
+          [S.is_blank(flat(c)) for c in ((0, 0, 0), (255, 255, 255), (200, 20, 20))], [True, True, True])
+    headlights = flat((8, 8, 8))
+    headlights[50:75, 20:50] = 250
+    headlights[50:75, 110:140] = 250
+    check("is_blank: a dark frame with lit headlights is not blank", S.is_blank(headlights), False)
+    check("is_blank: share 0 turns it off", S.is_blank(flat((0, 0, 0)), 0.0), False)
+    check("penalised_flags: blank costs stars even when the whole burst shares it",
+          S.penalised_flags({"a": ("blank",), "b": ("blank",)}), {"a": ("blank",), "b": ("blank",)})
+
+    def blank_rows(flags_of):
+        """id -> (keeper, stars, Why tag) for a 3-frame burst scored 9/6/1."""
+        open(res_path, "w").close()
+        S.process_burst_logic("1", {"a": 9.0, "b": 6.0, "c": 1.0}, flags_of, 3,
+                              Namespace(keep_mode="single_best", rank_mode="universal", nk_mode="leave"), res_path)
+        rows = [line.strip().split(",") for line in open(res_path)]
+        return {r[0]: (r[4], r[5], [t for t in r[6].split(";") if t.startswith("Why|")][0]) for r in rows}
+
+    check("blank: an all-blank burst is rejected in full",
+          blank_rows({k: ("blank",) for k in "abc"}),
+          {k: ("0", "-1", "Why|Blank") for k in "abc"})
+    check("blank: the sharpest frame is blank, a good frame keeps",
+          blank_rows({"a": ("blank",), "b": (), "c": ()}),
+          {"a": ("0", "-1", "Why|Blank"), "b": ("1", "0", "Why|Keeper"), "c": ("0", "leave", "Why|Outranked")})
+    check("blank: Blank is a listed Why reason", "Blank" in S.WHY_REASONS, True)
 
     def keeper_row(flags, rank_mode, sharp=5000.0, reference=None):
         open(res_path, "w").close()

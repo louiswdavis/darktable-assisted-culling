@@ -150,7 +150,7 @@ check("TAG_TOGGLES: every row has a kind in TAG_KINDS", table.concat(bad_kind, "
 local order = {}
 for _, t in ipairs(C.tag_rows_in_order()) do order[#order + 1] = t.key end
 check("tag_rows_in_order: outputs, checks, then diagnostics", table.concat(order, ","),
-    "keeper,rejected,overexposed,underexposed,eyes_closed,cut_off,blocked,subject_guessed,subject,technique,scored,why")
+    "keeper,rejected,overexposed,underexposed,eyes_closed,cut_off,blocked,blank,subject_guessed,subject,technique,scored,why")
 
 local old_off = C.preset_encode(C.PRESET_SCHEMA, { tag_subject = false })
 old_off = old_off:gsub('%s*"tag_subject_guessed"%s*:%s*[a-z]+%s*,?', "")
@@ -276,11 +276,11 @@ check("preset schema: switch defaults", string.format("%s %s %s %s %s %s", cd.ru
     cd.fast_jpeg_decode, cd.penalise_overexposed, cd.penalise_underexposed, cd.penalise_eyes_closed),
     "false false true true true true")
 local all_tags_on = true
-for _, k in ipairs({ "keeper", "rejected", "overexposed", "underexposed", "eyes_closed", "cut_off", "blocked", "subject", "subject_guessed", "technique", "scored", "why" }) do
+for _, k in ipairs({ "keeper", "rejected", "overexposed", "underexposed", "eyes_closed", "cut_off", "blocked", "blank", "subject", "subject_guessed", "technique", "scored", "why" }) do
     if cd["tag_" .. k] ~= true then all_tags_on = false end
 end
 check("preset schema: every tag switch defaults on", all_tags_on, true)
-check("preset schema: 32 keys", #C.PRESET_SCHEMA, 32)
+check("preset schema: 34 keys", #C.PRESET_SCHEMA, 34)
 local page_missing, page_duplicate = PC.page_coverage(C.PANEL_PAGES, C.PANEL_OTHER_KEYS, C.PRESET_SCHEMA)
 check("PANEL_PAGES: every preset key is on one page or listed off-stack",
     table.concat(page_missing, " ") .. table.concat(page_duplicate, " "), "")
@@ -318,6 +318,7 @@ check("preset schema: keeper margin defaults off", cd.keep_margin, "off")
 check("preset schema: graded non-keepers can be picked",
     C.preset_merge(C.PRESET_SCHEMA, { non_keeper = "graded" }).non_keeper, "graded")
 check("preset schema: star strictness defaults to standard", cd.star_scale, "1")
+check("preset schema: blank frames default to 95%", cd.blank_share, "95")
 check("preset schema: an unknown star strictness falls back",
     C.preset_merge(C.PRESET_SCHEMA, { star_scale = "3" }).star_scale, "1")
 local has_motion = false
