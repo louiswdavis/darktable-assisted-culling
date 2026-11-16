@@ -366,12 +366,12 @@ function C.pythonw_of(py)
 end
 
 -- One argument quoted for the shell. Windows: cmd.exe keeps everything inside double quotes
--- literal except a `%NAME%` of a set variable, and a path can't hold `"`; a `"` in any other
--- argument is passed through as \" for the C runtime, and a lone `%` is doubled so cmd.exe
--- leaves it alone. `windows` overrides the platform (tests).
+-- literal except a `%NAME%` of a set variable, which a command line can't escape (doubling `%`
+-- works only in batch files), and a path can't hold `"`; a `"` in any other argument is passed
+-- through as \" for the C runtime. `windows` overrides the platform (tests).
 function C.shell_quote(s, windows)
     if windows == nil then windows = C.IS_WINDOWS end
-    if windows then return '"' .. s:gsub('"', '\\"'):gsub("%%", "%%%%") .. '"' end
+    if windows then return '"' .. s:gsub('"', '\\"') .. '"' end
     return "'" .. s:gsub("'", "'\\''") .. "'"
 end
 

@@ -59,15 +59,19 @@ def file_key(filepath: str):
 # ---------------------------------------------------------------- decode
 
 def _open_rgb(source, fast_jpeg: bool) -> tuple:
-    """(rgb array upright per EXIF orientation, whether the file carried a rotation)."""
+    """(rgb array upright per EXIF orientation, whether the file carried a rotation,
+    the upright (w, h) of a full decode)."""
     img = Image.open(source)
+    full = img.size
     if fast_jpeg:
         try:
             img.draft("RGB", (FAST_JPEG_DIM, FAST_JPEG_DIM))
         except Exception:
             pass
-    rotated = img.getexif().get(0x0112, 1) not in (0, 1)
-    return np.array(ImageOps.exif_transpose(img).convert("RGB")), rotated
+    orientation = img.getexif().get(0x0112, 1)
+    if orientation in (5, 6, 7, 8):
+        full = full[::-1]
+    return np.array(ImageOps.exif_transpose(img).convert("RGB")), orientation not in (0, 1), full
 
 
 # LibRaw's sizes.flip codes → the np.rot90 turns (counter-clockwise) that make the image upright
@@ -78,6 +82,12 @@ def decode_rgb(filepath: str, fast_jpeg: bool = False) -> np.ndarray:
     """Decoded image, upright, at the size the file holds it: a JPEG at full size
     (fast_jpeg lets Pillow decode near FAST_JPEG_DIM), a RAW's embedded preview at its
     own size, or a half-size RAW render when there is no usable preview."""
+    return decode_rgb_sized(filepath, fast_jpeg)[0]
+
+
+def decode_rgb_sized(filepath: str, fast_jpeg: bool = False) -> tuple:
+    """(decode_rgb's array, the upright (w, h) of the same decode without fast_jpeg). With
+    fast_jpeg the array can be smaller than that size; without, the two agree."""
     ext = Path(filepath).suffix.lower()
     if ext in RAW_EXTENSIONS:
         import rawpy
@@ -85,19 +95,23 @@ def decode_rgb(filepath: str, fast_jpeg: bool = False) -> np.ndarray:
             try:
                 thumb = raw.extract_thumb()
                 if thumb.format == rawpy.ThumbFormat.JPEG:
-                    rgb, rotated = _open_rgb(io.BytesIO(thumb.data), fast_jpeg)
+                    rgb, rotated, full = _open_rgb(io.BytesIO(thumb.data), fast_jpeg)
                 elif thumb.format == rawpy.ThumbFormat.BITMAP:
-                    rgb, rotated = thumb.data, False
+                    rgb, rotated, full = thumb.data, False, (thumb.data.shape[1], thumb.data.shape[0])
                 else:
                     raise ValueError("Unsupported thumbnail")
                 # embedded previews are usually stored unrotated; the raw header says how to turn them
                 if not rotated:
-                    rgb = np.ascontiguousarray(np.rot90(rgb, _RAW_FLIP_TURNS.get(raw.sizes.flip, 0)))
+                    turns = _RAW_FLIP_TURNS.get(raw.sizes.flip, 0)
+                    rgb = np.ascontiguousarray(np.rot90(rgb, turns))
+                    if turns % 2:
+                        full = full[::-1]
             except Exception:
                 rgb = raw.postprocess(half_size=True, use_camera_wb=True, no_auto_bright=True)
-        return rgb
-    rgb, _ = _open_rgb(filepath, fast_jpeg)
-    return rgb
+                full = (rgb.shape[1], rgb.shape[0])
+        return rgb, tuple(full)
+    rgb, _, full = _open_rgb(filepath, fast_jpeg)
+    return rgb, tuple(full)
 
 
 # ---------------------------------------------------------------- detector families
@@ -156,7 +170,9 @@ def _yolox_run(detector: Detector, canvas: np.ndarray, scale: float, w: int, h: 
 # and `pred_boxes` 1×Q×4 as normalised cx,cy,w,h), which gets sigmoid and the box conversion here.
 def _detr_load(data: bytes):
     import onnxruntime  # lazy: culling installs it only once the DETR family is the default
-    return onnxruntime.InferenceSession(data, providers=["CPUExecutionProvider"])
+    opts = onnxruntime.SessionOptions()
+    opts.intra_op_num_threads = 1  # the worker pool supplies the parallelism
+    return onnxruntime.InferenceSession(data, sess_options=opts, providers=["CPUExecutionProvider"])
 
 
 def _detr_run(detector: Detector, canvas: np.ndarray, scale: float, w: int, h: int) -> np.ndarray:
