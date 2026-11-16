@@ -35,7 +35,6 @@ DETECTOR_NMS = 0.5
 CANDIDATE_MIN_SCORE = 0.03  # every NMS survivor this strong is stored; plugins filter higher
 DETECT_VERSION = 1  # bump when decode or inference behaviour changes, so cached boxes are redone
 CACHE_MAX_AGE_DAYS = 90
-CACHE_COMMIT_EVERY = 50
 FAST_JPEG_DIM = 800  # Pillow draft target when fast_jpeg is on (culling's MAX_DIM)
 
 COCO_NAMES = {0: "person", 1: "bicycle", 2: "car", 3: "motorcycle", 4: "airplane", 5: "bus",
@@ -290,10 +289,12 @@ def detection_key(path: str, detector: Detector) -> str:
 class DetectionCache:
     """Stored entries in SQLite under the darktable config dir, shared by both plugins and
     keyed by detection_key. Nothing plugin-specific is in the key; thresholds apply on read.
-    An empty path disables it. Rows unused for CACHE_MAX_AGE_DAYS are pruned on open."""
+    An empty path disables it. Rows unused for CACHE_MAX_AGE_DAYS are pruned on open.
+    Each put commits at once: identify.py's worker processes each hold one, and an open write
+    transaction would lock the others out past the 30 s timeout."""
 
     def __init__(self, path: str):
-        self.db, self.used, self.pending = None, [], 0
+        self.db, self.used = None, []
         if not path:
             return
         os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
@@ -327,10 +328,7 @@ class DetectionCache:
             return
         self.db.execute("INSERT OR REPLACE INTO detections (key, value, used) VALUES (?, ?, ?)",
                         (key, json.dumps(entry), int(time.time())))
-        self.pending += 1
-        if self.pending >= CACHE_COMMIT_EVERY:
-            self.db.commit()
-            self.pending = 0
+        self.db.commit()
 
     def close(self):
         if not self.db:
