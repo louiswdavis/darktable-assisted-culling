@@ -41,7 +41,8 @@ from vehicle_detect import (  # noqa: E402
 from rating import (  # noqa: E402,F401
     STAR_THRESHOLDS, RELATIVE_REFERENCE_PERCENTILE, RELATIVE_MIN_FRAMES, GRADED_STEPS, TIER_THRESHOLDS,
     PEAK_TIER_THRESHOLDS, UNIFORMITY_TIER_THRESHOLDS, MOTION_TIER_THRESHOLDS, TIER_THRESHOLDS_BY_MODE,
-    FLAG_PENALTIES, tier_table, keepers_allowed, penalised_flags, blank_frames, relative_references, rate_burst,
+    FLAG_PENALTIES, NUMBER_READ_MIN_GAP, JUDGE_FRAMES, JUDGE_MIN_GAP, tier_table, keepers_allowed, penalised_flags,
+    blank_frames, relative_references, rate_burst, judge_shortlist,
 )
 
 MAX_DIM = 800
@@ -185,21 +186,20 @@ def path_key(filepath: str) -> str:
     return os.path.normcase(os.path.abspath(filepath))
 
 
-def read_car_boxes(path: str) -> tuple:
-    """({path_key: [(x0, y0, x1, y1) frame fractions]} per frame of tagging's boxes.json, log line).
-    Frames whose file changed after boxes.json was written, and frames tagging failed on, are left
-    out. {} with no path, a missing or unreadable file, or a people run."""
-    if not path:
-        return {}, "car boxes: off, raw detector boxes"
+def tagging_frames(path: str) -> tuple:
+    """(the image entries of tagging's boxes.json still matching their file, how many were
+    left out as changed since or gone, why there are none). Entries tagging failed on are
+    skipped. The reason is "" when the file read; a missing or unreadable file or a people
+    run gives no entries and a reason."""
     try:
         written = os.path.getmtime(path)
         with open(path, encoding="utf-8") as f:
             data = json.load(f)
     except (OSError, ValueError) as e:
-        return {}, f"car boxes: none from tagging ({e.__class__.__name__} on {path}), raw detector boxes"
+        return [], 0, f"none from tagging ({e.__class__.__name__} on {path})"
     if data.get("kind") == "people":
-        return {}, f"car boxes: {path} is from a people run, raw detector boxes"
-    cars, stale = {}, 0
+        return [], 0, f"{path} is from a people run"
+    fresh, stale = [], 0
     for img in data.get("images", {}).values():
         if img.get("status") == "error" or len(img.get("frame") or []) != 2:
             continue
@@ -207,14 +207,52 @@ def read_car_boxes(path: str) -> tuple:
             unchanged = os.path.getmtime(img["file"]) <= written
         except OSError:
             unchanged = False
-        if not unchanged:
+        if unchanged:
+            fresh.append(img)
+        else:
             stale += 1
-            continue
+    return fresh, stale, ""
+
+
+def read_car_boxes(path: str) -> tuple:
+    """({path_key: [(x0, y0, x1, y1) frame fractions]} per frame of tagging's boxes.json, log line).
+    Frames whose file changed after boxes.json was written, and frames tagging failed on, are left
+    out. {} with no path, a missing or unreadable file, or a people run."""
+    if not path:
+        return {}, "car boxes: off, raw detector boxes"
+    images, stale, none = tagging_frames(path)
+    if none:
+        return {}, f"car boxes: {none}, raw detector boxes"
+    cars = {}
+    for img in images:
         fw, fh = img["frame"]
         cars[path_key(img["file"])] = [(b["bbox"][0] / fw, b["bbox"][1] / fh, b["bbox"][2] / fw, b["bbox"][3] / fh)
                                        for b in img["boxes"]]
     return cars, (f"car boxes: {len(cars)} frames from {path}"
                   + (f", {stale} left out (file changed since tagging ran, or gone)" if stale else ""))
+
+
+def read_number_reads(path: str, manifest) -> tuple:
+    """({image id: {number: best OCR confidence}} over all of a frame's car boxes in tagging's
+    boxes.json, log line), for the manifest's frames with at least one read. Same frames left
+    out as read_car_boxes; {} with no path."""
+    if not path:
+        return {}, ""
+    images, stale, none = tagging_frames(path)
+    if none:
+        return {}, f"number reads: {none}, close calls by sharpness only"
+    by_path = {}
+    for img in images:
+        best = {}
+        for box in img["boxes"]:
+            for text, conf in box.get("ocr") or []:
+                if str(text).strip():
+                    best[str(text).strip()] = max(best.get(str(text).strip(), 0.0), float(conf))
+        if best:
+            by_path[path_key(img["file"])] = best
+    reads = {row[0]: by_path[path_key(row[1])] for row in manifest if path_key(row[1]) in by_path}
+    return reads, (f"number reads: {len(reads)} frames from {path}"
+                   + (f", {stale} left out (file changed since tagging ran, or gone)" if stale else ""))
 
 
 def box_iou(a, b) -> float:
@@ -668,6 +706,11 @@ CACHE_NEUTRAL = (
     "DIRECTION_MIN_SHIFT", "EDGE_TOUCH", "CUT_TRAILING_SHARE", "TIGHT_CROP_SHARE", "BLOCKED_SHARE", "NO_VEHICLE_SUBJECT",
     # keyed per frame by car_key, so a change misses only the frames in tagging's file
     "CAR_BOX_MIN_IOU",
+    # number reads come from tagging's file each run and only settle close calls
+    "NUMBER_READ_MIN_GAP",
+    # the judge's score is cached under its own key (judge_key), which holds the JUDGE_ inputs;
+    # JUDGE_FRAMES and JUDGE_MIN_GAP only pick frames and settle close calls
+    "JUDGE_SIZE", "JUDGE_GRID", "JUDGE_MEAN", "JUDGE_STD", "JUDGE_FRAMES", "JUDGE_MIN_GAP",
 )
 SCORE_CACHE_MAX_AGE_DAYS = 90
 SCORE_CACHE_COMMIT_EVERY = 50
@@ -991,6 +1034,51 @@ def lift_motion_blur(scores: dict, motion: dict) -> dict:
     return out
 
 
+# --sharp-judge: a no-reference image quality model (ONNX, CPU) scores the car crop of the frames
+# judge_shortlist picks, and its score settles close calls (rating.judge_clearer). The model takes
+# one RGB JUDGE_SIZE² image normalised with JUDGE_MEAN/JUDGE_STD and returns one score, higher =
+# better: DBCNN, HyperIQA or TReS from huggingface.co/86Cao/IQA-ONNX-Models. A model judging the
+# whole frame would judge the background, so it sees only the car, at full resolution, in tiles.
+JUDGE_SIZE = 224
+JUDGE_GRID = 3  # JUDGE_GRID × JUDGE_GRID tiles spread over the car crop; their scores are averaged
+JUDGE_MEAN = (0.485, 0.456, 0.406)
+JUDGE_STD = (0.229, 0.224, 0.225)
+
+
+class SharpJudge:
+    """The --sharp-judge model. Loaded from its path, not its bytes: the exports keep their
+    weights in a .onnx.data file beside the model."""
+
+    def __init__(self, path: str):
+        import onnxruntime  # lazy: only a run with the judge on needs it
+        self.session = onnxruntime.InferenceSession(path, providers=["CPUExecutionProvider"])
+        self.input = self.session.get_inputs()[0].name
+        self.id = [file_key(p) for p in (path, path + ".data") if os.path.exists(p)]
+
+    def score(self, crop: np.ndarray) -> float:
+        """Mean score over the crop's judge_tiles."""
+        mean, std = np.array(JUDGE_MEAN, np.float32), np.array(JUDGE_STD, np.float32)
+        scores = []
+        for tile in judge_tiles(crop):
+            x = ((tile.astype(np.float32) / 255.0 - mean) / std).transpose(2, 0, 1)[np.newaxis]
+            scores.append(float(np.asarray(self.session.run(None, {self.input: np.ascontiguousarray(x)})[0]).reshape(-1)[0]))
+        return float(np.mean(scores))
+
+
+def judge_tiles(crop: np.ndarray) -> list:
+    """JUDGE_GRID² JUDGE_SIZE squares spread evenly over the crop, corners included. A crop
+    with a side under JUDGE_SIZE is grown first so its short side is JUDGE_SIZE."""
+    h, w = crop.shape[:2]
+    if min(h, w) < JUDGE_SIZE:
+        grow = JUDGE_SIZE / min(h, w)
+        crop = cv2.resize(crop, (max(JUDGE_SIZE, round(w * grow)), max(JUDGE_SIZE, round(h * grow))),
+                          interpolation=cv2.INTER_CUBIC)
+        h, w = crop.shape[:2]
+    ys = sorted({int(v) for v in np.linspace(0, h - JUDGE_SIZE, JUDGE_GRID)})
+    xs = sorted({int(v) for v in np.linspace(0, w - JUDGE_SIZE, JUDGE_GRID)})
+    return [crop[y:y + JUDGE_SIZE, x:x + JUDGE_SIZE] for y in ys for x in xs]
+
+
 def frame_entry(rgb: np.ndarray, detector: str, detections):
     """(the frame's detection entry or None without a detector, the entry when it was
     detected here or None when `detections` was the stored one): the parent writes
@@ -1195,14 +1283,14 @@ def emit_saliency_points(manifest, args, cache, detections):
 # The one "Why|<reason>" tag every scored frame gets in results column 7, saying how
 # it was decided. Kept to a handful: a tag per score bucket floods darktable's tag list.
 WHY_REASONS = ("Keeper", "Keeper by margin", "Outranked", "Graded", "Not shortlisted",
-               "No vehicle", "Close call", "Blank", "Spread")
+               "No vehicle", "Close call", "Blank", "Spread", "Number clearer", "Subject clearer")
 # the subject tag of a sam_subject frame whose detector found no car
 NO_VEHICLE_SUBJECT = "Subject|Vehicle|Guessed"
 
 
 def process_burst_logic(burst_id, burst_sharpness, burst_flags, burst_size, args, results_path,
                         eligible=None, diag_tags=None, reference=None, mode=None,
-                        no_vehicle=frozenset()) -> list:
+                        no_vehicle=frozenset(), reads=None, judged=None) -> list:
     """Appends the burst's result rows and returns its keepers, best first.
     diag_tags maps an id to its diagnostic tags (under "Assisted Culling|"),
     written ";"-joined in the 7th column after the frame's Why|<reason> tag
@@ -1210,10 +1298,12 @@ def process_burst_logic(burst_id, burst_sharpness, burst_flags, burst_size, args
     for 100 points (see relative_references); None means the group was too
     small for one and the burst takes universal tiers. mode is the burst's
     sharp mode (args.sharp_mode when not given) and picks its tier table. no_vehicle
-    frames are left alone with Why|No vehicle (rate_burst)."""
+    frames are left alone with Why|No vehicle (rate_burst). reads ({id: {number: confidence}})
+    lets a clearer number read settle a close call, and judged ({id: judge score}) a clearer
+    subject (rate_burst)."""
     sorted_members, burst_keepers, stars_of, reason_of = rate_burst(
         burst_sharpness, burst_flags, burst_size, args, eligible, reference, mode, no_vehicle,
-        sorted(burst_sharpness, key=int) if getattr(args, "spread_keepers", False) else None)
+        sorted(burst_sharpness, key=int) if getattr(args, "spread_keepers", False) else None, reads, judged)
     keepers = set(burst_keepers)
     burst_rows = [[
         img_id,
@@ -1231,10 +1321,11 @@ def process_burst_logic(burst_id, burst_sharpness, burst_flags, burst_size, args
 
 
 REPORT_HEADER = ["burst", "file", "rank", "of", "score", "stars", "keeper", "flags", "tags", "why", "folder", "reason", "car",
-                 "direction", "id", "subject", "motion", "straightness", "crop", "subject_own"]
+                 "direction", "id", "subject", "motion", "straightness", "crop", "subject_own", "reads", "judge"]
 
 
-def report_rows(manifest, result_rows, keepers_per_burst, direction_of=None, parts_of=None) -> list:
+def report_rows(manifest, result_rows, keepers_per_burst, direction_of=None, parts_of=None, reads_of=None,
+                judged_of=None) -> list:
     """One row per scored frame, bursts in manifest order and frames best first, saying why it
     was kept or not. stars is "leave" for a non-keeper the run left alone. reason is the
     frame's Why tag (WHY_REASONS); car is the car number the frame was pooled under, "" if none;
@@ -1242,8 +1333,11 @@ def report_rows(manifest, result_rows, keepers_per_burst, direction_of=None, par
     id is darktable's image id (capture order within a film roll). subject, motion,
     straightness and crop are motion_aware's score parts (parts_of), blank in other modes:
     eval_culling.py re-ranks from them. subject is at the burst's shared size (same_scale,
-    crop "WxH → size"); subject_own is at the crop's own size. These are last so older readers
-    of the columns keep working."""
+    crop "WxH → size"); subject_own is at the crop's own size. reads is the frame's car-number
+    reads from tagging (reads_of, read_number_reads) as "number:confidence" joined by "|", best
+    first, so eval_culling.py can replay the number tiebreak. judge is the sharpness judge's
+    score (judged_of), blank for a frame it didn't score. These are last so older readers of
+    the columns keep working."""
     file_of = {row[0]: row[1] for row in manifest}
     car_of = {row[0]: row[9] for row in manifest}
     by_burst = {}
@@ -1263,6 +1357,10 @@ def report_rows(manifest, result_rows, keepers_per_burst, direction_of=None, par
             reason = next((t[4:] for t in tags.split(";") if t.startswith("Why|")), "")
             why = ("left alone: no vehicle found" if reason == "No vehicle"
                    else f"kept: rank {rank} of {len(rows)}, the best of its stretch of the burst" if reason == "Spread"
+                   else f"kept: rank {rank} of {len(rows)}, a close call its car number reads clearer in"
+                   if reason == "Number clearer"
+                   else f"kept: rank {rank} of {len(rows)}, a close call the sharpness judge scores clearer"
+                   if reason == "Subject clearer"
                    else f"kept: rank {rank} of {len(rows)}, {allowed} allowed" if keeper == "1" and rank <= allowed
                    else f"kept: rank {rank} of {len(rows)}, within the keeper margin of the best" if keeper == "1"
                    else f"not kept: rank {rank} of {len(rows)}, only {allowed} allowed or not eligible")
@@ -1277,7 +1375,10 @@ def report_rows(manifest, result_rows, keepers_per_burst, direction_of=None, par
                         os.path.dirname(path), reason, car_of.get(img_id, ""),
                         (direction_of or {}).get(burst_id, ""), img_id,
                         "" if subject == "" else round(subject, 4), cls,
-                        "" if straight == "" else round(straight, 4), crop, "" if own == "" else round(own, 4)])
+                        "" if straight == "" else round(straight, 4), crop, "" if own == "" else round(own, 4),
+                        "|".join(f"{n}:{c:.3f}" for n, c in sorted((reads_of or {}).get(img_id, {}).items(),
+                                                                   key=lambda nc: -nc[1])),
+                        "" if img_id not in (judged_of or {}) else round(judged_of[img_id], 4)])
     return out
 
 
@@ -1299,7 +1400,7 @@ def archive_report(report_path, archive_dir, keep):
         log(f"couldn't archive the report: {e}")
 
 
-def write_report(manifest, args, direction_of=None, parts_of=None):
+def write_report(manifest, args, direction_of=None, parts_of=None, judged_of=None):
     """Writes args.report (CSV, REPORT_HEADER) from the finished results file, then archives it
     when args.report_archive_dir is set; a failure is logged, never fatal, since the scores are
     already on their way back to darktable."""
@@ -1310,7 +1411,8 @@ def write_report(manifest, args, direction_of=None, parts_of=None):
             w = csv.writer(f)
             w.writerow(REPORT_HEADER)
             w.writerows(report_rows(manifest, result_rows, lambda n: keepers_allowed(args.keep_mode, n),
-                                    direction_of, parts_of))
+                                    direction_of, parts_of,
+                                    read_number_reads(getattr(args, "number_reads", ""), manifest)[0], judged_of))
     except OSError as e:
         log(f"couldn't write the report {args.report}: {e}")
         return
@@ -1333,9 +1435,9 @@ def main(args):
         if getattr(args, "emit_saliency_points", False):
             emit_saliency_points(manifest, args, cache, detections)
         else:
-            direction_of, parts_of = score_manifest(manifest, args, cache, detections)
+            direction_of, parts_of, judged_of = score_manifest(manifest, args, cache, detections)
             if getattr(args, "report", ""):
-                write_report(manifest, args, direction_of, parts_of)
+                write_report(manifest, args, direction_of, parts_of, judged_of)
     finally:
         cache.close()
         detections.close()
@@ -1413,10 +1515,10 @@ def score_manifest(manifest, args, cache, detections):
         burst_motion = motion_of.pop(burst_id, {})
         if burst_motion:
             scores = lift_motion_blur(scores, burst_motion)
+        path_of = {item[0]: item[1] for item in burst_groups[burst_id]}
         if detector:
             # framing is judged across the burst, so it's added here and never cached per frame
             ids = [item[0] for item in burst_groups[burst_id] if item[0] in raw]
-            path_of = {item[0]: item[1] for item in burst_groups[burst_id]}
             direction, framing = framing_flags(
                 [frame_boxes(car_filtered(detections.get(detection_key(path_of[i], detector_for(detector))),
                                           cars_of.get(path_key(path_of[i])))) for i in ids])
@@ -1434,6 +1536,12 @@ def score_manifest(manifest, args, cache, detections):
         eligible = set(eligible) - blank_frames(burst_flags[burst_id], getattr(args, "tag_only_flags", frozenset()))
         burst_tags = []
         note = f"burst {burst_id}: {len(raw)} of {len(burst_groups[burst_id])} frames scored, mode {mode_of[burst_id]}"
+        if judge:
+            # only frames that can be a close call: the judge is the slow part of a run
+            short = judge_shortlist(scores, eligible)
+            for i in short:
+                judged_of[i] = judge_frame(path_of[i])
+            note += f", judged {', '.join(f'{i} {judged_of[i]:.3g}' for i in short) or 'none'}"
         if mode_of[burst_id] != args.sharp_mode:
             burst_tags.append(technique_tag(mode_of[burst_id]))
             med = [float(np.median(known)) if (known := [v for v in vals if v > 0]) else 0.0
@@ -1456,7 +1564,7 @@ def score_manifest(manifest, args, cache, detections):
         else:
             keepers = process_burst_logic(burst_id, scores, burst_flags[burst_id], len(burst_groups[burst_id]),
                                           args, args.results, eligible, diag, mode=mode_of[burst_id],
-                                          no_vehicle=no_vehicle)
+                                          no_vehicle=no_vehicle, reads=reads_of, judged=judged_of)
             log(f"{note}, keepers {', '.join(keepers) or 'none'}"
                 + (f", {len(no_vehicle)} left alone (no vehicle)" if no_vehicle else ""))
         del burst_sharpness[burst_id]
@@ -1479,6 +1587,17 @@ def score_manifest(manifest, args, cache, detections):
     detector = getattr(args, "detector", "") if motion else ""
     det_key = detector_key(detector)  # loads the model: a missing or corrupt one fails the run here, not the centre third on every frame
     cars_of, cars_note = read_car_boxes(getattr(args, "car_boxes", "")) if detector else ({}, "")
+    reads_of, reads_note = read_number_reads(getattr(args, "number_reads", ""), manifest)
+    if reads_note:
+        log(reads_note)
+    judge, judged_of = None, {}  # judged_of: id → the judge's score, judge_shortlist's frames only
+    if getattr(args, "sharp_judge", ""):
+        if motion:
+            judge = SharpJudge(args.sharp_judge)
+            log(f"sharpness judge: {os.path.basename(args.sharp_judge)} on the car crop of up to "
+                f"{JUDGE_FRAMES} frames per burst")
+        else:
+            log("sharpness judge: off, it needs motion_aware's car crop")
     motion_of = {}  # burst → {id: (class, straightness, no vehicle)}, motion_aware only
     direction_of = {}  # burst → travel direction (framing_flags), with a detector only
     parts_of = {}  # id → (subject sharpness, class, straightness, crop[, own-size subject]), motion_aware only, for the report
@@ -1510,6 +1629,23 @@ def score_manifest(manifest, args, cache, detections):
             # None (mask unusable) is cached too: the same inputs give the same mask
             masked = None if sharp[0] is None else float(sharp[0])
             cache.put({"masked": masked}, *masked_key(filepath, args, prescored[image_id][2], edited))
+
+    def judge_frame(filepath):
+        """The judge's score for the frame's car crop, cached; the centre third when there is no
+        detector or no car, as in motion_aware_score."""
+        cars = cars_of.get(path_key(filepath))
+        key = ("judge", file_key(filepath), args.fast_jpeg, judge.id, det_key, *car_key(cars),
+               JUDGE_SIZE, JUDGE_GRID, JUDGE_MEAN, JUDGE_STD)
+        hit = cache.get(*key)
+        if hit is not None:
+            return hit["judge"]
+        full = decode_rgb(filepath, args.fast_jpeg)
+        stored = detections.get(detection_key(filepath, detector_for(detector))) if detector else None
+        entry = car_filtered(frame_entry(full, detector, stored)[0], cars)
+        box = vehicle_box(full, entry)[0] if entry is not None else None
+        score = judge.score(subject_crop(full, box or CENTRE_BOX))
+        cache.put({"judge": score}, *key)
+        return score
 
     with concurrent.futures.ProcessPoolExecutor(max_workers=workers, initializer=_init_worker,
                                                 initargs=(detector,)) as executor:
@@ -1610,10 +1746,10 @@ def score_manifest(manifest, args, cache, detections):
     for burst_id, scores, flags, eligible, diag, note, group, no_vehicle in deferred:
         keepers = process_burst_logic(burst_id, scores, flags, len(burst_groups[burst_id]),
                                       args, args.results, eligible, diag, references.get(group), mode=group[0],
-                                      no_vehicle=no_vehicle)
+                                      no_vehicle=no_vehicle, reads=reads_of, judged=judged_of)
         log(f"{note}, keepers {', '.join(keepers) or 'none'}"
             + (f", {len(no_vehicle)} left alone (no vehicle)" if no_vehicle else ""))
-    return direction_of, parts_of
+    return direction_of, parts_of, judged_of
 
 
 if __name__ == "__main__":
@@ -1640,6 +1776,15 @@ if __name__ == "__main__":
     parser.add_argument("--spread-keepers", action="store_true",
                         help="Keep one frame per equal time slice of each burst instead of the top frames by "
                              "score, where the slice's best scores at least CLOSE_CALL_SHARE of the burst's best")
+    parser.add_argument("--number-reads", default="",
+                        help="tagging's last boxes.json: in a close call, the dropped frame keeps instead when it "
+                             "reads a car number both frames read at least NUMBER_READ_MIN_GAP more confidently "
+                             "(empty = off)")
+    parser.add_argument("--sharp-judge", default="",
+                        help="motion_aware: a no-reference quality model .onnx (DBCNN, HyperIQA or TReS from "
+                             "86Cao/IQA-ONNX-Models) scoring the car crop of each burst's top frames, at most "
+                             f"{JUDGE_FRAMES}; in a close call the dropped frame keeps instead when it scores at least "
+                             f"{JUDGE_MIN_GAP:.0%} higher (empty = off)")
     parser.add_argument("--no-vehicle-leave", action="store_true",
                         help="A frame where the detector found no car (motion_aware, or sam_subject with a "
                              "detector) is never a keeper and keeps its rating, tagged Why|No vehicle")

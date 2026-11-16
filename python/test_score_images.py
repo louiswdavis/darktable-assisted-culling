@@ -91,6 +91,25 @@ def run_tests():
         check("car boxes: a people run gives none", S.read_car_boxes(boxes_json)[0], {})
     check("car boxes: a missing file gives none", S.read_car_boxes(os.path.join(tempfile.gettempdir(), "no.boxes.json"))[0], {})
     check("car boxes: no path gives none", S.read_car_boxes(""), ({}, "car boxes: off, raw detector boxes"))
+    # ticket 38: number reads from the same file, per manifest id, best confidence over all boxes
+    with tempfile.TemporaryDirectory() as nr_tmp:
+        shot, plain_shot = os.path.join(nr_tmp, "a.jpg"), os.path.join(nr_tmp, "b.jpg")
+        open(shot, "wb").close()
+        open(plain_shot, "wb").close()
+        boxes_json = os.path.join(nr_tmp, "c.boxes.json")
+        with open(boxes_json, "w", encoding="utf-8") as f:
+            _json.dump({"images": {
+                "1": {"file": shot, "frame": [2000, 1000], "status": "ok", "boxes": [
+                    {"bbox": [0, 0, 9, 9], "ocr": [["12", 0.6], ["7", 0.3]]},
+                    {"bbox": [0, 0, 9, 9], "ocr": [["12", 0.8], [" ", 0.9]]}]},
+                "2": {"file": plain_shot, "frame": [2000, 1000], "status": "ok", "boxes": [{"bbox": [0, 0, 9, 9]}]}}}, f)
+        os.utime(shot, (1, 1))
+        os.utime(plain_shot, (1, 1))
+        reads, note = S.read_number_reads(boxes_json, [["5", shot], ["6", plain_shot], ["7", "elsewhere.jpg"]])
+        check("number reads: best confidence per number, blanks dropped, frames with none left out",
+              reads, {"5": {"12": 0.8, "7": 0.3}})
+        check("number reads: the log counts frames", note, f"number reads: 1 frames from {boxes_json}")
+    check("number reads: no path is off", S.read_number_reads("", [["5", "a.jpg"]]), ({}, ""))
 
     small_sure = (10, 10, 30, 30, 0.95, 2)
     big_unsure = (100, 50, 300, 250, 0.5, 7)
@@ -290,6 +309,61 @@ def run_tests():
     check("spread: one keeper allowed keeps the best frame",
           R.rate_burst(best_three, {k: () for k in best_three}, 12,
                        Namespace(**{**vars(spread_on), "keep_mode": "single_best"}))[1], [5])
+
+    # ticket 38: a clearer number read settles a close call
+    single = Namespace(keep_mode="single_best", rank_mode="universal", nk_mode="leave")
+    close_pair = {"a": 100.0, "b": 97.0}
+    def settle(reads, burst=close_pair, settings=single):
+        _m, kept, _s, why = R.rate_burst(burst, {k: () for k in burst}, len(burst), settings, reads=reads)
+        return kept, why
+    check("number: the dropped frame of a close call reads clearer, so it keeps",
+          settle({"a": {"12": 0.6}, "b": {"12": 0.9}}), (["b"], {"a": "Close call", "b": "Number clearer"}))
+    check("number: a gap under NUMBER_READ_MIN_GAP keeps the sharper frame",
+          settle({"a": {"12": 0.6}, "b": {"12": 0.65}})[0], ["a"])
+    check("number: only one frame reading keeps today's ranking", settle({"b": {"12": 0.9}})[0], ["a"])
+    check("number: different numbers keep today's ranking", settle({"a": {"12": 0.3}, "b": {"21": 0.9}})[0], ["a"])
+    check("number: the number both read best decides",
+          settle({"a": {"12": 0.9, "7": 0.1}, "b": {"12": 0.8, "7": 0.5}})[0], ["a"])
+    check("number: no reads rate exactly as before", (settle(None), settle({})),
+          ((["a"], {"a": "Close call", "b": "Close call"}),) * 2)
+    check("number: not a close call keeps the sharper frame",
+          settle({"a": {"12": 0.1}, "b": {"12": 0.9}}, {"a": 100.0, "b": 90.0})[0], ["a"])
+    check("number: the keeper margin still holds the sharper frame",
+          settle({"a": {"12": 0.6}, "b": {"12": 0.9}}, settings=Namespace(**{**vars(single), "keep_margin": 0.98})),
+          (["a", "b"], {"a": "Close call", "b": "Number clearer"}))
+    check("number: number_clearer needs a shared number", R.number_clearer({"1": 0.1}, {"2": 0.9}), False)
+
+    # ticket 14: the sharpness judge settles a close call the reads left
+    def judge(judged, burst=close_pair, settings=single, reads=None):
+        _m, kept, _s, why = R.rate_burst(burst, {k: () for k in burst}, len(burst), settings, reads=reads, judged=judged)
+        return kept, why
+    check("judge: the dropped frame scored clearer keeps",
+          judge({"a": 0.50, "b": 0.60}), (["b"], {"a": "Close call", "b": "Subject clearer"}))
+    check("judge: a gap under JUDGE_MIN_GAP keeps the sharper frame", judge({"a": 0.50, "b": 0.52})[0], ["a"])
+    check("judge: one frame unjudged keeps today's ranking", judge({"b": 0.9})[0], ["a"])
+    check("judge: no scores rate exactly as before", (judge(None), judge({})),
+          ((["a"], {"a": "Close call", "b": "Close call"}),) * 2)
+    check("judge: not a close call keeps the sharper frame", judge({"a": 0.1, "b": 0.9}, {"a": 100.0, "b": 90.0})[0], ["a"])
+    check("judge: a number read settles it first",
+          judge({"a": 0.50, "b": 0.60}, reads={"a": {"12": 0.6}, "b": {"12": 0.9}}),
+          (["b"], {"a": "Close call", "b": "Number clearer"}))
+    check("judge: reads that settle nothing leave it to the judge",
+          judge({"a": 0.50, "b": 0.60}, reads={"a": {"12": 0.6}, "b": {"12": 0.62}})[1]["b"], "Subject clearer")
+    check("judge_shortlist: frames within the close-call share, best first, capped",
+          R.judge_shortlist({"a": 100.0, "b": 99.0, "c": 98.0, "d": 97.0, "e": 50.0}, {"a", "b", "c", "d", "e"}),
+          ["a", "b", "c"])
+    check("judge_shortlist: ineligible frames stay out",
+          R.judge_shortlist({"a": 100.0, "b": 99.0}, {"b"}), ["b"])
+    check("judge_shortlist: nothing to judge", (R.judge_shortlist({}, set()), R.judge_shortlist({"a": 0.0}, {"a"})), ([], []))
+    check("judge_clearer: an unscored or zero keeper never swaps",
+          (R.judge_clearer(None, 0.9), R.judge_clearer(0.5, None), R.judge_clearer(0.0, 0.9)), (False, False, False))
+    tile_rng = np.random.default_rng(14)
+    tiles = S.judge_tiles(tile_rng.integers(0, 255, (300, 500, 3), dtype=np.uint8))
+    check("judge_tiles: a 3x3 grid of JUDGE_SIZE squares",
+          (len(tiles), {t.shape for t in tiles}), (S.JUDGE_GRID ** 2, {(S.JUDGE_SIZE, S.JUDGE_SIZE, 3)}))
+    small = S.judge_tiles(tile_rng.integers(0, 255, (100, 150, 3), dtype=np.uint8))
+    check("judge_tiles: a small crop grows to JUDGE_SIZE first", {t.shape for t in small}, {(S.JUDGE_SIZE, S.JUDGE_SIZE, 3)})
+    check("judge_tiles: an exact-size crop is one tile", len(S.judge_tiles(np.zeros((224, 224, 3), np.uint8))), 1)
 
     # flags: listed in column 3, each costs its stars, and they stack -------------
     check("frame_flags: exposure ok and eyes open is no flags", S.frame_flags("ok"), ())
@@ -708,15 +782,21 @@ def run_tests():
     check("report: direction per burst", S.report_rows(rep_manifest, rep_results, lambda n: 1, {"0": "left"})[0][13],
           "left")
     check("report: the id column is darktable's id", [r[14] for r in rep], ["1", "2", "3"])
-    check("report: score parts blank outside motion_aware", rep[0][15:], ["", "", "", "", ""])
+    check("report: score parts blank outside motion_aware", rep[0][15:20], ["", "", "", "", ""])
     parts = S.report_rows(rep_manifest, rep_results, lambda n: 1, None,
                           {"1": (69.565217, "pan", 0.812345, "640x400 → 600", 55.123456)})
-    check("report: score parts per frame, rounded", (parts[0][15:], parts[1][15:]),
+    check("report: score parts per frame, rounded", (parts[0][15:20], parts[1][15:20]),
           ([69.5652, "pan", 0.8123, "640x400 → 600", 55.1235], ["", "", "", "", ""]))
     check("report: parts without an own-size subject leave it blank",
           S.report_rows(rep_manifest, rep_results, lambda n: 1, None, {"1": (1.0, "pan", 0.5, "9x9")})[0][19], "")
-    check("report: parts columns are last", S.REPORT_HEADER[-6:],
-          ["id", "subject", "motion", "straightness", "crop", "subject_own"])
+    check("report: parts columns, then reads, then judge, are last", S.REPORT_HEADER[-8:],
+          ["id", "subject", "motion", "straightness", "crop", "subject_own", "reads", "judge"])
+    judged_rep = S.report_rows(rep_manifest, rep_results, lambda n: 1, judged_of={"1": 0.612345})
+    check("report: the judge score per judged frame, blank for the rest", [r[-1] for r in judged_rep], [0.6123, "", ""])
+    judged_results = [["2", "40.0", "", "0", "0", "leave", "Why|Close call"],
+                      ["1", "80.0", "", "0", "1", "4", "Why|Subject clearer"], ["3", "55.0", "", "1", "1", "3", ""]]
+    check("report: a judge keeper says why", S.report_rows(rep_manifest, judged_results, lambda n: 1)[0][9],
+          "kept: rank 1 of 2, a close call the sharpness judge scores clearer")
 
     # framing_flags --------------------------------------------------------------
     def det(*boxes):

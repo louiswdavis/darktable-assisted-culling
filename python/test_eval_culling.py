@@ -151,7 +151,7 @@ with tempfile.TemporaryDirectory() as tmp:
     import json
     from rating import TIER_THRESHOLDS, rate_burst, star_tier
 
-    s = E.settings_of({"rank_mode": "universal", "keep_mode": "single_best", "keep_margin": "off", "spread_keepers": "off", "non_keeper": "leave", "star_scale": "1"})
+    s = E.settings_of({"rank_mode": "universal", "keep_mode": "single_best", "keep_margin": "off", "spread_keepers": "off", "number_reads": "off", "sharp_judge": "off", "non_keeper": "leave", "star_scale": "1"})
     check("settings_of: margin off is 0, scale is a float", (s.keep_margin, s.star_scale, s.nk_mode), (0.0, 1.0, "leave"))
     check("settings_of: margin 90 is 0.9", E.settings_of({**vars(s), "non_keeper": "graded", "keep_margin": "90", "star_scale": "1.25"}).keep_margin, 0.9)
 
@@ -176,7 +176,8 @@ with tempfile.TemporaryDirectory() as tmp:
     check("suggest: scores the hand-rated frames only", ranked[0][1]["frames"], 5)
     preset = json.loads(E.preset_json(ranked[0][0], "subject_focus"))
     check("preset_json: a custom preset with the run's sharpness mode", (preset["genre"], preset["sharp_mode"], sorted(preset)),
-          ("custom", "subject_focus", ["genre", "keep_margin", "keep_mode", "non_keeper", "rank_mode", "sharp_mode", "star_scale"]))
+          ("custom", "subject_focus", ["genre", "keep_margin", "keep_mode", "non_keeper", "number_reads", "rank_mode", "sharp_judge", "sharp_mode",
+                                         "spread_keepers", "star_scale"]))
     text = E.render_suggestions(ranked, 1, 5, "subject_focus", 1)
     check("render_suggestions: one shoot warns", "one shoot only" in text, True)
     check("render_suggestions: two shoots do not", "one shoot only" in E.render_suggestions(ranked, 2, 10, "subject_focus", 1), False)
@@ -218,6 +219,40 @@ with tempfile.TemporaryDirectory() as tmp:
     check("rescore: SAME_SCALE 1 keeps the shared-size subject", E.rescore(own, E.PART_DEFAULTS)[0]["score"], 92.0)
     check("frame_of: own-size subject", E.frame_of({"burst": "P", "file": "x.jpg", "subject_own": "60.25"}, "motion_aware")["subject_own"], 60.25)
     check("parts_agreement: bursts with parts only", E.parts_agreement(live), (1, 1))
+
+    # ticket 38: number reads in the report, replayed off and on
+    check("frame_of: number reads", E.frame_of({"burst": "P", "file": "x.jpg", "reads": "12:0.900|7:0.300"}, "motion_aware")["reads"],
+          {"12": 0.9, "7": 0.3})
+    check("frame_of: no reads column", bare["reads"], {})
+    def read_frame(name, score, reads, judge=None):
+        return {"path": name, "burst": "N", "file": name, "id": None, "score": score, "flags": (), "of": 2, "eligible": True,
+                "no_vehicle": False, "masked": False, "mode": "subject_focus", "reads": reads, "judge": judge}
+    clearer = [read_frame("n1", 100.0, {"12": 0.6}), read_frame("n2", 97.0, {"12": 0.9})]
+    off_on = {state: {f["path"]: f for f in E.replay(clearer, E.settings_of({**vars(s), "non_keeper": "leave", "keep_margin": "off",
+              "star_scale": "1", "number_reads": state}), "subject_focus")} for state in ("off", "on")}
+    check("replay: number reads on lets the clearer read keep", [(off_on[st]["n1"]["keeper"], off_on[st]["n2"]["reason"])
+          for st in ("off", "on")], [(True, "Close call"), (False, "Number clearer")])
+    lines = E.number_read_lines([(clearer, {E.shot_key("n2"): (3, False), E.shot_key("n1"): (0, False)})],
+                                E.settings_of({**vars(s), "non_keeper": "leave", "keep_margin": "off", "star_scale": "1"}),
+                                "subject_focus", 1)
+    check("number_read_lines: hit rate off and on, close calls settled",
+          (lines[0].startswith("number reads off:"), "hit rate 0.0%" in lines[0], "hit rate 100.0%" in lines[1],
+           lines[1].endswith("1 close calls settled by the read")), (True, True, True, True))
+
+    # ticket 14: the sharpness judge's score in the report, replayed off and on
+    check("frame_of: judge score", E.frame_of({"burst": "P", "file": "x.jpg", "judge": "0.6125"}, "motion_aware")["judge"], 0.6125)
+    check("frame_of: no judge column", bare["judge"], None)
+    judged = [read_frame("j1", 100.0, {}, 0.50), read_frame("j2", 97.0, {}, 0.60)]
+    off_on = {state: {f["path"]: f for f in E.replay(judged, E.settings_of({**vars(s), "non_keeper": "leave", "keep_margin": "off",
+              "star_scale": "1", "number_reads": "off", "sharp_judge": state}), "subject_focus")} for state in ("off", "on")}
+    check("replay: judge on lets the subject the judge scores clearer keep", [(off_on[st]["j1"]["keeper"], off_on[st]["j2"]["reason"])
+          for st in ("off", "on")], [(True, "Close call"), (False, "Subject clearer")])
+    lines = E.judge_lines([(judged, {E.shot_key("j2"): (3, False), E.shot_key("j1"): (0, False)})],
+                          E.settings_of({**vars(s), "non_keeper": "leave", "keep_margin": "off", "star_scale": "1", "number_reads": "off"}),
+                          "subject_focus", 1)
+    check("judge_lines: hit rate off and on, close calls settled",
+          (lines[0].startswith("sharpness judge off:"), "hit rate 0.0%" in lines[0], "hit rate 100.0%" in lines[1],
+           lines[1].endswith("1 close calls settled by the judge")), (True, True, True, True))
     check("parts_agreement: a score out of step disagrees", E.parts_agreement([{**live[0], "subject": 70.0}] + live[1:]), (0, 1))
 
     kept = [{**f, "keeper": f["path"] in ("p1", "q1")} for f in live]

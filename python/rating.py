@@ -14,6 +14,14 @@ GRADED_STEPS = [(0.90, 1), (0.75, 2), (0.60, 3), (0.45, 4)]
 # the last frame kept by rank and the best frame that wasn't kept are a close call
 # when the dropped one scores at least this share of the kept one
 CLOSE_CALL_SHARE = 0.95
+# with number reads on, the dropped frame of a close call reads a number both frames read
+# at least this much more confidently (tagging's OCR, 0-1) than the kept one, so it keeps instead
+NUMBER_READ_MIN_GAP = 0.10
+# with the sharpness judge on (--sharp-judge), the top frames of a burst within CLOSE_CALL_SHARE of
+# its best (at most JUDGE_FRAMES) get a quality score on the car crop, and the dropped frame of a
+# close call keeps instead when it scores at least JUDGE_MIN_GAP (a share) above the kept one
+JUDGE_FRAMES = 3
+JUDGE_MIN_GAP = 0.05
 
 # universal tiers for the Laplacian-variance modes (subject_focus, subject_peak, center,
 # face_detect, sam_subject); modes on another scale have their own table in
@@ -123,6 +131,35 @@ def close_call(burst_sharpness: dict, ranked_keepers: list, losers: list) -> set
     return set()
 
 
+def number_clearer(kept_reads: dict, lost_reads: dict) -> bool:
+    """True when the dropped frame reads the number both frames read best (highest summed
+    confidence) at least NUMBER_READ_MIN_GAP more confidently than the kept frame. Reads are
+    {number: confidence}; a frame with none never wins or loses."""
+    shared = kept_reads.keys() & lost_reads.keys()
+    if not shared:
+        return False
+    number = max(shared, key=lambda n: (kept_reads[n] + lost_reads[n], n))
+    return lost_reads[number] - kept_reads[number] >= NUMBER_READ_MIN_GAP
+
+
+def judge_shortlist(burst_sharpness: dict, eligible) -> list:
+    """The ids the sharpness judge scores: eligible frames at CLOSE_CALL_SHARE of the best
+    eligible score or more, best first, at most JUDGE_FRAMES. Only these can be a close call."""
+    ranked = sorted((i for i in eligible if i in burst_sharpness), key=lambda i: -burst_sharpness[i])
+    if not ranked or burst_sharpness[ranked[0]] <= 0:
+        return []
+    best = burst_sharpness[ranked[0]]
+    return [i for i in ranked if burst_sharpness[i] >= CLOSE_CALL_SHARE * best][:JUDGE_FRAMES]
+
+
+def judge_clearer(kept_score, lost_score) -> bool:
+    """True when the judge scored both frames and the dropped one at least JUDGE_MIN_GAP (a
+    share) above the kept one. None (not judged) never wins or loses."""
+    if kept_score is None or lost_score is None or kept_score <= 0:
+        return False
+    return lost_score >= kept_score * (1 + JUDGE_MIN_GAP)
+
+
 def spread_keepers(burst_sharpness: dict, in_order: list, by_score: list, allowed: int, best: float) -> set:
     """allowed keepers from in_order (the eligible ids in capture order) cut into allowed equal
     slices: each slice's best frame, unless it scores under CLOSE_CALL_SHARE of best, so a
@@ -142,7 +179,8 @@ def spread_keepers(burst_sharpness: dict, in_order: list, by_score: list, allowe
 
 
 def rate_burst(burst_sharpness: dict, burst_flags: dict, burst_size: int, settings,
-               eligible=None, reference=None, mode=None, no_vehicle=frozenset(), order=None) -> tuple:
+               eligible=None, reference=None, mode=None, no_vehicle=frozenset(), order=None,
+               reads=None, judged=None) -> tuple:
     """(members best first, keepers best first, id → stars, id → Why reason) for one
     burst. settings carries keep_mode, rank_mode and nk_mode, plus optional
     keep_margin (share of the burst's best a frame needs to keep as well, 0 = off),
@@ -158,7 +196,12 @@ def rate_burst(burst_sharpness: dict, burst_flags: dict, burst_size: int, settin
     A keeper in the close call keeps the stars its own score earns (no top-40% drop).
     settings.spread_keepers (default off) picks keepers per time slice (spread_keepers);
     order lists the ids in capture order, sorted ids when not given. A keeper the
-    slices chose instead of a frame ranked higher gets Why|Spread."""
+    slices chose instead of a frame ranked higher gets Why|Spread. reads ({id: {number:
+    confidence}}, tagging's OCR) settles the close call: when number_clearer, the dropped
+    frame keeps instead (Why|Number clearer) and the kept one drops unless the keeper
+    margin holds it. judged ({id: judge score}, judge_shortlist's frames) settles a close call
+    the reads didn't: when judge_clearer, the same swap with Why|Subject clearer. None or {}
+    changes nothing."""
     if not burst_sharpness:
         return [], [], {}, {}
 
@@ -185,6 +228,20 @@ def rate_burst(burst_sharpness: dict, burst_flags: dict, burst_size: int, settin
     ranked = set(keepers)  # kept by rank (or by slice), before the margin adds any
     if margin > 0 and best > 0:
         keepers |= {i for i in eligible if burst_sharpness[i] >= margin * best}
+    close = close_call(burst_sharpness, [i for i in sorted_members if i in ranked],
+                       [i for i in sorted_members if i in eligible and i not in keepers])
+    clearer, subject_clearer = set(), set()
+    if close and (reads or judged):
+        kept = [i for i in sorted_members if i in ranked][-1]
+        lost = next(i for i in close if i != kept)
+        if reads and number_clearer(reads.get(kept, {}), reads.get(lost, {})):
+            clearer = {lost}
+        elif judged and judge_clearer(judged.get(kept), judged.get(lost)):
+            subject_clearer = {lost}
+        if clearer or subject_clearer:
+            ranked, spread = (ranked - {kept}) | {lost}, spread - {kept}
+            in_margin = margin > 0 and burst_sharpness[kept] >= margin * best
+            keepers = (keepers if in_margin else keepers - {kept}) | {lost}
 
     burst_keepers = [i for i in sorted_members if i in keepers]
     num_keepers = len(burst_keepers)
@@ -193,8 +250,6 @@ def rate_burst(burst_sharpness: dict, burst_flags: dict, burst_size: int, settin
     penalised = penalised_flags(burst_flags, tag_only)
     star_scale = getattr(settings, "star_scale", 1.0)
     tiers = tier_table(mode or getattr(settings, "sharp_mode", ""))
-    close = close_call(burst_sharpness, [i for i in sorted_members if i in ranked],
-                       [i for i in sorted_members if i in eligible and i not in keepers])
 
     rated = {}
     for img_id in sorted_members:
@@ -245,7 +300,9 @@ def rate_burst(burst_sharpness: dict, burst_flags: dict, burst_size: int, settin
                 except ValueError:
                     stars = 0
         stars_of[img_id] = stars
-        reason_of[img_id] = ("Spread" if img_id in spread
+        reason_of[img_id] = ("Number clearer" if img_id in clearer
+                             else "Subject clearer" if img_id in subject_clearer
+                             else "Spread" if img_id in spread
                              else "Close call" if img_id in close
                              else ("Keeper" if img_id in ranked else "Keeper by margin") if is_keeper
                              else "Not shortlisted" if img_id not in eligible

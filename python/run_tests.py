@@ -1,8 +1,9 @@
 # Run with: python python/run_tests.py [name ...]
-# Runs every python/test_*.py and lua/test_assisted_*.lua (or just the named ones, e.g. score_images
-# assisted_culling) with this interpreter and writes each one's output to tests/<name>.txt in the repo
+# Runs every python/test_*.py and lua/test_assisted_*.lua (or just the named ones, by file
+# name without test_ and the extension) with this interpreter and writes each one's output to tests/<name>.txt in the repo
 # root, then prints a one-line summary each. Lua suites run under a `lua` on PATH, else under lupa
-# (`pip install lupa`); with neither they are reported as SKIP and the run fails.
+# (`pip install lupa`); with neither they are reported as SKIP and the run fails. check_shared.py
+# runs first, and a shared file that differs from a sibling repo's copy fails the run too.
 
 import os
 import shutil
@@ -18,7 +19,8 @@ LUPA = ("import lupa; L=lupa.LuaRuntime(); "
 
 
 def main(names: list) -> int:
-    tests = [(HERE, f) for f in sorted(os.listdir(HERE)) if f.startswith("test_") and f.endswith(".py")]
+    shared_bad = subprocess.run([sys.executable, os.path.join(HERE, "check_shared.py")]).returncode != 0
+    tests =[(HERE, f) for f in sorted(os.listdir(HERE)) if f.startswith("test_") and f.endswith(".py")]
     if os.path.isdir(LUA_DIR):
         tests += [(LUA_DIR, f) for f in sorted(os.listdir(LUA_DIR))
                   if f.startswith("test_assisted_") and f.endswith(".lua")]
@@ -46,7 +48,7 @@ def main(names: list) -> int:
         bad += bool(failed)
         print(f"{'FAIL' if failed else 'ok  '} {label}: {passed} ok, {fails} FAIL, exit {run.returncode} -> {out}")
     print(f"{len(tests) - bad}/{len(tests)} test files passed")
-    return 1 if bad or not tests else 0
+    return 1 if bad or shared_bad or not tests else 0
 
 
 def command(folder: str, test: str):

@@ -328,6 +328,8 @@ check("no_groups_notice: none mode and single frame are silent",
     tostring(C.no_groups_notice("none", 5, 5)) .. "|" .. tostring(C.no_groups_notice("native", 1, 1)), "nil|nil")
 check("preset schema: keeper margin defaults off", cd.keep_margin, "off")
 check("preset schema: spread keepers defaults off", cd.spread_keepers, false)
+check("preset schema: number reads defaults off", cd.number_reads, false)
+check("preset schema: sharpness judge defaults off", cd.sharp_judge, false)
 check("preset schema: graded non-keepers can be picked",
     C.preset_merge(C.PRESET_SCHEMA, { non_keeper = "graded" }).non_keeper, "graded")
 check("preset schema: star strictness defaults to standard", cd.star_scale, "1")

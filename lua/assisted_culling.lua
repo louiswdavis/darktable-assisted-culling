@@ -300,6 +300,8 @@ M.PRESET_SCHEMA = {
     { key = "penalise_blocked", kind = "bool", default = true },
     { key = "blank_share", kind = "choice", choices = blank_share_opts, default = "95" },
     { key = "spread_keepers", kind = "bool", default = false },
+    { key = "number_reads", kind = "bool", default = false },
+    { key = "sharp_judge", kind = "bool", default = false },
     { key = "no_vehicle_leave", kind = "bool", default = false },
     { key = "car_boxes_only", kind = "bool", default = true },
     { key = "tag_keeper", kind = "bool", default = true },
@@ -325,7 +327,7 @@ for _, f in ipairs(M.PRESET_SCHEMA) do
 end
 M.PANEL_PAGES = {
     { number = 1, title = "scoring", keys = { "genre", "rank_mode", "sharp_mode", "exp_mode", "keep_mode",
-        "keep_margin", "spread_keepers", "non_keeper", "star_scale" } },
+        "keep_margin", "spread_keepers", "number_reads", "sharp_judge", "non_keeper", "star_scale" } },
     { number = 2, title = "bursts", keys = { "group_support", "group_node", "car_tag_node" } },
     { number = 3, title = "penalties & speed", keys = { "apply_while_scoring", "fast_jpeg_decode",
         "penalise_overexposed", "penalise_underexposed", "penalise_eyes_closed", "penalise_cut_off",
@@ -368,8 +370,8 @@ M.TAG_TOGGLES = {
       when = "subject tracking (SAM) only. Masked: the burst was ranked on SAM masks. Subject bias: a shortlisted frame got no mask, so the burst fell back." },
     { key = "why", label = "Why", kind = "diag",
       writes = { "Why|Keeper", "Why|Keeper by margin", "Why|Outranked", "Why|Graded", "Why|Not shortlisted",
-          "Why|No vehicle", "Why|Close call", "Why|Blank", "Why|Spread" },
-      when = "every scored frame, saying how it was decided. Keeper: kept by rank. Keeper by margin: kept by the keeper margin. Outranked: lost to a sharper frame (left or rejected). Graded: lost and rated by burst. Not shortlisted: subject tracking (SAM) left it out of the shortlist. No vehicle: the detector found no car, so the frame kept its rating (only with \"Leave frames with no vehicle\" on). Blank: the frame is one flat colour, so it was rejected. Close call: the last keeper and the best frame that lost scored within 5% of each other; the keeper is still kept, but check both. Spread: kept as its stretch of the burst's best frame over a sharper frame elsewhere (only with \"Spread keepers over the burst\" on). Filter on one to step through, say, every frame that lost to the margin." },
+          "Why|No vehicle", "Why|Close call", "Why|Blank", "Why|Spread", "Why|Number clearer", "Why|Subject clearer" },
+      when = "every scored frame, saying how it was decided. Keeper: kept by rank. Keeper by margin: kept by the keeper margin. Outranked: lost to a sharper frame (left or rejected). Graded: lost and rated by burst. Not shortlisted: subject tracking (SAM) left it out of the shortlist. No vehicle: the detector found no car, so the frame kept its rating (only with \"Leave frames with no vehicle\" on). Blank: the frame is one flat colour, so it was rejected. Close call: the last keeper and the best frame that lost scored within 5% of each other; the keeper is still kept, but check both. Spread: kept as its stretch of the burst's best frame over a sharper frame elsewhere (only with \"Spread keepers over the burst\" on). Number clearer: kept over the sharper frame of a close call because tagging read the car's number clearer in it (only with \"Break close calls on the number read\" on). Subject clearer: kept over the sharper frame of a close call because the sharpness judge scored its car clearer (only with \"Break close calls with the sharpness judge\" on). Filter on one to step through, say, every frame that lost to the margin." },
 }
 
 -- Headings of the tags-written page, in order; each TAG_TOGGLES row's `kind` is one of these.
@@ -495,6 +497,9 @@ local function mask_path_for(id)
 end
 
 local DETECTOR_FILE = "object_detection_yolox_2022nov.onnx"
+-- HyperIQA from huggingface.co/86Cao/IQA-ONNX-Models; its weights sit beside it in
+-- hyperiqa_model.onnx.data, a name the model file holds, so neither can be renamed
+local JUDGE_FILE = "hyperiqa_model.onnx"
 
 if dt.gui then
     C.register_shared_prefs(dt)
@@ -1160,11 +1165,24 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         if fast_jpeg then argv[#argv + 1] = "--fast-jpeg" end
         if settings.no_vehicle_leave then argv[#argv + 1] = "--no-vehicle-leave" end
         if settings.spread_keepers then argv[#argv + 1] = "--spread-keepers" end
+        if settings.number_reads then
+            table.move({ "--number-reads", (M.car_boxes_path(dt.configuration.config_dir,
+                dt.preferences.read("assisted_tagging", "last_collection", "string"))) }, 1, 2, #argv + 1, argv)
+        end
         if sharp_mode == "motion_aware" then
             local detector = plugin_root(sc_script) .. "/models/" .. DETECTOR_FILE
             if file_exists(detector) then
                 local det = detector_argv(detector, settings)
                 table.move(det, 1, #det, #argv + 1, argv)
+            end
+            if settings.sharp_judge then
+                local judge = plugin_root(sc_script) .. "/models/" .. JUDGE_FILE
+                if not file_exists(judge) then
+                    error("\"Break close calls with the sharpness judge\" is on but " .. judge
+                        .. " is missing: download " .. JUDGE_FILE .. " and " .. JUDGE_FILE
+                        .. ".data (see the README), or turn it off", 0)
+                end
+                table.move({ "--sharp-judge", judge }, 1, 2, #argv + 1, argv)
             end
         end
         if sam_model then
@@ -2004,6 +2022,10 @@ local function install_panel()
         { genre_combo, rank_combo, sharp_combo, exp_combo, keep_combo, keep_margin_combo,
           check("spread_keepers", _("Spread keepers over the burst"),
               _("Cuts each burst into as many equal stretches of capture order as keepers allowed and keeps the sharpest frame of each, so a car through a corner keeps its entry and exit, not three near-copies of one moment. A stretch whose best frame scores under 95% of the burst's best keeps nothing; the next-sharpest frame overall is kept instead. A keeper picked this way over a sharper frame gets Why|Spread. Needs more than one keeper allowed.\nDefault: off. Unproven: compare a run with it on and off against your picks (eval_culling.py) before relying on it.")),
+          check("number_reads", _("Break close calls on the number read"),
+              _("In a close call (the last keeper and the best frame that lost score within 5%), keeps the frame where tagging read the car's number clearly: both frames must read the same number and the dropped one read it at least 0.10 more confidently. Reads come from tagging's last run on this collection (its boxes.json); frames changed since, or missing from it, keep the sharpness ranking. The frame kept this way gets Why|Number clearer.\nDefault: off. Unproven: compare a run with it on and off against your picks (eval_culling.py) before relying on it.")),
+          check("sharp_judge", _("Break close calls with the sharpness judge"),
+              _("In a close call that the number read left alone, scores the car crop of the burst's top frames (up to 3 within 5% of the best) with a learned image-quality model (HyperIQA) and keeps the frame it scores at least 5% clearer. Motion-aware sharpness only. Needs hyperiqa_model.onnx and hyperiqa_model.onnx.data in the plugin's models folder (see the README); each judged frame is decoded again, so a run takes longer. The frame kept this way gets Why|Subject clearer.\nDefault: off. Unproven: compare a run with it on and off against your picks (eval_culling.py) before relying on it.")),
           non_keeper_combo, star_scale_combo },
         {
             group_support_combo,

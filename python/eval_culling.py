@@ -62,6 +62,8 @@ SUGGEST_GRID = {
     "keep_mode": ["single_best", "portrait_mode", "dynamic_burst", "keep_all"],
     "keep_margin": ["off", "95", "90", "85", "80", "75"],
     "spread_keepers": ["off", "on"],
+    "number_reads": ["off", "on"],
+    "sharp_judge": ["off", "on"],
     "non_keeper": ["leave", "graded"],
     "star_scale": ["1", "0.5", "0.75", "1.25", "1.5", "2"],
 }
@@ -186,8 +188,10 @@ def write_snapshot(files: list, out: str) -> int:
 
 def frame_of(row: dict, sharp_mode: str) -> dict:
     """One report row as the eval sees it: plugin stars (None when the run left the frame
-    alone), keeper, motion class, the burst's sharpness mode, darktable id and rank, and the
-    score parts (subject None when the report has none: another mode or an older run)."""
+    alone), keeper, motion class, the burst's sharpness mode, darktable id and rank, the
+    score parts (subject None when the report has none: another mode or an older run) and
+    the car-number reads ({number: confidence}, {} when the report has none) and the
+    sharpness judge's score (None when the run did not judge the frame)."""
     tags = [t for t in (row.get("tags") or "").split(";") if t]
     stars = (row.get("stars") or "").strip()
     mode = sharp_mode
@@ -202,7 +206,9 @@ def frame_of(row: dict, sharp_mode: str) -> dict:
              "id": int(row["id"]) if (row.get("id") or "").strip() else None,
              "subject": float(row["subject"]) if (row.get("subject") or "").strip() else None,
              "subject_own": float(row["subject_own"]) if (row.get("subject_own") or "").strip() else None,
-             "cls": (row.get("motion") or "").strip(), "straight": float(row.get("straightness") or 0.0)}
+             "cls": (row.get("motion") or "").strip(), "straight": float(row.get("straightness") or 0.0),
+             "reads": {n: float(c) for n, _, c in (r.rpartition(":") for r in (row.get("reads") or "").split("|") if r)},
+             "judge": float(row["judge"]) if (row.get("judge") or "").strip() else None}
     if "score" in row:  # what a --suggest replay needs
         frame.update({"score": float(row["score"] or 0.0),
                       "flags": tuple(f for f in (row.get("flags") or "").split(";") if f),
@@ -227,6 +233,8 @@ def settings_of(choice: dict) -> Namespace:
     return Namespace(rank_mode=choice["rank_mode"], keep_mode=choice["keep_mode"], nk_mode=choice["non_keeper"],
                      keep_margin=0.0 if choice["keep_margin"] == "off" else int(choice["keep_margin"]) / 100,
                      spread_keepers=choice["spread_keepers"] == "on",
+                     number_reads=choice["number_reads"] == "on",
+                     sharp_judge=choice["sharp_judge"] == "on",
                      star_scale=float(choice["star_scale"]))
 
 
@@ -236,7 +244,9 @@ def replay(frames: list, settings, sharp_mode: str) -> list:
     (the relative reference spans the run). Tag-only flags are not in the report, so every
     flag counts; a burst's unreadable frames are not either, so `of` is its size. Frames the
     run left alone for no vehicle stay left alone. A burst
-    is scored in one mode: the one EXIF switched it to when any of its frames says so."""
+    is scored in one mode: the one EXIF switched it to when any of its frames says so. With
+    settings.number_reads the frames' reads settle close calls, and with settings.sharp_judge
+    the judge's scores settle the ones the reads left; each frame gets its Why reason."""
     bursts = {}
     for f in frames:
         bursts.setdefault(f["burst"], []).append(f)
@@ -250,16 +260,20 @@ def replay(frames: list, settings, sharp_mode: str) -> list:
     out = []
     for burst, burst_frames in bursts.items():
         first = burst_frames[0]
-        _members, keepers, stars_of, _reasons = rate_burst(
+        _members, keepers, stars_of, reasons = rate_burst(
             {f["path"]: f["score"] for f in burst_frames}, {f["path"]: f["flags"] for f in burst_frames},
             first["of"] or len(burst_frames), settings, {f["path"] for f in burst_frames if f["eligible"]},
             references.get((mode_of[burst], first["masked"])), mode_of[burst],
             {f["path"] for f in burst_frames if f["no_vehicle"]},
-            [f["path"] for f in sorted(burst_frames, key=lambda f: (f["id"] is None, f["id"] or 0, f["file"]))])
+            [f["path"] for f in sorted(burst_frames, key=lambda f: (f["id"] is None, f["id"] or 0, f["file"]))],
+            {f["path"]: f["reads"] for f in burst_frames if f["reads"]} if getattr(settings, "number_reads", False) else None,
+            {f["path"]: f["judge"] for f in burst_frames if f["judge"] is not None}
+            if getattr(settings, "sharp_judge", False) else None)
         kept = set(keepers)
         for f in burst_frames:
             stars = stars_of[f["path"]]
-            out.append({**f, "stars": None if stars == "leave" else stars, "keeper": f["path"] in kept})
+            out.append({**f, "stars": None if stars == "leave" else stars, "keeper": f["path"] in kept,
+                        "reason": reasons[f["path"]]})
     return out
 
 
@@ -339,17 +353,7 @@ def suggest(shoots: list, sharp_mode: str, pick_stars: int, top: int) -> list:
     outcomes = {}
     for values in itertools.product(*SUGGEST_GRID.values()):
         choice = dict(zip(SUGGEST_GRID, values))
-        settings = settings_of(choice)
-        pooled = []
-        for frames, truth in shoots:
-            rated = {f["path"]: f for f in replay(frames, settings, sharp_mode)}
-            for f in frames:
-                rating = lookup_truth(truth, f["path"])
-                if rating is not None:
-                    stars, rejected = rating
-                    pooled.append({**rated[f["path"]], "truth": -1 if rejected else stars,
-                                   "pick": not rejected and stars >= pick_stars})
-        s = summarise(pooled)
+        s = summarise(pooled(shoots, settings_of(choice), sharp_mode, pick_stars))
         key = (s["hits"], s["picks"], s["false"], s["kept"], None if s["spearman"] is None else round(s["spearman"], 6))
         if key not in outcomes:
             outcomes[key] = (choice, s)
@@ -363,12 +367,54 @@ def suggest(shoots: list, sharp_mode: str, pick_stars: int, top: int) -> list:
     return sorted(outcomes.values(), key=goodness, reverse=True)[:top]
 
 
+def pooled(shoots: list, settings, sharp_mode: str, pick_stars: int) -> list:
+    """Each shoot's frames with a hand rating, replayed under settings, with their truth and pick."""
+    out = []
+    for frames, truth in shoots:
+        rated = {f["path"]: f for f in replay(frames, settings, sharp_mode)}
+        for f in frames:
+            rating = lookup_truth(truth, f["path"])
+            if rating is not None:
+                stars, rejected = rating
+                out.append({**rated[f["path"]], "truth": -1 if rejected else stars,
+                            "pick": not rejected and stars >= pick_stars})
+    return out
+
+
+def number_read_lines(shoots: list, settings, sharp_mode: str, pick_stars: int) -> list:
+    """The hit rate with number reads off and on under the run's panel settings, and how many
+    close calls a clearer read settled (frames kept with Why|Number clearer)."""
+    lines = []
+    for state in ("off", "on"):
+        state_settings = Namespace(**{**vars(settings), "number_reads": state == "on"})
+        settled = sum(f["reason"] == "Number clearer" for frames, _truth in shoots
+                      for f in replay(frames, state_settings, sharp_mode))
+        lines.append(line_of(f"number reads {state}", summarise(pooled(shoots, state_settings, sharp_mode, pick_stars)))
+                     + (f"; {settled} close calls settled by the read" if state == "on" else ""))
+    return lines
+
+
+def judge_lines(shoots: list, settings, sharp_mode: str, pick_stars: int) -> list:
+    """The hit rate with the sharpness judge off and on under the run's panel settings, and
+    how many close calls the judge settled (frames kept with Why|Subject clearer)."""
+    lines = []
+    for state in ("off", "on"):
+        state_settings = Namespace(**{**vars(settings), "sharp_judge": state == "on"})
+        settled = sum(f["reason"] == "Subject clearer" for frames, _truth in shoots
+                      for f in replay(frames, state_settings, sharp_mode))
+        lines.append(line_of(f"sharpness judge {state}", summarise(pooled(shoots, state_settings, sharp_mode, pick_stars)))
+                     + (f"; {settled} close calls settled by the judge" if state == "on" else ""))
+    return lines
+
+
 def preset_json(choice: dict, sharp_mode: str) -> str:
     """The choice as a preset file's keys (assisted_culling/presets/<name>.json); the ones not
     listed take their defaults when the plugin loads it."""
     return json.dumps({"genre": "custom", "rank_mode": choice["rank_mode"], "sharp_mode": sharp_mode,
                        "keep_mode": choice["keep_mode"], "keep_margin": choice["keep_margin"],
                        "spread_keepers": choice["spread_keepers"] == "on",
+                       "number_reads": choice["number_reads"] == "on",
+                       "sharp_judge": choice["sharp_judge"] == "on",
                        "non_keeper": choice["non_keeper"], "star_scale": choice["star_scale"]}, indent=2)
 
 
@@ -530,8 +576,8 @@ def main():
     ap.add_argument("--set", action="append", default=[], metavar="NAME=value",
                     help="re-rank from the stored score parts with this constant changed: " + ", ".join(SET_NAMES))
     for name, flag in (("rank_mode", "--rank-mode"), ("keep_mode", "--keep-mode"), ("keep_margin", "--keep-margin"),
-                       ("spread_keepers", "--spread-keepers"),
-                       ("non_keeper", "--non-keeper"), ("star_scale", "--star-scale")):
+                       ("spread_keepers", "--spread-keepers"), ("number_reads", "--number-reads"),
+                       ("sharp_judge", "--sharp-judge"), ("non_keeper", "--non-keeper"), ("star_scale", "--star-scale")):
         ap.add_argument(flag, dest=name, choices=SUGGEST_GRID[name], default=SUGGEST_GRID[name][0],
                         help=f"the run's panel setting, for --set (default {SUGGEST_GRID[name][0]})")
     a = ap.parse_args()
@@ -588,6 +634,11 @@ def main():
             if not os.path.isfile(p):
                 sys.exit(f"--shoot file not found: {p}")
         shoots.append((rescore(read_report(path, a.sharp_mode, True), knobs), read_truth_csv(truth_path)))
+    if a.sharp_mode != "run" and any(f["reads"] and "score" in f for frames, _t in shoots for f in frames):
+        notes += number_read_lines(shoots, settings_of({k: getattr(a, k) for k in SUGGEST_GRID}), a.sharp_mode,
+                                   a.pick_stars)
+    if a.sharp_mode != "run" and any(f["judge"] is not None and "score" in f for frames, _t in shoots for f in frames):
+        notes += judge_lines(shoots, settings_of({k: getattr(a, k) for k in SUGGEST_GRID}), a.sharp_mode, a.pick_stars)
     if a.suggest:
         rated = sum(1 for frames, truth in shoots for f in frames if lookup_truth(truth, f["path"]) is not None)
         if not rated:
