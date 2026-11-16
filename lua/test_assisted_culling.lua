@@ -17,7 +17,7 @@ end
 -- plugin_common.lua ---------------------------------------------------------------
 -- The same file in all three plugin repos; COMMON_HASH pins it. After changing it, copy it to the
 -- other two repos and put the hash this prints into their tests too.
-local COMMON_HASH = "503716c8"
+local COMMON_HASH = "f1505e66"
 local script_dir = (arg and arg[0] or ""):match("^(.*)[/\\]") or "."
 local PC = dofile(script_dir .. "/plugin_common.lua")
 local function fnv1a(text)
@@ -55,10 +55,19 @@ end
 -- group keys ----------------------------------------------------------------
 local G10 = "Assisted Grouping|2026-11-09 10:00:00|Group"
 local G12 = "Assisted Grouping|2026-11-09 12:30:00|Group"
-check("newest_group_node picks the greatest stamp",
-    C.newest_group_node({ { G10 .. "|0001" }, { "F1|Ferrari", G12 .. "|0001" } }), G12)
-check("newest_group_node ignores other tags", C.newest_group_node({ { "F1|Ferrari" } }), nil)
-check("newest_group_node with empty input", C.newest_group_node({}), nil)
+-- Half-regrouped selection: 1-2 only carry the 10:00 run, 3-4 the 12:30 run → two bursts, not all singles.
+local lk, n_runs = C.latest_group_keys({
+    { id = 1, tags = { [G10 .. "|0001"] = true } },
+    { id = 2, tags = { [G10 .. "|0001"] = true } },
+    { id = 3, tags = { [G10 .. "|0002"] = true, [G12 .. "|0001"] = true } },
+    { id = 4, tags = { [G12 .. "|0001"] = true } },
+})
+local lng = C.number_groups({ 1, 2, 3, 4 }, lk)
+check("latest_group_keys keeps each photo's own run", table.concat({ lng[1], lng[2], lng[3], lng[4] }, ","), "1,1,2,2")
+check("latest_group_keys counts runs", n_runs, 2)
+check("group_tags_hint fires when native found nothing but tags exist",
+    C.group_tags_hint(0, { { id = 1, tags = { [G12 .. "|0001"] = true } } }), C.GROUP_TAGS_HINT)
+check("group_tags_hint silent when native groups exist", C.group_tags_hint(3, { { id = 1, tags = { [G12 .. "|0001"] = true } } }), nil)
 
 local gk = C.tag_group_keys({
     { id = 1, tags = { [G12 .. "|0001"] = true, [G12 .. "|0001|x"] = true } },
@@ -318,6 +327,7 @@ check("no_groups_notice: grouped selection is silent", C.no_groups_notice("tags"
 check("no_groups_notice: none mode and single frame are silent",
     tostring(C.no_groups_notice("none", 5, 5)) .. "|" .. tostring(C.no_groups_notice("native", 1, 1)), "nil|nil")
 check("preset schema: keeper margin defaults off", cd.keep_margin, "off")
+check("preset schema: spread keepers defaults off", cd.spread_keepers, false)
 check("preset schema: graded non-keepers can be picked",
     C.preset_merge(C.PRESET_SCHEMA, { non_keeper = "graded" }).non_keeper, "graded")
 check("preset schema: star strictness defaults to standard", cd.star_scale, "1")
@@ -336,6 +346,9 @@ check("genre modes: a changed mode no longer matches",
 check("genre modes: custom never matches", C.genre_matches("custom", cd), false)
 check("preset schema: a label for a choice falls back",
     C.preset_merge(C.PRESET_SCHEMA, { sharp_mode = "face & eyes (OpenCV)" }).sharp_mode, "tiles_uniformity")
+check("preset schema: car boxes from tagging default on", cd.car_boxes_only, true)
+check("car_boxes_path: tagging's last-run boxes.json, backslashes folded",
+    C.car_boxes_path("C:\\Users\\me\\dt\\", "rallye"), "C:/Users/me/dt/assisted_tagging/last-run/rallye.boxes.json")
 
 print("")
 if failures == 0 then

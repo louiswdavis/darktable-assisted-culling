@@ -110,6 +110,16 @@ with tempfile.TemporaryDirectory() as tmp:
     check("render: same input, same text", E.render(E.evaluate(mine, truth, 1), 1), text)
     check("render: overall line", "overall: 5 frames, picks 4, kept 3, hit rate 50.0%, false keepers 1 of 3 (33.3%), Spearman +0.80 (n=4, 1 left unrated)" in text, True)
 
+    # per burst ranking: A has 3 hand-rated frames, B only 2 (b3 is unrated by hand)
+    ranking = result["ranking"]
+    check("burst_ranking: A judged, B skipped", (list(ranking["bursts"]), ranking["skipped"]), (["A"], 1))
+    a = ranking["bursts"]["A"]
+    check("burst_ranking: top-1 is a pick, first frame by file when ids are missing", (a["top1"], a["frames"], a["first"]), (True, 3, "a1.JPG"))
+    check("burst_ranking: Spearman of score vs stars", round(a["spearman"], 6), 0.5)   # scores 900/700/200 vs stars 5/-1/2
+    check("render: ranking summary", "mean top-1 agreement 100.0%, median Spearman +0.50 (n=1)" in text, True)
+    check("render: worst bursts name their first frame", "a1.JPG" in text.split("worst 5 by Spearman")[1], True)
+    check("evaluate: no ranking without scores", E.evaluate([{k: v for k, v in f.items() if k != "score"} for f in mine], truth, 1)["ranking"], None)
+
     # truth CSV: bare names match any folder, full paths match their folder
     truth_csv = os.path.join(tmp, "truth.csv")
     touch(truth_csv, "file,rating,reject\na1.JPG,5,no\na2.jpg,0,yes\n" + os.path.join(shoot, "a3.ARW") + ",2,\nb1.jpg,-1,\n")
@@ -141,7 +151,7 @@ with tempfile.TemporaryDirectory() as tmp:
     import json
     from rating import TIER_THRESHOLDS, rate_burst, star_tier
 
-    s = E.settings_of({"rank_mode": "universal", "keep_mode": "single_best", "keep_margin": "off", "non_keeper": "leave", "star_scale": "1"})
+    s = E.settings_of({"rank_mode": "universal", "keep_mode": "single_best", "keep_margin": "off", "spread_keepers": "off", "non_keeper": "leave", "star_scale": "1"})
     check("settings_of: margin off is 0, scale is a float", (s.keep_margin, s.star_scale, s.nk_mode), (0.0, 1.0, "leave"))
     check("settings_of: margin 90 is 0.9", E.settings_of({**vars(s), "non_keeper": "graded", "keep_margin": "90", "star_scale": "1.25"}).keep_margin, 0.9)
 
@@ -183,6 +193,70 @@ with tempfile.TemporaryDirectory() as tmp:
     run = subprocess.run([sys.executable, E.__file__, "--suggest", "--sharp-mode", "subject_focus", "--shoot", report, snap, "--write-preset", preset_file],
                          capture_output=True, text=True)
     check("cli: --shoot alone works and an existing preset file is refused", (run.returncode, "exists" in run.stderr), (1, True))
+
+    # score parts and --set ------------------------------------------------------
+    parted = E.frame_of({"burst": "P", "file": "x.jpg", "id": "7", "subject": "80.5", "motion": "pan", "straightness": "0.25"}, "motion_aware")
+    check("frame_of: score parts", (parted["id"], parted["subject"], parted["cls"], parted["straight"]), (7, 80.5, "pan", 0.25))
+    bare = E.frame_of({"burst": "P", "file": "x.jpg"}, "motion_aware")
+    check("frame_of: no parts in an older report", (bare["id"], bare["subject"], bare["cls"], bare["straight"]), (None, None, "", 0.0))
+
+    check("lift_blur: a motion-blur frame rises to the burst's median", E.lift_blur({"a": 10.0, "b": 30.0, "c": 5.0},
+          {"a": ("ordinary", 0.0), "b": ("pan", 0.0), "c": ("motion_blur", 0.0)}, 500.0), {"a": 10.0, "b": 30.0, "c": 20.0})
+    check("lift_blur: an all-blur burst scores by straightness", E.lift_blur({"a": 1.0}, {"a": ("motion_blur", 0.1)}, 500.0), {"a": 50.0})
+
+    def part(name, rank, subject, cls, score, burst="P"):
+        return {"path": name, "burst": burst, "rank": rank, "subject": subject, "cls": cls, "straight": 0.0, "score": score}
+
+    live = [part("p1", 1, 80.0, "pan", 92.0), part("p2", 2, 90.0, "ordinary", 90.0), part("p3", 3, 100.0, "missed_pan", 70.0),
+            {**part("q1", 1, None, "", 500.0, "Q")}]
+    check("rescore: today's constants rebuild the live scores", [f["score"] for f in E.rescore(live, E.PART_DEFAULTS)], [92.0, 90.0, 70.0, 500.0])
+    flat = E.rescore(live, {**E.PART_DEFAULTS, "PAN_BONUS": 1.0})
+    check("rescore: PAN_BONUS 1.0 drops the pan below p2; no parts keeps its score", [f["score"] for f in flat], [80.0, 90.0, 70.0, 500.0])
+    own = [{**live[0], "subject_own": 60.0}] + live[1:]
+    check("rescore: SAME_SCALE 0 uses the own-size subject where there is one",
+          [f["score"] for f in E.rescore(own, {**E.PART_DEFAULTS, "SAME_SCALE": 0.0})], [69.0, 90.0, 70.0, 500.0])
+    check("rescore: SAME_SCALE 1 keeps the shared-size subject", E.rescore(own, E.PART_DEFAULTS)[0]["score"], 92.0)
+    check("frame_of: own-size subject", E.frame_of({"burst": "P", "file": "x.jpg", "subject_own": "60.25"}, "motion_aware")["subject_own"], 60.25)
+    check("parts_agreement: bursts with parts only", E.parts_agreement(live), (1, 1))
+    check("parts_agreement: a score out of step disagrees", E.parts_agreement([{**live[0], "subject": 70.0}] + live[1:]), (0, 1))
+
+    kept = [{**f, "keeper": f["path"] in ("p1", "q1")} for f in live]
+    check("keeper_agreement: same keepers", E.keeper_agreement(kept, kept), (2, 2))
+    check("keeper_agreement: one burst differs", E.keeper_agreement(kept, [{**f, "keeper": f["path"] in ("p2", "q1")} for f in live]), (1, 2))
+
+    check("parse_sets: numbers by name", E.parse_sets(["PAN_BONUS=1.1", "CLOSE_CALL_SHARE=0.5"]), {"PAN_BONUS": 1.1, "CLOSE_CALL_SHARE": 0.5})
+    for bad in ("BLUR_STRAIGHT_SCALE=400", "PAN_BONUS=high", "PAN_BONUS"):
+        try:
+            E.parse_sets([bad])
+            check(f"parse_sets: {bad} exits", "no exit", "exit")
+        except SystemExit:
+            check(f"parse_sets: {bad} exits", "exit", "exit")
+
+    parts_dir = os.path.join(tmp, "parts")
+    os.mkdir(parts_dir)
+    for name, stars in (("p1.jpg", 3), ("p2.jpg", 5), ("p3.jpg", 1)):
+        touch(os.path.join(parts_dir, name))
+        touch(os.path.join(parts_dir, name + ".xmp"), xmp(stars))
+    parts_report = os.path.join(tmp, "parts.csv")
+    touch(parts_report, "\n".join([
+        "burst,file,rank,of,score,stars,keeper,flags,tags,why,folder,reason,direction,id,subject,motion,straightness,crop",
+        f"P,p1.jpg,1,3,92.0,4,yes,,Technique|Panning,kept,{parts_dir},Keeper,,11,80.0,pan,0.0,640x400",
+        f"P,p2.jpg,2,3,90.0,leave,no,,Why|Outranked,not kept,{parts_dir},Outranked,,12,90.0,ordinary,0.0,640x400",
+        f"P,p3.jpg,3,3,70.0,leave,no,,Technique|Missed Pan,not kept,{parts_dir},Outranked,,13,100.0,missed_pan,0.0,640x400",
+    ]) + "\n")
+    run = subprocess.run([sys.executable, E.__file__, parts_dir, "--report", parts_report, "--sharp-mode", "motion_aware",
+                          "--non-keeper", "leave", "--pick-stars", "4"], capture_output=True, text=True)
+    check("cli: parts note without --set", (run.returncode, run.stdout.startswith("score parts rebuild the live ranking in 1/1 bursts\n")), (0, True))
+    check("cli: per burst ranking printed", "mean top-1 agreement 0.0%" in run.stdout, True)   # p1 ranks first, p2 is the 5-star
+    run = subprocess.run([sys.executable, E.__file__, parts_dir, "--report", parts_report, "--sharp-mode", "motion_aware",
+                          "--non-keeper", "leave", "--pick-stars", "4", "--set", "PAN_BONUS=1.0"], capture_output=True, text=True)
+    check("cli: --set replays with the live keepers first", (run.returncode, "keeps the live run's frames in 1/1 bursts" in run.stdout), (0, True))
+    check("cli: --set PAN_BONUS lifts p2 to top-1", ("set: PAN_BONUS=1.0" in run.stdout, "mean top-1 agreement 100.0%" in run.stdout), (True, True))
+    run = subprocess.run([sys.executable, E.__file__, shoot, "--report", report, "--sharp-mode", "subject_focus", "--set", "PAN_BONUS=1.1"],
+                         capture_output=True, text=True)
+    check("cli: --set of a part needs a report with parts", (run.returncode, "no score parts" in run.stderr), (1, True))
+    run = subprocess.run([sys.executable, E.__file__, shoot, "--report", report, "--set", "CLOSE_CALL_SHARE=0.5"], capture_output=True, text=True)
+    check("cli: --set needs --sharp-mode", (run.returncode, "--sharp-mode" in run.stderr), (1, True))
 
 print(f"\n{'all ok' if failures == 0 else f'{failures} failed'}")
 sys.exit(1 if failures else 0)

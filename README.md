@@ -129,6 +129,7 @@ Frames are also tagged with how they were judged, so you can spot-check the scor
 | `Assisted Culling\|Why\|Keeper` / `…\|Keeper by margin` | Every scored frame gets one `Why` tag saying how it was decided. Kept by rank, or kept by the [keeper margin](#keeper-margin). |
 | `Assisted Culling\|Why\|Outranked` / `…\|Graded` / `…\|Not shortlisted` | Lost to a sharper frame (left alone or rejected), lost and rated by burst (*graded by burst*), or left out of the SAM shortlist. Filter on one to step through, say, every frame the margin kept. |
 | `Assisted Culling\|Why\|Close call` | The burst's last keeper and the best frame that lost scored within 5% of each other. Both get this tag in place of Keeper / Outranked; the keeper is still kept and rated as usual. Check both by eye. |
+| `Assisted Culling\|Why\|Spread` | *Spread keepers over the burst* only: kept as the best frame of its stretch of the burst over a sharper frame elsewhere (see [Keeper margin](#keeper-margin)). Wins over Close call on that keeper; the frame it beat still says Close call. |
 | `Assisted Culling\|Why\|Blank` | The frame is blank, so it was rejected whatever its sharpness. |
 | `Assisted Culling\|Why\|No vehicle` | Only with **Leave frames with no vehicle** on (penalties & speed page; default off), in motorsport or SAM sharpness with the vehicle detector installed. The detector found no car, so the frame is never a keeper, keeps its rating and gets no Rejected tag. A burst with no car in any frame is left alone. Other sharpness modes never run the detector, so they never write it. |
 
@@ -166,7 +167,7 @@ A few things a re-run doesn't touch:
 
 Tick **Tag each run** to also stamp every frame a run writes with `Assisted Culling|Run|YYYY-MM-DD HH:MM`, so you can filter darktable down to one run's frames. Stamps accumulate, and **Clear culling marks** leaves them; remove old ones in darktable's tag manager.
 
-Each scoring run also writes `assisted_culling/last-run.csv` in darktable's config folder (the folder holding `assisted_culling.log`): one row per scored frame with its burst, rank in the burst, score, stars, keeper yes/no, flags, diagnostic tags, a `why` line ("kept: rank 1 of 4, 2 allowed", "not kept: rank 3 of 4, only 2 allowed or not eligible; flagged blur"), the file's folder and a `reason` column (the frame's `Why` tag: Keeper, Keeper by margin, Outranked, Graded, Not shortlisted, No vehicle, Blank or Close call) and a `car` column: the first car tag on the frame under the car tag node, blank when no node was set or the frame had none (frames carrying several cars stay in their shared pool). A final `direction` column holds the burst's travel direction (left, right or unknown) in motorsport mode with the vehicle detector, blank otherwise. The allowance counts every frame of the burst, including frames that couldn't be read. Open it in a spreadsheet to see why a frame lost, or to tune thresholds from evidence. It is overwritten by the next run, but each run's copy is also kept as `assisted_culling/reports/YYYYMMDD-HHMMSS.csv` (newest 20), so two runs can be compared.
+Each scoring run also writes `assisted_culling/last-run.csv` in darktable's config folder (the folder holding `assisted_culling.log`): one row per scored frame with its burst, rank in the burst, score, stars, keeper yes/no, flags, diagnostic tags, a `why` line ("kept: rank 1 of 4, 2 allowed", "not kept: rank 3 of 4, only 2 allowed or not eligible; flagged blur"), the file's folder and a `reason` column (the frame's `Why` tag: Keeper, Keeper by margin, Outranked, Graded, Not shortlisted, No vehicle, Blank, Close call or Spread) and a `car` column: the first car tag on the frame under the car tag node, blank when no node was set or the frame had none (frames carrying several cars stay in their shared pool). A `direction` column holds the burst's travel direction (left, right or unknown) in motorsport mode with the vehicle detector, blank otherwise. Then `id` (darktable's image id, which follows capture order) and, in *motion_aware* mode, the score parts `eval_culling.py --set` rebuilds from: `subject` (subject sharpness at the burst's shared size), `motion` (pan, missed_pan, motion_blur or ordinary), `straightness`, `crop` (the crop's size and the size it was compared at) and `subject_own` (subject sharpness at the crop's own size); blank in other modes. The allowance counts every frame of the burst, including frames that couldn't be read. Open it in a spreadsheet to see why a frame lost, or to tune thresholds from evidence. It is overwritten by the next run, but each run's copy is also kept as `assisted_culling/reports/YYYYMMDD-HHMMSS.csv` (newest 20), so two runs can be compared.
 
 While a run is going, **Clear culling marks** and the culling shortcut queue behind it instead of refusing. Each queued job keeps the selection and settings from when you clicked, and starts when the run before it finishes. Cancelling drops the queue. (The panel button turns into **Cancel culling** during a run, so a second culling run can only be queued with the shortcut.)
 
@@ -233,6 +234,7 @@ How each frame's focus is measured.
 #### Motorsport (subject & motion)
 
 - **The car at full resolution.** The [vehicle detector](#vehicle-detector) finds the car (no detector, or no car found: the centre third of the frame). That area is cut from the full-size image, up to 1600 px on its long side, and scored there, so badges, numbers and tread still count. RAW-only frames use the embedded preview, so a small preview limits this.
+- **Every frame of a burst is compared at one size.** A car coming toward the camera fills more pixels in each frame, and a bigger crop scores sharper for that alone. So each crop is also scored shrunk to 400, 600, 800 and 1200 px (`SUBJECT_SCALES`; never enlarged), and the burst is ranked at the largest size all its crops reach. The report's `crop` column shows it (`2310x1100 → 800`). A burst with a crop under 400 px can't share a size; the log says so and its frames use their smallest sizes.
 - **Overcast light isn't punished.** Sharpness is divided by the area's contrast, so a crisp car under flat grey cloud scores like the same car in sun.
 - **Motion is read per frame**, not per burst, from the direction of the streaks across a 6×6 grid:
   - car sharp, background streaked → `Technique|Panning`, score ×1.15
@@ -279,6 +281,15 @@ It runs on the CPU and adds about a tenth of a second per frame. If the file is 
 
 Vehicle boxes are cached in `assisted_plugins/detections.sqlite` in darktable's config directory, shared with the tagging plugin so a frame both plugins see is detected once. The key is the file (path, modified time, size), the detector model file and a fingerprint of the shared detector code, so a new detector or a `vehicle_detect.py` change re-detects everything once; rows unused for 90 days are dropped. Delete the file to start over. The tagging plugin's `compare_detectors.py` measures a second detector against YOLOX on your own photos; switching this plugin to a `dfine_*.onnx` or `rtdetr*.onnx` file (`DETECTOR_FILE` in `lua/assisted_culling.lua`) needs `onnxruntime` in this venv.
 
+#### Car boxes from tagging
+
+The detector also boxes trucks, vans and parked cars, and the most prominent box can be one of those rather than the race car. The tagging plugin's car check already throws those boxes out, and its last run writes the boxes it kept to `assisted_tagging/last-run/<collection>.boxes.json` in darktable's config directory. With **Only car boxes (from tagging)** on, culling reads that file (`--car-boxes`) and drops any detector box that overlaps none of tagging's boxes by at least `CAR_BOX_MIN_IOU` (0.5). The motorsport detail then says `car box … from tagging (N other boxes dropped)`, and a frame left with no box says `tagging's car check dropped N`.
+
+- Run tagging on the same collection first. The file is tagging's last run, picked by tagging's last collection; frames not in it use every detector box, as with the setting off.
+- A frame edited (its file modified) after that tagging run, or one tagging failed on, uses every box too. The log counts these.
+- A people tagging run writes no car boxes, so it is ignored.
+- The log line `car boxes: …` says where the boxes came from, how many frames were checked and how many boxes were dropped.
+
 ### Exposure
 
 - *whole frame*: checks the whole frame for clipping.
@@ -291,6 +302,8 @@ Vehicle boxes are cached in `assisted_plugins/detections.sqlite` in darktable's 
 How many frames per burst survive: *single best only*, *portrait (1 or 2)*, *dynamic (1 to 5)* (scales with burst size), or *keep all (focus stack)* for frames you'll merge rather than cull.
 
 **Keeper margin** (default *off*) keeps more: every frame scoring within 95%, 90%, 85%, 80% or 75% of its burst's sharpest frame is kept too, on top of the *keepers* count. A burst of near-identical sharp frames then keeps all of them, and a burst with one clear winner still keeps one. The extra keepers count as lower keepers, so they lose one star like any keeper outside the burst's top 40%. `last-run.csv` says "within the keeper margin of the best" for them.
+
+**Spread keepers over the burst** (default *off*, unproven) picks the keepers per stretch of the burst instead of by score alone. The burst's frames, in capture order (darktable's image id), are cut into as many equal stretches as keepers allowed, and each stretch keeps its sharpest frame. A car through a corner then keeps its entry and exit rather than three near-copies of the sharpest moment. A stretch whose best frame scores under 95% (`CLOSE_CALL_SHARE`) of the burst's best keeps nothing, and the next-sharpest frame overall is kept instead, so a mostly blurred burst still keeps its sharp frames. A keeper picked over a sharper frame gets `Why|Spread`. It does nothing when one keeper is allowed. The keeper margin still adds frames on top. Check it against your picks before relying on it: run once with it on and once off, then `eval_culling.py` each report.
 
 ### Non-keepers
 
@@ -311,7 +324,7 @@ Flags still cost a star each. **Star strictness** scales these steps too: strict
 ### 2 bursts
 
 - **grouping support** (Native groups, Grouping tags, None; default Native groups). What groups photos before keepers are picked, see [Grouping support](#grouping-support).
-- **Grouping tag node (blank = newest run)**. The tag node whose children are the groups in Grouping tags mode.
+- **Grouping tag node (blank = latest run per photo)**. The tag node whose children are the groups in Grouping tags mode.
 - **Car tag node (blank = off)**. The tag node whose children are car numbers, e.g. the collection prefix from [Assisted Tagging](../darktable-assisted-tagging/README.md). Each group is split by car before keepers are picked; frames with no car tag share one pool per group.
 
 ### 3 penalties & speed
@@ -320,6 +333,7 @@ Flags still cost a star each. **Star strictness** scales these steps too: strict
 - **Fast JPEG decoding** (default on). Decodes JPEGs and raw previews at reduced size. Several times faster; scores shift slightly, which matters little since keepers are ranked within each burst.
 - **blank frames** (off, 99%, 97%, 95%, 90% one colour; default 95%). A frame at least this share one flat colour is tagged `Blank` and rejected. Off rates blank frames like any other.
 - ***Flag* lowers stars** (default on, one per flag). Off = that flag never costs stars; it's still tagged if its tag switch is on. See [Flags cost stars](#flags-cost-stars-never-the-keeper).
+- **Only car boxes (from tagging)** (default on). With the [vehicle detector](#vehicle-detector) installed, sharpness and framing use only the detector boxes that the tagging plugin's last run kept as cars. See [Car boxes from tagging](#car-boxes-from-tagging).
 
 ### 4 tags written
 
@@ -381,7 +395,7 @@ Sharpness is the variance of the Laplacian of a downscaled grayscale copy, a sta
 Culling no longer clusters photos by capture time. Keepers are picked within groups that something else already made, and the panel's **grouping support** combobox picks which:
 
 - **Native groups** (default): darktable's own image groups. A photo's group is its group leader; members share one group even when the leader isn't in the selection.
-- **Grouping tags**: the children of an [Assisted Grouping](../darktable-assisted-grouping/README.md) tag node, e.g. `Assisted Grouping|2026-01-01 12:00:00|Group|NNNN`. The **Grouping tag node (blank = newest run)** entry names the node; blank uses the newest Assisted Grouping run found on the selected photos. Assisted Grouping must have **Write group tags** on, or there is nothing to find. A photo with several children under the node takes the first by name (the log lists them); a photo tagged only by an older run is alone.
+- **Grouping tags**: the children of an [Assisted Grouping](../darktable-assisted-grouping/README.md) tag node, e.g. `Assisted Grouping|2026-01-01 12:00:00|Group|NNNN`. The **Grouping tag node (blank = latest run per photo)** entry names the node; blank uses each photo's own latest Assisted Grouping run, so after regrouping part of a shoot the regrouped photos use the new run and the rest keep the old one. Assisted Grouping must have **Write group tags** on, or there is nothing to find. With a typed node, a photo with several children under it takes the first by name (the log lists them) and a photo without one is alone. In Native groups mode, if no photo is in a group but grouping tags are present, the log and a notice say to switch to Grouping tags.
 - **None**: every photo is its own group and is judged alone.
 
 The car tag node splits per car only for start-list entries tagged `<node>|<number>`; entries tagged `<node>|<team>|<name>` (imported start lists with teams) split per team until ticket 15 keys on the car.
@@ -436,6 +450,8 @@ Everything you'd change per shoot is a panel option or a preference. What's left
   - `SHADOW_CLIP`, `HIGHLIGHT_CLIP` and `CLIP_PCT_FLAG` control exposure flagging.
   - `BLINK_MIN_FACE_PX` is the smallest face width judged for closed eyes.
   - `DETECTOR_MIN_SCORE` is the confidence a vehicle detection needs.
+  - `CAR_BOX_MIN_IOU` (0.5) is how much a detector box must overlap one of [tagging's car boxes](#car-boxes-from-tagging) to be kept.
+  - `SUBJECT_SCALES` (400, 600, 800, 1200) are the long-side sizes each car crop is also scored at, so a burst's frames can be compared at the largest size they all reach. Crops are never enlarged.
   - `PANNING_SHUTTER` (1/125 s) and `SHALLOW_DOF_APERTURE` (f/4) are the [shooting intent](#shooting-intent-from-exif) cutoffs.
   - Motorsport mode: `STREAK_COHERENCE` (how strong a streak must be), `STREAK_SHARE` / `_SLOW` / `_FAST` (share of the background that must streak), `SUBJECT_STREAK_MAX` (how much of the car may streak in a good pan), `PAN_BONUS` and `MISSED_PAN_FACTOR`.
   - `SCORE_CACHE_MAX_AGE_DAYS` (default 90) is how long an unused cache entry is kept.
@@ -475,7 +491,7 @@ The grouping-support changes have not run in darktable yet. Work through these s
 Use a selection with at least two bursts of 3+ frames each.
 
 4. **Native groups.** Group each burst in darktable (ctrl+g), set **grouping support** to *Native groups*, and click **Cull selection**. *Expect:* one `Keeper` per burst (more if *keepers* allows), the rest `Rejected` or rated per *non-keepers*. The log at `%LOCALAPPDATA%\darktable\assisted_culling.log` shows `run started`, the `settings:` line, `group support native: N of M photos in groups of 2+` and `run finished`.
-5. **Grouping tags, blank node.** Run Assisted Grouping with **Write group tags** on, then set **grouping support** to *Grouping tags*, leave the node blank, and cull. *Expect:* the same per-burst keepers as step 4. The `group support tags:` log line ends with `node Assisted Grouping|<stamp>|Group` (the newest run).
+5. **Grouping tags, blank node.** Run Assisted Grouping with **Write group tags** on, then set **grouping support** to *Grouping tags*, leave the node blank, and cull. *Expect:* the same per-burst keepers as step 4. The `group support tags:` log line ends with `latest run per photo (1 runs)`.
 6. **Grouping tags, wrong node.** Type a node that doesn't exist on these photos and cull. *Expect:* every photo is judged alone, and the `group support tags:` log line ends with `(matches no selected photo)`.
 7. **None.** Set **grouping support** to *None* and cull. *Expect:* every photo is judged alone; each frame can be a keeper.
 
@@ -544,9 +560,25 @@ It prints, overall and per group, per sharpness mode and per motion class: the h
 
 Same inputs give the same output, so two runs with different settings are compared by diffing their `--out` files.
 
+It also judges the order inside each burst, on the frames you rated by hand: **top-1 agreement** (the plugin's best frame is one of your picks) and **Spearman** between its scores and your stars. It prints the mean top-1, the median Spearman and the 5 worst bursts with their first frame in capture order, so you can find them in darktable. Bursts with under 3 rated frames, or rated all the same, are skipped and counted.
+
+#### Changing a scoring constant without a re-run
+
+A *motion_aware* run stores each frame's score parts in the report (subject sharpness, motion class, straightness). `--set NAME=value` rebuilds the scores from them with one constant changed, replays the keepers and stars, and prints the same summary:
+
+```
+python python/eval_culling.py @rally-photos.txt --truth rally-truth.csv --sharp-mode motion_aware --set PAN_BONUS=1.1
+```
+
+- `NAME` is `PAN_BONUS`, `MISSED_PAN_FACTOR`, `CLOSE_CALL_SHARE` or `SAME_SCALE`; repeat `--set` to change several.
+- `--set SAME_SCALE=0` ranks each car at its own crop size (`subject_own`), as before bursts were compared at one size. Run the eval with and without it to see what the shared size changes against your picks.
+- Pass the run's panel settings too (`--rank-mode`, `--keep-mode`, `--keep-margin`, `--spread-keepers`, `--non-keeper`, `--star-scale`; each defaults to the plugin's default). A first line says in how many bursts a replay with nothing changed keeps the live run's frames: anything short of all means the settings differ from the run's.
+- Another line says in how many bursts the stored parts rebuild the live order. Anything short of all means `score_images.py` and `eval_culling.py` disagree on the constants.
+- A report from another sharpness mode, or from an older version, has no parts: `--set PAN_BONUS` then stops with a message. `--set CLOSE_CALL_SHARE` works on any report.
+
 #### Letting it suggest settings
 
-Instead of re-running the plugin per setting, `--suggest` replays the run's scores under every combination of ranking mode, keepers, keeper margin, star strictness and non-keepers (the panel's own choices) and prints the best few against your picks:
+Instead of re-running the plugin per setting, `--suggest` replays the run's scores under every combination of ranking mode, keepers, keeper margin, spread keepers, star strictness and non-keepers (the panel's own choices) and prints the best few against your picks:
 
 ```
 python python/eval_culling.py @rally-photos.txt --truth rally-truth.csv --sharp-mode subject_focus --suggest

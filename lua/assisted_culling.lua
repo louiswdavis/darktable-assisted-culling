@@ -46,8 +46,9 @@ local run_next -- defined after start_culling; score_images calls it as a run fi
 local clear_button = nil
 
 -- Shared with the other two plugins (plugin_common.lua); re-exported for the tests.
-M.newest_group_node, M.tag_group_keys, M.native_group_keys, M.number_groups =
-    C.newest_group_node, C.tag_group_keys, C.native_group_keys, C.number_groups
+M.latest_group_tag, M.latest_group_keys, M.group_tags_hint, M.GROUP_TAGS_HINT =
+    C.latest_group_tag, C.latest_group_keys, C.group_tags_hint, C.GROUP_TAGS_HINT
+M.tag_group_keys, M.native_group_keys, M.number_groups = C.tag_group_keys, C.native_group_keys, C.number_groups
 M.shot_stem, M.is_raw, M.csv_line, M.parse_csv_line, M.parse_report_line, M.pythonw_of =
     C.shot_stem, C.is_raw, C.csv_line, C.parse_csv_line, C.parse_csv_fields, C.pythonw_of
 local lead_rank = C.lead_rank
@@ -270,6 +271,13 @@ function M.genre_matches(genre, s)
 end
 
 -- Every panel setting a preset stores, in panel order.
+-- Tagging's boxes.json for its selected collection (its last run there): the car boxes its
+-- SigLIP 2 box check kept, which score_images.py --car-boxes scores on. The path is built
+-- the way tagging builds it; a missing file means raw detector boxes.
+function M.car_boxes_path(config_dir, collection)
+    return ((config_dir .. "/assisted_tagging/last-run/" .. (collection or "") .. ".boxes.json"):gsub("\\", "/"):gsub("/+", "/"))
+end
+
 M.PRESET_SCHEMA = {
     { key = "genre", kind = "choice", choices = genre_opts, default = "landscape" },
     { key = "rank_mode", kind = "choice", choices = rank_opts, default = "universal" },
@@ -291,7 +299,9 @@ M.PRESET_SCHEMA = {
     { key = "penalise_cut_off", kind = "bool", default = true },
     { key = "penalise_blocked", kind = "bool", default = true },
     { key = "blank_share", kind = "choice", choices = blank_share_opts, default = "95" },
+    { key = "spread_keepers", kind = "bool", default = false },
     { key = "no_vehicle_leave", kind = "bool", default = false },
+    { key = "car_boxes_only", kind = "bool", default = true },
     { key = "tag_keeper", kind = "bool", default = true },
     { key = "tag_rejected", kind = "bool", default = true },
     { key = "tag_overexposed", kind = "bool", default = true },
@@ -315,11 +325,11 @@ for _, f in ipairs(M.PRESET_SCHEMA) do
 end
 M.PANEL_PAGES = {
     { number = 1, title = "scoring", keys = { "genre", "rank_mode", "sharp_mode", "exp_mode", "keep_mode",
-        "keep_margin", "non_keeper", "star_scale" } },
+        "keep_margin", "spread_keepers", "non_keeper", "star_scale" } },
     { number = 2, title = "bursts", keys = { "group_support", "group_node", "car_tag_node" } },
     { number = 3, title = "penalties & speed", keys = { "apply_while_scoring", "fast_jpeg_decode",
         "penalise_overexposed", "penalise_underexposed", "penalise_eyes_closed", "penalise_cut_off",
-        "penalise_blocked", "blank_share", "no_vehicle_leave" } },
+        "penalise_blocked", "blank_share", "no_vehicle_leave", "car_boxes_only" } },
     { number = 4, title = "tags written", keys = tag_keys },
     { number = 5, title = "run", keys = { "run_tag" } },
     { number = 6, title = "tools", keys = {} },
@@ -358,8 +368,8 @@ M.TAG_TOGGLES = {
       when = "subject tracking (SAM) only. Masked: the burst was ranked on SAM masks. Subject bias: a shortlisted frame got no mask, so the burst fell back." },
     { key = "why", label = "Why", kind = "diag",
       writes = { "Why|Keeper", "Why|Keeper by margin", "Why|Outranked", "Why|Graded", "Why|Not shortlisted",
-          "Why|No vehicle", "Why|Close call", "Why|Blank" },
-      when = "every scored frame, saying how it was decided. Keeper: kept by rank. Keeper by margin: kept by the keeper margin. Outranked: lost to a sharper frame (left or rejected). Graded: lost and rated by burst. Not shortlisted: subject tracking (SAM) left it out of the shortlist. No vehicle: the detector found no car, so the frame kept its rating (only with \"Leave frames with no vehicle\" on). Blank: the frame is one flat colour, so it was rejected. Close call: the last keeper and the best frame that lost scored within 5% of each other; the keeper is still kept, but check both. Filter on one to step through, say, every frame that lost to the margin." },
+          "Why|No vehicle", "Why|Close call", "Why|Blank", "Why|Spread" },
+      when = "every scored frame, saying how it was decided. Keeper: kept by rank. Keeper by margin: kept by the keeper margin. Outranked: lost to a sharper frame (left or rejected). Graded: lost and rated by burst. Not shortlisted: subject tracking (SAM) left it out of the shortlist. No vehicle: the detector found no car, so the frame kept its rating (only with \"Leave frames with no vehicle\" on). Blank: the frame is one flat colour, so it was rejected. Close call: the last keeper and the best frame that lost scored within 5% of each other; the keeper is still kept, but check both. Spread: kept as its stretch of the burst's best frame over a sharper frame elsewhere (only with \"Spread keepers over the burst\" on). Filter on one to step through, say, every frame that lost to the margin." },
 }
 
 -- Headings of the tags-written page, in order; each TAG_TOGGLES row's `kind` is one of these.
@@ -463,6 +473,17 @@ end
 new_run_paths()
 -- Per-frame scores reused across runs; tmp_dir is wiped, the config dir isn't.
 local CACHE_PATH = dt.configuration.config_dir .. "/assisted_culling/scores.sqlite"
+
+-- `--detector <model> --detections <shared cache>`, plus `--car-boxes <tagging's file>` when
+-- the "Only car boxes" setting is on.
+local function detector_argv(detector, settings)
+    local argv = { "--detector", detector, "--detections", C.detections_path(dt) }
+    if settings.car_boxes_only then
+        table.move({ "--car-boxes", (M.car_boxes_path(dt.configuration.config_dir,
+            dt.preferences.read("assisted_tagging", "last_collection", "string"))) }, 1, 2, #argv + 1, argv)
+    end
+    return argv
+end
 local REPORT_PATH = dt.configuration.config_dir .. "/assisted_culling/last-run.csv"
 local REPORT_ARCHIVE_DIR = dt.configuration.config_dir .. "/assisted_culling/reports"
 
@@ -858,7 +879,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             return have
         end
         local mechanism = settings.group_support
-        local key_of, node, multi = {}, nil, {}
+        local key_of, node, multi, n_runs = {}, nil, {}, 0
         if mechanism == "native" then
             local items = {}
             for _, img in ipairs(primaries) do
@@ -874,17 +895,15 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             end
             key_of = M.native_group_keys(items)
         elseif mechanism == "tags" then
-            local items, lists = {}, {}
-            for _, img in ipairs(primaries) do
-                local have = have_of(img)
-                items[#items + 1] = { id = img.id, tags = have }
-                local names = {}
-                for name in pairs(have) do names[#names + 1] = name end
-                lists[#lists + 1] = names
-            end
+            local items = {}
+            for _, img in ipairs(primaries) do items[#items + 1] = { id = img.id, tags = have_of(img) } end
             local typed = (settings.group_node or ""):match("^%s*(.-)%s*$")
-            node = typed ~= "" and typed or M.newest_group_node(lists)
-            if node then key_of, multi = M.tag_group_keys(items, node) end
+            if typed ~= "" then
+                node = typed
+                key_of, multi = M.tag_group_keys(items, node)
+            else
+                key_of, n_runs = M.latest_group_keys(items)
+            end
         end
         local car_node = (settings.car_tag_node or ""):match("^%s*(.-)%s*$")
         local car_of, car_multi, n_split = nil, {}, 0
@@ -915,7 +934,11 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         end
         local msg = string.format("group support %s: %d of %d photos in groups of 2+", mechanism, grouped, #primaries)
         if mechanism == "tags" then
-            msg = msg .. string.format(", node %s", node or "(none found)")
+            if node then
+                msg = msg .. string.format(", node %s", node)
+            else
+                msg = msg .. (n_runs > 0 and string.format(", latest run per photo (%d runs)", n_runs) or ", no grouping tags found")
+            end
             if node and next(key_of) == nil then msg = msg .. " (matches no selected photo)" end
             if #multi > 0 then msg = msg .. ", several children on ids " .. table.concat(multi, ",") end
         end
@@ -926,6 +949,12 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             if #car_multi > 0 then msg = msg .. ", several cars on ids " .. table.concat(car_multi, ",") end
         end
         log(msg)
+        if mechanism == "native" and grouped == 0 then
+            local items = {}
+            for _, img in ipairs(primaries) do items[#items + 1] = { id = img.id, tags = have_of(img) } end
+            local hint = M.group_tags_hint(grouped, items)
+            if hint then log(hint); dt.print("Assisted Culling: " .. hint) end
+        end
 
         local overlap, fast_jpeg = settings.apply_while_scoring, settings.fast_jpeg_decode
 
@@ -1002,7 +1031,8 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             if not file_exists(detector) then detector = "" end
             local points_argv = { sc_script, MANIFEST_PATH, POINTS_PATH, "--emit-saliency-points" }
             if detector ~= "" then
-                table.move({ "--detector", detector, "--detections", C.detections_path(dt) }, 1, 4, #points_argv + 1, points_argv)
+                local det = detector_argv(detector, settings)
+                table.move(det, 1, #det, #points_argv + 1, points_argv)
             end
             table.move({
                 "--keep-mode", tostring(keep_mode),
@@ -1129,10 +1159,12 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         }
         if fast_jpeg then argv[#argv + 1] = "--fast-jpeg" end
         if settings.no_vehicle_leave then argv[#argv + 1] = "--no-vehicle-leave" end
+        if settings.spread_keepers then argv[#argv + 1] = "--spread-keepers" end
         if sharp_mode == "motion_aware" then
             local detector = plugin_root(sc_script) .. "/models/" .. DETECTOR_FILE
             if file_exists(detector) then
-                table.move({ "--detector", detector, "--detections", C.detections_path(dt) }, 1, 4, #argv + 1, argv)
+                local det = detector_argv(detector, settings)
+                table.move(det, 1, #det, #argv + 1, argv)
             end
         end
         if sam_model then
@@ -1785,8 +1817,8 @@ local function install_panel()
         _("What groups photos before keepers are picked. Native groups: darktable's image groups. Grouping tags: the children of the tag node below. None: every photo is judged alone.\nDefault: native groups. Pick grouping tags after an Assisted Grouping run you have not applied as darktable groups."),
         { _("Native groups"), _("Grouping tags"), _("None") })
     local group_node_entry = dt.new_widget("entry") {
-        placeholder = _("Grouping tag node (blank = newest run)"),
-        tooltip = _("Grouping tags only: the tag node whose children are the groups, e.g. Assisted Grouping|2026-01-01 12:00:00|Group. Blank uses the newest Assisted Grouping run on the selected photos.\nDefault: blank. Set it when the photos carry more than one grouping run."),
+        placeholder = _("Grouping tag node (blank = latest run per photo)"),
+        tooltip = _("Grouping tags only: the tag node whose children are the groups, e.g. Assisted Grouping|2026-01-01 12:00:00|Group. Blank uses each photo's own latest Assisted Grouping run, so photos regrouped by a later run and photos left on an earlier run both keep their groups.\nDefault: blank. Set it to pin one run."),
         text = "",
     }
     local car_node_entry = dt.new_widget("entry") {
@@ -1830,6 +1862,8 @@ local function install_panel()
         { _("off"), _("99% one colour"), _("97% one colour"), _("95% one colour"), _("90% one colour") })
     option_checks[#option_checks + 1] = check("no_vehicle_leave", _("Leave frames with no vehicle"),
         _("Motorsport and subject tracking (SAM) sharpness only, when the vehicle detector is installed. A frame where it finds no car is never a keeper, keeps its rating and gets Why|No vehicle, instead of being scored on the centre of the frame. A burst with no car in any frame is left alone.\nDefault: off. Turn on for car shoots once you've checked a run's No vehicle frames really are empty."))
+    option_checks[#option_checks + 1] = check("car_boxes_only", _("Only car boxes (from tagging)"),
+        _("Motorsport and subject tracking (SAM) sharpness only, when the vehicle detector is installed. Once Assisted Tagging has run on these images with its car check, sharpness is judged only on the boxes it kept as cars, so a marshal, shed or railing box is never the subject. A frame whose boxes it all dropped counts as no vehicle. Images tagging hasn't run on, or that changed since, use every detector box.\nDefault: on. Turn off to judge every detector box, as before."))
 
     local tag_checks = {}
     local kind_labels, last_kind = {}, nil
@@ -1967,7 +2001,10 @@ local function install_panel()
     })
 
     local page_widgets = {
-        { genre_combo, rank_combo, sharp_combo, exp_combo, keep_combo, keep_margin_combo, non_keeper_combo, star_scale_combo },
+        { genre_combo, rank_combo, sharp_combo, exp_combo, keep_combo, keep_margin_combo,
+          check("spread_keepers", _("Spread keepers over the burst"),
+              _("Cuts each burst into as many equal stretches of capture order as keepers allowed and keeps the sharpest frame of each, so a car through a corner keeps its entry and exit, not three near-copies of one moment. A stretch whose best frame scores under 95% of the burst's best keeps nothing; the next-sharpest frame overall is kept instead. A keeper picked this way over a sharper frame gets Why|Spread. Needs more than one keeper allowed.\nDefault: off. Unproven: compare a run with it on and off against your picks (eval_culling.py) before relying on it.")),
+          non_keeper_combo, star_scale_combo },
         {
             group_support_combo,
             dt.new_widget("label") { label = _("grouping tag node"), halign = "start" },

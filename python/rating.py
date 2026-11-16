@@ -123,8 +123,26 @@ def close_call(burst_sharpness: dict, ranked_keepers: list, losers: list) -> set
     return set()
 
 
+def spread_keepers(burst_sharpness: dict, in_order: list, by_score: list, allowed: int, best: float) -> set:
+    """allowed keepers from in_order (the eligible ids in capture order) cut into allowed equal
+    slices: each slice's best frame, unless it scores under CLOSE_CALL_SHARE of best, so a
+    blurred slice doesn't keep a blurred frame. Each slice that keeps none is made up by the
+    next-best frame overall (by_score: the eligible ids best first) not kept yet."""
+    kept = set()
+    for k in range(allowed):
+        part = in_order[k * len(in_order) // allowed:(k + 1) * len(in_order) // allowed]
+        pick = max(part, key=lambda i: burst_sharpness[i], default=None)
+        if pick is not None and burst_sharpness[pick] >= CLOSE_CALL_SHARE * best:
+            kept.add(pick)
+    for i in by_score:
+        if len(kept) >= allowed:
+            break
+        kept.add(i)
+    return kept
+
+
 def rate_burst(burst_sharpness: dict, burst_flags: dict, burst_size: int, settings,
-               eligible=None, reference=None, mode=None, no_vehicle=frozenset()) -> tuple:
+               eligible=None, reference=None, mode=None, no_vehicle=frozenset(), order=None) -> tuple:
     """(members best first, keepers best first, id → stars, id → Why reason) for one
     burst. settings carries keep_mode, rank_mode and nk_mode, plus optional
     keep_margin (share of the burst's best a frame needs to keep as well, 0 = off),
@@ -135,23 +153,36 @@ def rate_burst(burst_sharpness: dict, burst_flags: dict, burst_size: int, settin
     burst takes universal tiers. mode is the burst's sharp mode (settings.sharp_mode
     when not given) and picks its tier table. no_vehicle frames (the detector found no
     car) are never keepers and keep their rating ("leave"), whatever the other settings.
-    Blank frames (blank_frames) are never keepers and are rejected (-1), before no_vehicle."""
+    Blank frames (blank_frames) are never keepers and are rejected (-1), before no_vehicle.
+    The keeper count comes from the eligible frames; burst_size is no longer read.
+    A keeper in the close call keeps the stars its own score earns (no top-40% drop).
+    settings.spread_keepers (default off) picks keepers per time slice (spread_keepers);
+    order lists the ids in capture order, sorted ids when not given. A keeper the
+    slices chose instead of a frame ranked higher gets Why|Spread."""
     if not burst_sharpness:
         return [], [], {}, {}
 
-    allowed = keepers_allowed(settings.keep_mode, burst_size)
     tag_only = getattr(settings, "tag_only_flags", frozenset())
     blank = blank_frames(burst_flags, tag_only)
     if eligible is None:
         eligible = set(burst_sharpness)
     eligible = set(eligible) - set(no_vehicle) - blank
+    # counted on the frames that can keep, not burst_size: 3 frames of the car in a
+    # 7-frame burst keep like a 3-frame burst
+    allowed = keepers_allowed(settings.keep_mode, len(eligible))
 
     sorted_members = sorted(burst_sharpness.keys(),
                             key=lambda i: (i in eligible, burst_sharpness[i]), reverse=True)
     keepers = set([i for i in sorted_members if i in eligible][:allowed])
     best = max((burst_sharpness[i] for i in eligible), default=0.0)
+    spread = set()
+    if getattr(settings, "spread_keepers", False) and allowed > 1 and best > 0:
+        by_rank = keepers
+        keepers = spread_keepers(burst_sharpness, [i for i in (order or sorted(burst_sharpness)) if i in eligible],
+                                 [i for i in sorted_members if i in eligible], allowed, best)
+        spread = keepers - by_rank
     margin = getattr(settings, "keep_margin", 0.0)
-    ranked = set(keepers)  # kept by rank, before the margin adds any
+    ranked = set(keepers)  # kept by rank (or by slice), before the margin adds any
     if margin > 0 and best > 0:
         keepers |= {i for i in eligible if burst_sharpness[i] >= margin * best}
 
@@ -162,6 +193,8 @@ def rate_burst(burst_sharpness: dict, burst_flags: dict, burst_size: int, settin
     penalised = penalised_flags(burst_flags, tag_only)
     star_scale = getattr(settings, "star_scale", 1.0)
     tiers = tier_table(mode or getattr(settings, "sharp_mode", ""))
+    close = close_call(burst_sharpness, [i for i in sorted_members if i in ranked],
+                       [i for i in sorted_members if i in eligible and i not in keepers])
 
     rated = {}
     for img_id in sorted_members:
@@ -179,13 +212,12 @@ def rate_burst(burst_sharpness: dict, burst_flags: dict, burst_size: int, settin
         else:
             stars = max(0, star_tier(raw_score, tiers, star_scale) - star_cost)
 
-        if is_keeper and settings.keep_mode != "keep_all" and num_keepers > 1 and img_id not in top_40_keepers:
+        if (is_keeper and settings.keep_mode != "keep_all" and num_keepers > 1
+                and img_id not in top_40_keepers and img_id not in close):
             stars = max(0, stars - 1)
         rated[img_id] = stars
 
     lowest_keeper = min((rated[i] for i in keepers), default=5)
-    close = close_call(burst_sharpness, [i for i in sorted_members if i in ranked],
-                       [i for i in sorted_members if i in eligible and i not in keepers])
     stars_of, reason_of = {}, {}
     for img_id in sorted_members:
         is_keeper = img_id in keepers
@@ -213,7 +245,8 @@ def rate_burst(burst_sharpness: dict, burst_flags: dict, burst_size: int, settin
                 except ValueError:
                     stars = 0
         stars_of[img_id] = stars
-        reason_of[img_id] = ("Close call" if img_id in close
+        reason_of[img_id] = ("Spread" if img_id in spread
+                             else "Close call" if img_id in close
                              else ("Keeper" if img_id in ranked else "Keeper by margin") if is_keeper
                              else "Not shortlisted" if img_id not in eligible
                              else "Graded" if settings.nk_mode == "graded" else "Outranked")

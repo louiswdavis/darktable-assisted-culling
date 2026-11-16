@@ -53,6 +53,45 @@ def run_tests():
           f"no vehicle at {S.DETECTOR_MIN_SCORE}: nothing at {VD.CANDIDATE_MIN_SCORE}")
     check("MAX_DIM is the shared module's fast-JPEG draft size", S.MAX_DIM, VD.FAST_JPEG_DIM)
 
+    # car boxes from tagging's boxes.json (--car-boxes) ---------------------------
+    # culling's detector saw 4000x2000; tagging decoded the same frame at 2000x1000
+    two = {"frame": [4000, 2000], "detector": "fake",
+           "boxes": [[400, 400, 1200, 1200, 0.9, 2], [2400, 200, 3800, 1800, 0.8, 7]]}  # car, shed
+    car = [(200 / 2000, 200 / 1000, 600 / 2000, 600 / 1000)]
+    check("car boxes: the shed box tagging dropped goes, the car stays",
+          S.car_filtered(two, car), dict(two, boxes=[two["boxes"][0]], dropped=1))
+    check("car boxes: not in tagging's file → the entry as it was", S.car_filtered(two, None) is two, True)
+    check("car boxes: in the file with no kept box → no vehicle, the log says what went",
+          S.vehicle_box(np.zeros((500, 1000, 3), np.uint8), S.car_filtered(two, []))[::2],
+          (None, f"no vehicle at {S.DETECTOR_MIN_SCORE}: nothing at {VD.CANDIDATE_MIN_SCORE}; tagging's car check dropped 2"))
+    check("car boxes: the shed is no longer the prominent box",
+          S.vehicle_box(np.zeros((500, 1000, 3), np.uint8), S.car_filtered(two, car))[0], (0.1, 0.2, 0.3, 0.6))
+    check("car boxes: IoU under CAR_BOX_MIN_IOU doesn't match",
+          S.car_filtered(two, [(0.1, 0.2, 0.2, 0.4)])["boxes"], [])
+    check("car boxes: cache key unchanged off the file", S.car_key(None), ())
+    with tempfile.TemporaryDirectory() as cb_tmp:
+        shot, gone = os.path.join(cb_tmp, "a.jpg"), os.path.join(cb_tmp, "b.jpg")
+        open(shot, "wb").close()
+        boxes_json = os.path.join(cb_tmp, "c.boxes.json")
+        import json as _json
+        with open(boxes_json, "w", encoding="utf-8") as f:
+            _json.dump({"images": {
+                "1": {"file": shot, "frame": [2000, 1000], "status": "ok", "boxes": [{"bbox": [200, 200, 600, 600]}]},
+                "2": {"file": gone, "frame": [2000, 1000], "status": "ok", "boxes": []},
+                "3": {"file": shot, "frame": [], "status": "error", "boxes": []}}}, f)
+        os.utime(shot, (1, 1))
+        cars_of, note = S.read_car_boxes(boxes_json)
+        check("car boxes: read as frame fractions, keyed by path", cars_of, {S.path_key(shot): car})
+        check("car boxes: the log counts frames left out", note.endswith("1 left out (file changed since tagging ran, or gone)"), True)
+        os.utime(shot, None)
+        os.utime(boxes_json, (1, 1))
+        check("car boxes: a frame changed after tagging ran is left out", S.read_car_boxes(boxes_json)[0], {})
+        with open(boxes_json, "w", encoding="utf-8") as f:
+            _json.dump({"kind": "people", "images": {}}, f)
+        check("car boxes: a people run gives none", S.read_car_boxes(boxes_json)[0], {})
+    check("car boxes: a missing file gives none", S.read_car_boxes(os.path.join(tempfile.gettempdir(), "no.boxes.json"))[0], {})
+    check("car boxes: no path gives none", S.read_car_boxes(""), ({}, "car boxes: off, raw detector boxes"))
+
     small_sure = (10, 10, 30, 30, 0.95, 2)
     big_unsure = (100, 50, 300, 250, 0.5, 7)
     check("pick vehicle: prominence beats raw confidence",
@@ -214,6 +253,43 @@ def run_tests():
     check("why: every reason the scorer writes is listed",
           set(why_of(ns={"keep_margin": 0.6}).values()) | set(why_of(ns={"nk_mode": "graded"}).values())
           | set(why_of(eligible={"a"}).values()) <= set(S.WHY_REASONS), True)
+
+    # ticket 52: keeper count from eligible frames, close-call keepers keep their stars
+    import rating as R
+    seven = {k: 90.0 - 10 * n for n, k in enumerate("abcdefg")}
+    dynamic = Namespace(keep_mode="dynamic_burst", rank_mode="relative", nk_mode="leave")
+    check("keepers: 7 frames, 3 eligible, dynamic_burst keeps 1",
+          R.rate_burst(seven, {k: () for k in seven}, 7, dynamic, eligible={"a", "b", "c"}, reference=100.0)[1], ["a"])
+    def stars_for(third):
+        """id -> stars for 5 eligible frames (2 keepers), the best loser scoring third."""
+        burst = {"a": 99.0, "b": 90.0, "c": third, "d": 45.0, "e": 40.0}
+        return R.rate_burst(burst, {k: () for k in burst}, 5, dynamic, reference=100.0)[2]
+    check("star drop: a clear runner-up keeper loses the top-40% star", (stars_for(50.0)["a"], stars_for(50.0)["b"]), (5, 3))
+    check("star drop: a keeper in a close call keeps its own stars", (stars_for(88.0)["a"], stars_for(88.0)["b"]), (5, 4))
+
+    # ticket 54: spread keepers over the burst; ids are capture order
+    spread_on = Namespace(keep_mode="dynamic_burst", rank_mode="universal", nk_mode="leave", spread_keepers=True)
+    def twelve(**sharp):
+        """12 frames in capture order, 40 unless given; dynamic_burst allows 3 keepers."""
+        return {i: sharp.get(f"f{i}", 40.0) for i in range(1, 13)}
+    best_three = twelve(f2=96.0, f5=100.0, f6=99.0, f7=98.0, f10=97.0)
+    _m, kept, _s, why = R.rate_burst(best_three, {k: () for k in best_three}, 12, spread_on)
+    check("spread: 12 frames, 3 keepers, the best three adjacent keep one per third", sorted(kept), [2, 5, 10])
+    check("spread: a slice's pick over a sharper frame says Spread, the frame it beat is a close call",
+          (why[2], why[10], why[5], why[6]), ("Spread", "Spread", "Keeper", "Close call"))
+    one_moment = twelve(f5=100.0, f6=99.0, f7=98.0)
+    _m, kept, _s, why = R.rate_burst(one_moment, {k: () for k in one_moment}, 12, spread_on)
+    check("spread: mostly blur with one sharp moment keeps the sharp frames", (sorted(kept), why[6]), ([5, 6, 7], "Keeper"))
+    check("spread: frames are sliced in the order given, not by id",
+          sorted(R.rate_burst(best_three, {k: () for k in best_three}, 12, spread_on,
+                              order=[5, 6, 1, 2, 7, 3, 4, 8, 9, 10, 11, 12])[1]), [5, 7, 10])
+    plain = Namespace(keep_mode="dynamic_burst", rank_mode="universal", nk_mode="leave")
+    check("spread: off rates exactly as before",
+          R.rate_burst(best_three, {k: () for k in best_three}, 12, Namespace(**{**vars(plain), "spread_keepers": False})),
+          R.rate_burst(best_three, {k: () for k in best_three}, 12, plain))
+    check("spread: one keeper allowed keeps the best frame",
+          R.rate_burst(best_three, {k: () for k in best_three}, 12,
+                       Namespace(**{**vars(spread_on), "keep_mode": "single_best"}))[1], [5])
 
     # flags: listed in column 3, each costs its stars, and they stack -------------
     check("frame_flags: exposure ok and eyes open is no flags", S.frame_flags("ok"), ())
@@ -550,7 +626,26 @@ def run_tests():
           S.subject_crop(np.zeros((1000, 2000, 3), np.uint8), (0.25, 0.25, 0.75, 0.75)).shape, (600, 1200, 3))
     check("subject crop: shrunk to SUBJECT_CROP_MAX",
           max(S.subject_crop(np.zeros((4000, 6000, 3), np.uint8), (0.0, 0.0, 1.0, 1.0)).shape[:2])
-          in (S.SUBJECT_CROP_MAX - 1, S.SUBJECT_CROP_MAX), True)
+          == S.SUBJECT_CROP_MAX, True)
+
+    # same_scale: one burst's cars compared at one size
+    big = rgb_of(cv2.resize(texture, (1800, 1200), interpolation=cv2.INTER_CUBIC))
+    small = S.shrunk_to(big, 600)
+    check("shrunk_to: long side exact, aspect kept", small.shape[:2], (400, 600))
+    check("shrunk_to: never grows", S.shrunk_to(small, 900).shape, small.shape)
+    check("scale ladder: steps under the long side, then its own size",
+          [s for s, _ in S.scale_ladder(small)], [400, 600])
+    size, subject_of = S.same_scale({"near": S.scale_ladder(big), "far": S.scale_ladder(small)})
+    check("same_scale: the largest size both crops have", size, 600)
+    check("same_scale: the same scene at 600 and 1800 px scores within 5%",
+          abs(subject_of["near"] - subject_of["far"]) / subject_of["far"] < 0.05, True)
+    check("same_scale: a crop under the smallest step leaves each frame at its smallest size",
+          S.same_scale({"a": [[300, 5.0]], "b": [[400, 7.0], [900, 9.0]]}), (None, {"a": 5.0, "b": 7.0}))
+    check("same_scale: a lone frame keeps its own size", S.same_scale({"a": [[400, 7.0], [900, 9.0]]}), (900, {"a": 9.0}))
+    check("same_scale: no frames", S.same_scale({}), (None, {}))
+    check("class factor: pan, missed pan, ordinary",
+          (S.class_factor("pan"), S.class_factor("missed_pan"), S.class_factor("ordinary")),
+          (S.PAN_BONUS, S.MISSED_PAN_FACTOR, 1.0))
 
     check("EXIF prior: unknown shutter uses the default", S.streak_share_needed(0.0, 0.0), S.STREAK_SHARE)
     check("EXIF prior: 1/2000 needs more streak", S.streak_share_needed(1 / 2000, 400), S.STREAK_SHARE_FAST)
@@ -609,9 +704,19 @@ def run_tests():
     check("report: the reason column is the Why tag", (rep[0][11], rep[1][11]), ("Keeper", ""))
     check("report: the car column is twelfth", (rep[0][12], rep[1][12]), ("37", ""))
     check("report: one column per header", len(rep[0]), len(S.REPORT_HEADER))
-    check("report: direction is last, blank without a detector", rep[0][-1], "")
-    check("report: direction per burst", S.report_rows(rep_manifest, rep_results, lambda n: 1, {"0": "left"})[0][-1],
+    check("report: direction is fourteenth, blank without a detector", rep[0][13], "")
+    check("report: direction per burst", S.report_rows(rep_manifest, rep_results, lambda n: 1, {"0": "left"})[0][13],
           "left")
+    check("report: the id column is darktable's id", [r[14] for r in rep], ["1", "2", "3"])
+    check("report: score parts blank outside motion_aware", rep[0][15:], ["", "", "", "", ""])
+    parts = S.report_rows(rep_manifest, rep_results, lambda n: 1, None,
+                          {"1": (69.565217, "pan", 0.812345, "640x400 → 600", 55.123456)})
+    check("report: score parts per frame, rounded", (parts[0][15:], parts[1][15:]),
+          ([69.5652, "pan", 0.8123, "640x400 → 600", 55.1235], ["", "", "", "", ""]))
+    check("report: parts without an own-size subject leave it blank",
+          S.report_rows(rep_manifest, rep_results, lambda n: 1, None, {"1": (1.0, "pan", 0.5, "9x9")})[0][19], "")
+    check("report: parts columns are last", S.REPORT_HEADER[-6:],
+          ["id", "subject", "motion", "straightness", "crop", "subject_own"])
 
     # framing_flags --------------------------------------------------------------
     def det(*boxes):
@@ -695,6 +800,15 @@ def run_tests():
     # eval_culling.py keeps its own copy of the motion tags (it imports no cv2/numpy) -----
     import eval_culling
     check("eval_culling: MOTION_CLASS mirrors MOTION_TAGS", eval_culling.MOTION_CLASS, {v: k for k, v in S.MOTION_TAGS.items()})
+    check("eval_culling: score-part constants mirror score_images",
+          {n: eval_culling.PART_DEFAULTS[n] for n in ("PAN_BONUS", "MISSED_PAN_FACTOR", "BLUR_STRAIGHT_SCALE")},
+          {"PAN_BONUS": S.PAN_BONUS, "MISSED_PAN_FACTOR": S.MISSED_PAN_FACTOR, "BLUR_STRAIGHT_SCALE": S.BLUR_STRAIGHT_SCALE})
+    check("eval_culling: lift mirrors lift_motion_blur",
+          eval_culling.lift_blur({"a": 100.0, "b": 300.0, "c": 50.0}, {"c": ("motion_blur", 0.8)}, 500.0),
+          S.lift_motion_blur({"a": 100.0, "b": 300.0, "c": 50.0}, {"c": ("motion_blur", 0.8)}))
+    check("eval_culling: an all-blur burst ranks by straightness like lift_motion_blur",
+          eval_culling.lift_blur({"a": 10.0, "b": 20.0}, {"a": ("motion_blur", 0.8), "b": ("motion_blur", 0.6)}, 500.0),
+          S.lift_motion_blur({"a": 10.0, "b": 20.0}, {"a": ("motion_blur", 0.8), "b": ("motion_blur", 0.6)}))
     check("eval_culling: mode switches name technique_tag's tags",
           sorted(t for _m, t in eval_culling.MODE_SWITCH), sorted({S.technique_tag("subject_peak"), S.technique_tag("subject_focus")}))
     with tempfile.TemporaryDirectory() as d:

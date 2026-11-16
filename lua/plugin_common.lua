@@ -60,23 +60,46 @@ end
 -- Group keys --------------------------------------------------------------------
 -- How culling and tagging read the groups grouping wrote (tags or native groups).
 
-local GROUP_PREFIX = "Assisted Grouping|"
-local GROUP_STAMP = "^%d%d%d%d%-%d%d%-%d%d %d%d:%d%d:%d%d$"
+local GROUP_TAG = "^Assisted Grouping|(%d%d%d%d%-%d%d%-%d%d %d%d:%d%d:%d%d)|Group|%d+$"
 
--- Greatest-stamp "Assisted Grouping|<stamp>|Group" among the tag names, or nil.
-function C.newest_group_node(tag_lists)
-    local best
-    for _, tags in ipairs(tag_lists) do
-        for _, name in ipairs(tags) do
-            if name:sub(1, #GROUP_PREFIX) == GROUP_PREFIX then
-                local stamp, rest = name:sub(#GROUP_PREFIX + 1):match("^([^|]+)|(.*)$")
-                if stamp and stamp:match(GROUP_STAMP) and (rest == "Group" or rest:sub(1, 6) == "Group|") then
-                    if not best or stamp > best then best = stamp end
-                end
-            end
+-- The newest "Assisted Grouping|<stamp>|Group|<n>" among the tag names (name -> true), or nil.
+-- Stamps are `YYYY-MM-DD HH:MM:SS`, so string order is time order; a tie takes the greater name.
+function C.latest_group_tag(have)
+    local best, best_stamp
+    for name in pairs(have or {}) do
+        local stamp = name:match(GROUP_TAG)
+        if stamp and (not best_stamp or stamp > best_stamp or (stamp == best_stamp and name > best)) then
+            best, best_stamp = name, stamp
         end
     end
-    return best and (GROUP_PREFIX .. best .. "|Group") or nil
+    return best
+end
+
+-- id -> the image's own latest group tag, so a half-regrouped selection keeps each run's groups
+-- apart; second return counts the grouping runs those tags come from.
+function C.latest_group_keys(items)
+    local key_of, runs, n_runs = {}, {}, 0
+    for _, item in ipairs(items) do
+        local tag = C.latest_group_tag(item.tags)
+        if tag then
+            key_of[item.id] = tag
+            local stamp = tag:match(GROUP_TAG)
+            if not runs[stamp] then runs[stamp] = true; n_runs = n_runs + 1 end
+        end
+    end
+    return key_of, n_runs
+end
+
+C.GROUP_TAGS_HINT = "grouping tags found but no native groups; set Group support to Grouping tags to use them"
+
+-- GROUP_TAGS_HINT when native grouping put no photo in a group of 2+ but an item carries a
+-- grouping tag (grouping ran with Write group tags but not native groups), else nil.
+function C.group_tags_hint(grouped, items)
+    if grouped > 0 then return nil end
+    for _, item in ipairs(items) do
+        if C.latest_group_tag(item.tags) then return C.GROUP_TAGS_HINT end
+    end
+    return nil
 end
 
 -- id -> child name under node (first by name); second return lists ids with several children.
@@ -942,10 +965,17 @@ function C.make_preset_controls(o)
 
     picker = dt.new_widget("combobox") {
         label = "preset",
-        tooltip = "Pick a saved set of panel settings. template = the defaults. Unsaved changes are dropped when you switch. Save with actions → update preset.",
+        tooltip = "Pick a saved set of panel settings. template = the defaults. With unsaved changes, switching asks first: Switch drops them. Save with actions → update preset.",
         changed_callback = function(self)
             local name = self.value
-            if current and name and name ~= "" and name ~= current then ctl.select(name) end
+            if not (current and name and name ~= "" and name ~= current) then return end
+            if ctl.check_dirty() then
+                show_picker(current)
+                ask_confirm(string.format('Drop unsaved changes and switch to "%s"?', name), "Switch",
+                    function() hide_boxes(); ctl.select(name) end)
+                return
+            end
+            ctl.select(name)
         end,
         "template",
     }

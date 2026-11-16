@@ -171,7 +171,92 @@ def vehicle_box(rgb: np.ndarray, entry: dict) -> tuple:
     found = pick_vehicle([b for b in boxes if b[4] >= DETECTOR_MIN_SCORE], w, h)
     if found:
         return found[0], found[1], ""
-    return None, None, f"no vehicle at {DETECTOR_MIN_SCORE}: {strongest_detections(boxes, w, h)}"
+    dropped = f"; tagging's car check dropped {entry['dropped']}" if entry.get("dropped") else ""
+    return None, None, f"no vehicle at {DETECTOR_MIN_SCORE}: {strongest_detections(boxes, w, h)}{dropped}"
+
+
+# --car-boxes: tagging's last boxes.json, whose boxes are the ones tagging's SigLIP 2 box check
+# kept as cars. A frame in the file keeps only the detector boxes overlapping one of them at
+# CAR_BOX_MIN_IOU or more; a frame not in it (or changed since) keeps its raw boxes.
+CAR_BOX_MIN_IOU = 0.5
+
+
+def path_key(filepath: str) -> str:
+    return os.path.normcase(os.path.abspath(filepath))
+
+
+def read_car_boxes(path: str) -> tuple:
+    """({path_key: [(x0, y0, x1, y1) frame fractions]} per frame of tagging's boxes.json, log line).
+    Frames whose file changed after boxes.json was written, and frames tagging failed on, are left
+    out. {} with no path, a missing or unreadable file, or a people run."""
+    if not path:
+        return {}, "car boxes: off, raw detector boxes"
+    try:
+        written = os.path.getmtime(path)
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError) as e:
+        return {}, f"car boxes: none from tagging ({e.__class__.__name__} on {path}), raw detector boxes"
+    if data.get("kind") == "people":
+        return {}, f"car boxes: {path} is from a people run, raw detector boxes"
+    cars, stale = {}, 0
+    for img in data.get("images", {}).values():
+        if img.get("status") == "error" or len(img.get("frame") or []) != 2:
+            continue
+        try:
+            unchanged = os.path.getmtime(img["file"]) <= written
+        except OSError:
+            unchanged = False
+        if not unchanged:
+            stale += 1
+            continue
+        fw, fh = img["frame"]
+        cars[path_key(img["file"])] = [(b["bbox"][0] / fw, b["bbox"][1] / fh, b["bbox"][2] / fw, b["bbox"][3] / fh)
+                                       for b in img["boxes"]]
+    return cars, (f"car boxes: {len(cars)} frames from {path}"
+                  + (f", {stale} left out (file changed since tagging ran, or gone)" if stale else ""))
+
+
+def box_iou(a, b) -> float:
+    inter = box_area((max(a[0], b[0]), max(a[1], b[1]), min(a[2], b[2]), min(a[3], b[3])))
+    union = box_area(a) + box_area(b) - inter
+    return inter / union if union > 0 else 0.0
+
+
+def car_filtered(entry, cars):
+    """`entry` with only the boxes overlapping one of `cars` (frame fractions) at CAR_BOX_MIN_IOU or
+    more, and `dropped` = how many went. `entry` itself when cars is None (frame not in tagging's
+    file) or there is no entry."""
+    if cars is None or not entry:
+        return entry
+    fw, fh = entry["frame"]
+    keep = [b for b in entry["boxes"]
+            if any(box_iou((b[0] / fw, b[1] / fh, b[2] / fw, b[3] / fh), c) >= CAR_BOX_MIN_IOU for c in cars)]
+    return dict(entry, boxes=keep, dropped=len(entry["boxes"]) - len(keep))
+
+
+def car_key(cars) -> tuple:
+    """The cache-key part for a frame's car boxes: () when the frame isn't in tagging's file, so
+    keys are unchanged with the check off."""
+    return () if cars is None else (["cars", CAR_BOX_MIN_IOU, [[round(v, 4) for v in c] for c in cars]],)
+
+
+def log_car_check(rows, detections, detector: str, cars_of: dict, note: str):
+    """Logs where the boxes came from and, over the frames in tagging's file, how many boxes at
+    DETECTOR_MIN_SCORE or more the car check removed and how many frames it left with none."""
+    frames = removed = emptied = 0
+    for row in rows:
+        cars = cars_of.get(path_key(row[1]))
+        entry = detections.get(detection_key(row[1], detector_for(detector))) if cars is not None else None
+        if not entry:
+            continue
+        before = sum(b[4] >= DETECTOR_MIN_SCORE for b in entry["boxes"])
+        after = sum(b[4] >= DETECTOR_MIN_SCORE for b in car_filtered(entry, cars)["boxes"])
+        frames += 1
+        removed += before - after
+        emptied += bool(before) and not after
+    log(note + (f"; checked {frames} frames: {removed} boxes removed, {emptied} frames left with no vehicle"
+                if cars_of else ""))
 
 
 # Framing defects (motion_aware with a detector), judged per burst from the stored
@@ -565,8 +650,9 @@ def technique_tag(burst_mode: str) -> str:
 CACHE_INPUTS = (
     "MAX_DIM", "SHADOW_CLIP", "HIGHLIGHT_CLIP", "CLIP_PCT_FLAG", "BLANK_SHARE", "BLANK_TOLERANCE",
     "SALIENCY_GRID", "DETECTOR_MIN_SCORE",
+    # CAR_BOX_MIN_IOU is not here: car_key puts it in the key of each frame it applies to
     "BLINK_MIN_FACE_PX", "EYE_SEARCH_TOP", "MASK_ASPECT_TOLERANCE", "UNIFORMITY_MIN_CONTRAST", "EXIF_SLACK",
-    "SUBJECT_PAD", "SUBJECT_CROP_MAX", "NORM_MIN_CONTRAST", "MOTION_GRID", "STREAK_COHERENCE", "STREAK_ANGLE_TOL",
+    "SUBJECT_PAD", "SUBJECT_CROP_MAX", "SUBJECT_SCALES", "NORM_MIN_CONTRAST", "MOTION_GRID", "STREAK_COHERENCE", "STREAK_ANGLE_TOL",
     "SUBJECT_STREAK_MAX", "STREAK_SHARE", "STREAK_SHARE_SLOW", "STREAK_SHARE_FAST", "PAN_REACH", "FAST_SHUTTER",
     "PAN_BONUS", "MISSED_PAN_FACTOR", "BLUR_STRAIGHT_SCALE", "CENTRE_BOX",
 )
@@ -580,6 +666,8 @@ CACHE_NEUTRAL = (
     "MOTION_TIER_THRESHOLDS", "MOTION_TAGS", "PRESCORE_FAILED", "REPORT_HEADER", "REPORT_ARCHIVE_KEEP", "WHY_REASONS",
     # framing is judged across the burst and never cached; NO_VEHICLE_SUBJECT matches a cached subject
     "DIRECTION_MIN_SHIFT", "EDGE_TOUCH", "CUT_TRAILING_SHARE", "TIGHT_CROP_SHARE", "BLOCKED_SHARE", "NO_VEHICLE_SUBJECT",
+    # keyed per frame by car_key, so a change misses only the frames in tagging's file
+    "CAR_BOX_MIN_IOU",
 )
 SCORE_CACHE_MAX_AGE_DAYS = 90
 SCORE_CACHE_COMMIT_EVERY = 50
@@ -694,6 +782,7 @@ def masked_key(filepath: str, args, prompt, edited: str):
 # its tiles. Design: docs/superpowers/specs/culling/assisted-culling/2026-11-11-rally-sharpness-design.md
 SUBJECT_PAD = 0.10          # vehicle box grown by this share of its size on each side
 SUBJECT_CROP_MAX = 1600      # long side (px) the subject crop is shrunk to
+SUBJECT_SCALES = (400, 600, 800, 1200)  # smaller long sides (px) the car is also scored at (same_scale)
 NORM_MIN_CONTRAST = 8.0      # gray std (0–255) floor, so a flat patch can't divide by ~0
 MOTION_GRID = 6
 STREAK_COHERENCE = 0.45      # structure-tensor coherence from which a tile counts as streaked
@@ -721,11 +810,39 @@ def subject_crop(full: np.ndarray, box) -> np.ndarray:
     top, left = int(max(0.0, y0 - py) * h), int(max(0.0, x0 - px) * w)
     bottom, right = max(int(min(1.0, y1 + py) * h), top + 1), max(int(min(1.0, x1 + px) * w), left + 1)
     crop = full[top:bottom, left:right]
+    return shrunk_to(crop, SUBJECT_CROP_MAX)
+
+
+def shrunk_to(crop: np.ndarray, long_side: int) -> np.ndarray:
+    """The crop shrunk (INTER_AREA) so its long side is exactly long_side; never grown."""
     ch, cw = crop.shape[:2]
-    scale = SUBJECT_CROP_MAX / max(ch, cw)
-    if scale < 1:
-        crop = cv2.resize(crop, (max(1, int(cw * scale)), max(1, int(ch * scale))), interpolation=cv2.INTER_AREA)
-    return crop
+    if max(ch, cw) <= long_side:
+        return crop
+    scale = long_side / max(ch, cw)
+    size = (long_side, max(1, round(ch * scale))) if cw >= ch else (max(1, round(cw * scale)), long_side)
+    return cv2.resize(crop, size, interpolation=cv2.INTER_AREA)
+
+
+def scale_ladder(crop: np.ndarray) -> list:
+    """[[long side, normalised_sharpness]] at each SUBJECT_SCALES step under the crop's long
+    side, smallest first, then at its own size: the sizes same_scale can pick from."""
+    long_side = max(crop.shape[:2])
+    return ([[s, normalised_sharpness(shrunk_to(crop, s))] for s in SUBJECT_SCALES if s < long_side]
+            + [[long_side, normalised_sharpness(crop)]])
+
+
+def same_scale(ladders: dict) -> tuple:
+    """(long side, {id: subject sharpness}): a burst's cars compared at the largest size every
+    frame has in its scale_ladder. Laplacian steps span more of the scene on a smaller crop, so
+    an approaching car would otherwise score sharper for filling more pixels. When no size is
+    shared (a crop under the smallest step), each frame uses its smallest size and size is None."""
+    if not ladders:
+        return None, {}
+    shared = set.intersection(*({s for s, _ in ladder} for ladder in ladders.values()))
+    if not shared:
+        return None, {i: ladder[0][1] for i, ladder in ladders.items()}
+    size = max(shared)
+    return size, {i: next(v for s, v in ladder if s == size) for i, ladder in ladders.items()}
 
 
 def normalised_sharpness(rgb: np.ndarray) -> float:
@@ -828,7 +945,9 @@ def classify_motion(tiles: list, box, share_needed: float) -> tuple:
 
 def motion_aware_score(filepath: str, rgb: np.ndarray, entry, exposure: float, focal: float,
                        full=None) -> tuple:
-    """(score, class, straightness, log detail, no vehicle) for one frame. rgb is the
+    """(score, class, straightness, log detail, no vehicle, subject sharpness, crop "WxH",
+    scale_ladder) for one frame; score is subject × class_factor, at the crop's own size until
+    score_manifest compares the burst at one size (same_scale). rgb is the
     MAX_DIM frame; the car is cut from a full-size decode (`full` when the
     caller has one). entry is the frame's stored detection, None without a
     detector. No detector or no vehicle → the centre third stands in for the car.
@@ -838,13 +957,23 @@ def motion_aware_score(filepath: str, rgb: np.ndarray, entry, exposure: float, f
         box, _, note = vehicle_box(rgb, entry)
     region = box or CENTRE_BOX
     crop = subject_crop(decode_rgb(filepath) if full is None else full, region)
-    subject = normalised_sharpness(crop)
+    ladder = scale_ladder(crop)
+    subject = ladder[-1][1]
     cls, straight = classify_motion(motion_tiles(cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)), region,
                                     streak_share_needed(exposure, focal))
-    score = subject * {"pan": PAN_BONUS, "missed_pan": MISSED_PAN_FACTOR}.get(cls, 1.0)
+    score = subject * class_factor(cls)
     detail = (f"{cls}, straightness {straight:.2f}, subject {subject:.0f}, crop {crop.shape[1]}x{crop.shape[0]}"
               + ("" if box else f", centre third ({note})"))
-    return score, cls, straight, detail, entry is not None and not box
+    if box and entry.get("dropped") is not None:
+        detail += (f", car box {box[0]:.2f},{box[1]:.2f}-{box[2]:.2f},{box[3]:.2f} from tagging"
+                   f" ({entry['dropped']} other boxes dropped)")
+    return (score, cls, straight, detail, entry is not None and not box, subject, f"{crop.shape[1]}x{crop.shape[0]}",
+            ladder)
+
+
+def class_factor(cls: str) -> float:
+    """What a motion class multiplies the subject sharpness by."""
+    return {"pan": PAN_BONUS, "missed_pan": MISSED_PAN_FACTOR}.get(cls, 1.0)
 
 
 def lift_motion_blur(scores: dict, motion: dict) -> dict:
@@ -877,14 +1006,16 @@ def frame_entry(rgb: np.ndarray, detector: str, detections):
 def process_single_image(filepath: str, sharp_mode: str, exp_mode: str, cancel_path: str = "",
                          fast_jpeg: bool = False, mask_path: str = "", detector: str = "",
                          exposure: float = 0.0, focal: float = 0.0, detections=None,
-                         blank_share: float = BLANK_SHARE):
+                         blank_share: float = BLANK_SHARE, cars=None):
     """(filepath, score, flags, error, fresh detection entry or None). The detector sees
-    the frame as decoded; scoring sees it downscaled to MAX_DIM."""
+    the frame as decoded; scoring sees it downscaled to MAX_DIM. `cars` are the frame's car
+    boxes from tagging (car_filtered), None when it isn't in tagging's file."""
     if cancel_path and os.path.exists(cancel_path):
         return filepath, None, None, "cancelled", None
     try:
         full = decode_rgb(filepath, fast_jpeg)
         entry, fresh = frame_entry(full, detector if sharp_mode == "motion_aware" else "", detections)
+        entry = car_filtered(entry, cars)
         rgb = downscale(full)
         eyes_closed = False
         if sharp_mode == "face_detect":
@@ -906,15 +1037,16 @@ def process_single_image(filepath: str, sharp_mode: str, exp_mode: str, cancel_p
 
 
 def process_single_saliency(filepath: str, fast_jpeg: bool = False, exp_mode: str = "whole_frame",
-                            detector: str = "", detections=None, blank_share: float = BLANK_SHARE):
+                            detector: str = "", detections=None, blank_share: float = BLANK_SHARE, cars=None):
     """The SAM prompt is a vehicle box (x0, y0, x1, y1) when `detector` finds one,
     else the saliency point (x, y). Then the fallback score, the frame's flags
     ";"-joined, the subject tag ("" without a detector), the detector's log note
     and the fresh detection entry (None when `detections` was the stored one or
-    there is no detector)."""
+    there is no detector). `cars` as for process_single_image."""
     try:
         full = decode_rgb(filepath, fast_jpeg)
         entry, fresh = frame_entry(full, detector, detections)
+        entry = car_filtered(entry, cars)
         rgb = downscale(full)
         if entry is not None:
             prompt, coco, note = vehicle_box(rgb, entry)
@@ -962,6 +1094,7 @@ def emit_saliency_points(manifest, args, cache, detections):
     blank_share = getattr(args, "blank_share", BLANK_SHARE)
     detector = getattr(args, "detector", "")
     det_key = detector_key(detector)  # loads the model: a missing or unreadable one fails the run, not each frame
+    cars_of, cars_note = read_car_boxes(getattr(args, "car_boxes", "")) if detector else ({}, "")
     with open(args.results, "w", newline="", encoding="utf-8"):
         pass
     # opened once for the whole stage; darktable reads it only after the stage's done file
@@ -977,7 +1110,8 @@ def emit_saliency_points(manifest, args, cache, detections):
     done = 0
 
     def stage_a_key(filepath):
-        return ("stage_a", file_key(filepath), exp_mode, blank_share, args.fast_jpeg, det_key)
+        return ("stage_a", file_key(filepath), exp_mode, blank_share, args.fast_jpeg, det_key,
+                *car_key(cars_of.get(path_key(filepath))))
 
     def record(image_id, prompt, heuristic, flags, subject):
         nonlocal done
@@ -1026,7 +1160,7 @@ def emit_saliency_points(manifest, args, cache, detections):
                                                 initargs=(detector,)) as executor:
         future_to_id = {
             executor.submit(process_single_saliency, row[1], args.fast_jpeg, exp_mode, detector,
-                            stored.get(row[1]), blank_share): row[0]
+                            stored.get(row[1]), blank_share, cars_of.get(path_key(row[1]))): row[0]
             for row in to_decode
         }
         for future in concurrent.futures.as_completed(future_to_id):
@@ -1054,13 +1188,14 @@ def emit_saliency_points(manifest, args, cache, detections):
         pre_file.close()
     if detector:
         log(f"detections: {len(stored)} cached, {detected} detected")
+        log_car_check(manifest, detections, detector, cars_of, cars_note)
     log("finding subjects: done")
 
 
 # The one "Why|<reason>" tag every scored frame gets in results column 7, saying how
 # it was decided. Kept to a handful: a tag per score bucket floods darktable's tag list.
 WHY_REASONS = ("Keeper", "Keeper by margin", "Outranked", "Graded", "Not shortlisted",
-               "No vehicle", "Close call", "Blank")
+               "No vehicle", "Close call", "Blank", "Spread")
 # the subject tag of a sam_subject frame whose detector found no car
 NO_VEHICLE_SUBJECT = "Subject|Vehicle|Guessed"
 
@@ -1077,7 +1212,8 @@ def process_burst_logic(burst_id, burst_sharpness, burst_flags, burst_size, args
     sharp mode (args.sharp_mode when not given) and picks its tier table. no_vehicle
     frames are left alone with Why|No vehicle (rate_burst)."""
     sorted_members, burst_keepers, stars_of, reason_of = rate_burst(
-        burst_sharpness, burst_flags, burst_size, args, eligible, reference, mode, no_vehicle)
+        burst_sharpness, burst_flags, burst_size, args, eligible, reference, mode, no_vehicle,
+        sorted(burst_sharpness, key=int) if getattr(args, "spread_keepers", False) else None)
     keepers = set(burst_keepers)
     burst_rows = [[
         img_id,
@@ -1094,15 +1230,20 @@ def process_burst_logic(burst_id, burst_sharpness, burst_flags, burst_size, args
     return burst_keepers
 
 
-REPORT_HEADER = ["burst", "file", "rank", "of", "score", "stars", "keeper", "flags", "tags", "why", "folder", "reason", "car", "direction"]
+REPORT_HEADER = ["burst", "file", "rank", "of", "score", "stars", "keeper", "flags", "tags", "why", "folder", "reason", "car",
+                 "direction", "id", "subject", "motion", "straightness", "crop", "subject_own"]
 
 
-def report_rows(manifest, result_rows, keepers_per_burst, direction_of=None) -> list:
+def report_rows(manifest, result_rows, keepers_per_burst, direction_of=None, parts_of=None) -> list:
     """One row per scored frame, bursts in manifest order and frames best first, saying why it
     was kept or not. stars is "leave" for a non-keeper the run left alone. reason is the
     frame's Why tag (WHY_REASONS); car is the car number the frame was pooled under, "" if none;
     direction is the burst's travel direction (left, right, unknown), "" without a detector.
-    These are last so older readers of the columns keep working."""
+    id is darktable's image id (capture order within a film roll). subject, motion,
+    straightness and crop are motion_aware's score parts (parts_of), blank in other modes:
+    eval_culling.py re-ranks from them. subject is at the burst's shared size (same_scale,
+    crop "WxH → size"); subject_own is at the crop's own size. These are last so older readers
+    of the columns keep working."""
     file_of = {row[0]: row[1] for row in manifest}
     car_of = {row[0]: row[9] for row in manifest}
     by_burst = {}
@@ -1121,6 +1262,7 @@ def report_rows(manifest, result_rows, keepers_per_burst, direction_of=None) -> 
             tags = rest[0] if rest else ""
             reason = next((t[4:] for t in tags.split(";") if t.startswith("Why|")), "")
             why = ("left alone: no vehicle found" if reason == "No vehicle"
+                   else f"kept: rank {rank} of {len(rows)}, the best of its stretch of the burst" if reason == "Spread"
                    else f"kept: rank {rank} of {len(rows)}, {allowed} allowed" if keeper == "1" and rank <= allowed
                    else f"kept: rank {rank} of {len(rows)}, within the keeper margin of the best" if keeper == "1"
                    else f"not kept: rank {rank} of {len(rows)}, only {allowed} allowed or not eligible")
@@ -1129,10 +1271,13 @@ def report_rows(manifest, result_rows, keepers_per_burst, direction_of=None) -> 
             if flags:
                 why += f"; flagged {flags.replace(';', ', ')}"
             path = file_of.get(img_id, img_id)
+            subject, cls, straight, crop, own = (*(parts_of or {}).get(img_id, ("", "", "", "")), "")[:5]
             out.append([burst_id, os.path.basename(path), rank, len(rows),
                         score, stars, "yes" if keeper == "1" else "no", flags, tags, why,
                         os.path.dirname(path), reason, car_of.get(img_id, ""),
-                        (direction_of or {}).get(burst_id, "")])
+                        (direction_of or {}).get(burst_id, ""), img_id,
+                        "" if subject == "" else round(subject, 4), cls,
+                        "" if straight == "" else round(straight, 4), crop, "" if own == "" else round(own, 4)])
     return out
 
 
@@ -1154,7 +1299,7 @@ def archive_report(report_path, archive_dir, keep):
         log(f"couldn't archive the report: {e}")
 
 
-def write_report(manifest, args, direction_of=None):
+def write_report(manifest, args, direction_of=None, parts_of=None):
     """Writes args.report (CSV, REPORT_HEADER) from the finished results file, then archives it
     when args.report_archive_dir is set; a failure is logged, never fatal, since the scores are
     already on their way back to darktable."""
@@ -1165,7 +1310,7 @@ def write_report(manifest, args, direction_of=None):
             w = csv.writer(f)
             w.writerow(REPORT_HEADER)
             w.writerows(report_rows(manifest, result_rows, lambda n: keepers_allowed(args.keep_mode, n),
-                                    direction_of))
+                                    direction_of, parts_of))
     except OSError as e:
         log(f"couldn't write the report {args.report}: {e}")
         return
@@ -1188,9 +1333,9 @@ def main(args):
         if getattr(args, "emit_saliency_points", False):
             emit_saliency_points(manifest, args, cache, detections)
         else:
-            direction_of = score_manifest(manifest, args, cache, detections)
+            direction_of, parts_of = score_manifest(manifest, args, cache, detections)
             if getattr(args, "report", ""):
-                write_report(manifest, args, direction_of)
+                write_report(manifest, args, direction_of, parts_of)
     finally:
         cache.close()
         detections.close()
@@ -1255,6 +1400,15 @@ def score_manifest(manifest, args, cache, detections):
         nonlocal completed_bursts
         completed_bursts += 1
         raw = burst_sharpness[burst_id]
+        if motion:
+            size, subject_of = same_scale({i: ladder_of.pop(i) for i in list(raw) if i in ladder_of})
+            for i, subject in subject_of.items():
+                own, cls, straight, crop = parts_of[i]
+                raw[i] = subject * class_factor(cls)
+                parts_of[i] = (subject, cls, straight, f"{crop} → {size or 'own size'}", own)
+            if subject_of and size is None:
+                log(f"burst {burst_id}: a car crop is under {SUBJECT_SCALES[0]} px, so its frames are compared "
+                    "at their smallest sizes, not one shared size")
         scores, eligible = resolve_burst_scores(raw, candidates_of.get(burst_id))
         burst_motion = motion_of.pop(burst_id, {})
         if burst_motion:
@@ -1264,7 +1418,8 @@ def score_manifest(manifest, args, cache, detections):
             ids = [item[0] for item in burst_groups[burst_id] if item[0] in raw]
             path_of = {item[0]: item[1] for item in burst_groups[burst_id]}
             direction, framing = framing_flags(
-                [frame_boxes(detections.get(detection_key(path_of[i], detector_for(detector)))) for i in ids])
+                [frame_boxes(car_filtered(detections.get(detection_key(path_of[i], detector_for(detector))),
+                                          cars_of.get(path_key(path_of[i])))) for i in ids])
             direction_of[burst_id] = direction
             for i, extra in zip(ids, framing):
                 if extra:
@@ -1323,25 +1478,32 @@ def score_manifest(manifest, args, cache, detections):
     blank_share = getattr(args, "blank_share", BLANK_SHARE)
     detector = getattr(args, "detector", "") if motion else ""
     det_key = detector_key(detector)  # loads the model: a missing or corrupt one fails the run here, not the centre third on every frame
+    cars_of, cars_note = read_car_boxes(getattr(args, "car_boxes", "")) if detector else ({}, "")
     motion_of = {}  # burst → {id: (class, straightness, no vehicle)}, motion_aware only
     direction_of = {}  # burst → travel direction (framing_flags), with a detector only
+    parts_of = {}  # id → (subject sharpness, class, straightness, crop[, own-size subject]), motion_aware only, for the report
+    ladder_of = {}  # id → scale_ladder until its burst is finished, motion_aware only
     det_hits = det_fresh = 0
 
     def score_key(filepath, burst_id, image_id):
         key = ("score", file_key(filepath), mode_of[burst_id], args.exp_mode, blank_share, args.fast_jpeg)
         if motion:
             # the EXIF prior and the detector change the class, so they key it
-            key += (det_key, [round(v, 6) for v in shot_of[image_id]])
+            key += (det_key, [round(v, 6) for v in shot_of[image_id]], *car_key(cars_of.get(path_key(filepath))))
         return key
 
-    def keep_motion(burst_id, image_id, cls, straight, no_vehicle):
+    def keep_motion(burst_id, image_id, cls, straight, no_vehicle, subject, crop, ladder):
         motion_of.setdefault(burst_id, {})[image_id] = (cls, straight, no_vehicle)
+        parts_of[image_id] = (subject, cls, straight, crop)
+        ladder_of[image_id] = ladder
 
     def store(filepath, sharp, flags, image_id, mask_path, edited, burst_id):
         if motion:
-            score, cls, straight, _, no_vehicle = sharp
+            score, cls, straight, _, no_vehicle, subject, crop, ladder = sharp
             cache.put({"sharp": float(score), "flags": list(flags), "class": cls, "straight": straight,
-                       "no_vehicle": no_vehicle}, *score_key(filepath, burst_id, image_id))
+                       "no_vehicle": no_vehicle, "subject": float(subject), "crop": crop,
+                       "ladder": [[s, float(v)] for s, v in ladder]},
+                      *score_key(filepath, burst_id, image_id))
         elif not sam:
             cache.put({"sharp": float(sharp), "flags": list(flags)}, *score_key(filepath, burst_id, image_id))
         elif mask_path and image_id in prescored:
@@ -1366,11 +1528,12 @@ def score_manifest(manifest, args, cache, detections):
                     known = ((hit["masked"] if hit else None, fallback), tuple(filter(None, flags.split(";"))))
                 elif not sam:
                     hit = cache.get(*score_key(filepath, burst_id, image_id))
-                    # a motion entry cached before no_vehicle was stored is scored again
-                    if hit and (not motion or "no_vehicle" in hit):
+                    # a motion entry cached before its score parts were stored is scored again
+                    if hit and (not motion or "ladder" in hit):
                         known = (hit["sharp"], tuple(hit["flags"]))
                         if motion:
-                            keep_motion(burst_id, image_id, hit["class"], hit["straight"], hit["no_vehicle"])
+                            keep_motion(burst_id, image_id, hit["class"], hit["straight"], hit["no_vehicle"],
+                                        hit["subject"], hit["crop"], hit["ladder"])
                 if known:
                     burst_sharpness[burst_id][image_id], burst_flags[burst_id][image_id] = known
                     processed_count += 1
@@ -1380,7 +1543,8 @@ def score_manifest(manifest, args, cache, detections):
                 det_hits += stored is not None
                 fut = executor.submit(process_single_image, filepath, mode_of[burst_id], args.exp_mode,
                                       cancel_path, args.fast_jpeg, mask_path, detector, *shot_of[image_id],
-                                      detections=stored, blank_share=blank_share)
+                                      detections=stored, blank_share=blank_share,
+                                      cars=cars_of.get(path_key(filepath)))
                 future_to_item[fut] = (burst_id, image_id, filepath, mask_path, edited)
         log(f"scoring: {total_images} frames in {total_bursts} bursts, {processed_count} from cache or stage A, "
             f"{len(future_to_item)} to decode, sharpness {args.sharp_mode}")
@@ -1411,8 +1575,8 @@ def score_manifest(manifest, args, cache, detections):
             else:
                 store(filepath, sharp, flags, image_id, mask_path, edited, burst_id)
                 if motion:
-                    score, cls, straight, detail, no_vehicle = sharp
-                    keep_motion(burst_id, image_id, cls, straight, no_vehicle)
+                    score, cls, straight, detail, no_vehicle, subject, crop, ladder = sharp
+                    keep_motion(burst_id, image_id, cls, straight, no_vehicle, subject, crop, ladder)
                     log(f"motion {image_id} ({os.path.basename(filepath)}): {detail}")
                     sharp = score
                 burst_sharpness[burst_id][image_id] = sharp
@@ -1431,6 +1595,7 @@ def score_manifest(manifest, args, cache, detections):
 
     if detector:
         log(f"detections: {det_hits} cached, {det_fresh} detected")
+        log_car_check(manifest, detections, detector, cars_of, cars_note)
     references = relative_references(relative_scores)
     for (mode, masked), values in relative_scores.items():
         label = f"{mode}{' masked' if masked else ''} ({len(values)} frames)"
@@ -1448,7 +1613,7 @@ def score_manifest(manifest, args, cache, detections):
                                       no_vehicle=no_vehicle)
         log(f"{note}, keepers {', '.join(keepers) or 'none'}"
             + (f", {len(no_vehicle)} left alone (no vehicle)" if no_vehicle else ""))
-    return direction_of
+    return direction_of, parts_of
 
 
 if __name__ == "__main__":
@@ -1472,6 +1637,9 @@ if __name__ == "__main__":
                              "ranking) and the steps graded non-keepers drop by: above 1 is stricter, below 1 more generous")
     parser.add_argument("--keep-margin", default=0.0, type=float,
                         help="Also keep every eligible frame scoring at least this share of its burst's best (0 = off)")
+    parser.add_argument("--spread-keepers", action="store_true",
+                        help="Keep one frame per equal time slice of each burst instead of the top frames by "
+                             "score, where the slice's best scores at least CLOSE_CALL_SHARE of the burst's best")
     parser.add_argument("--no-vehicle-leave", action="store_true",
                         help="A frame where the detector found no car (motion_aware, or sam_subject with a "
                              "detector) is never a keeper and keeps its rating, tagged Why|No vehicle")
@@ -1481,6 +1649,8 @@ if __name__ == "__main__":
                              "frames without one fall back to the saliency point or the centre third")
     parser.add_argument("--detections", default="",
                         help="SQLite cache of per-frame detections shared with the tagging plugin (empty = detect every run)")
+    parser.add_argument("--car-boxes", default="",
+                        help="tagging's last boxes.json: score only detector boxes its car check kept (empty = raw boxes)")
     parser.add_argument("--prescores", default="",
                         help="sam_subject: per-frame fallback scores written by the saliency pass "
                              "and read by the scoring pass, so frames outside the shortlist decode once")
