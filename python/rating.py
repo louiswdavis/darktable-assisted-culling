@@ -50,6 +50,7 @@ FLAG_PENALTIES = {
     "eyes_closed": (15, 1),
     "cut_off": (15, 1),  # car cut by the frame edge (score_images.framing_flags, motion_aware only)
     "blocked": (15, 1),  # car hidden behind a nearer vehicle
+    "blank": (100, 5),  # one flat colour (score_images.is_blank): never a keeper, rejected (blank_frames)
 }
 
 
@@ -72,10 +73,16 @@ def keepers_allowed(keep_mode: str, burst_size: int) -> int:
 def penalised_flags(burst_flags: dict, tag_only=frozenset()) -> dict:
     """id → the flags that cost that frame stars. Tag-only flags never do, nor
     does a flag every frame of a multi-frame burst shares: a burst that's all
-    dark or all eyes-closed was most likely shot that way on purpose."""
+    dark or all eyes-closed was most likely shot that way on purpose. blank is
+    the exception: an all-blank burst holds nothing either way."""
     shared = set.intersection(*map(set, burst_flags.values())) if len(burst_flags) > 1 else set()
-    exempt = shared | set(tag_only)
+    exempt = (shared - {"blank"}) | set(tag_only)
     return {i: tuple(f for f in flags if f not in exempt) for i, flags in burst_flags.items()}
+
+
+def blank_frames(burst_flags: dict, tag_only=frozenset()) -> set:
+    """The frames rate_burst rejects as blank: flagged blank, unless blank is tag-only."""
+    return {i for i, flags in penalised_flags(burst_flags, tag_only).items() if "blank" in flags}
 
 
 def percentile(values: list, p: float) -> float:
@@ -127,14 +134,17 @@ def rate_burst(burst_sharpness: dict, burst_flags: dict, burst_size: int, settin
     (relative_references); None means the group was too small for one and the
     burst takes universal tiers. mode is the burst's sharp mode (settings.sharp_mode
     when not given) and picks its tier table. no_vehicle frames (the detector found no
-    car) are never keepers and keep their rating ("leave"), whatever the other settings."""
+    car) are never keepers and keep their rating ("leave"), whatever the other settings.
+    Blank frames (blank_frames) are never keepers and are rejected (-1), before no_vehicle."""
     if not burst_sharpness:
         return [], [], {}, {}
 
     allowed = keepers_allowed(settings.keep_mode, burst_size)
+    tag_only = getattr(settings, "tag_only_flags", frozenset())
+    blank = blank_frames(burst_flags, tag_only)
     if eligible is None:
         eligible = set(burst_sharpness)
-    eligible = set(eligible) - set(no_vehicle)
+    eligible = set(eligible) - set(no_vehicle) - blank
 
     sorted_members = sorted(burst_sharpness.keys(),
                             key=lambda i: (i in eligible, burst_sharpness[i]), reverse=True)
@@ -149,7 +159,7 @@ def rate_burst(burst_sharpness: dict, burst_flags: dict, burst_size: int, settin
     num_keepers = len(burst_keepers)
     top_40_count = max(1, int(round(num_keepers * 0.4)))
     top_40_keepers = set(burst_keepers[:top_40_count])
-    penalised = penalised_flags(burst_flags, getattr(settings, "tag_only_flags", frozenset()))
+    penalised = penalised_flags(burst_flags, tag_only)
     star_scale = getattr(settings, "star_scale", 1.0)
     tiers = tier_table(mode or getattr(settings, "sharp_mode", ""))
 
@@ -180,6 +190,9 @@ def rate_burst(burst_sharpness: dict, burst_flags: dict, burst_size: int, settin
     for img_id in sorted_members:
         is_keeper = img_id in keepers
         stars = rated[img_id]
+        if img_id in blank:
+            stars_of[img_id], reason_of[img_id] = -1, "Blank"
+            continue
         if img_id in no_vehicle:
             stars_of[img_id], reason_of[img_id] = "leave", "No vehicle"
             continue

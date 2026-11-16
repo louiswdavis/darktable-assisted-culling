@@ -217,7 +217,7 @@ def replay(frames: list, settings, sharp_mode: str) -> list:
     groups = {}
     for burst, burst_frames in bursts.items():
         for f in burst_frames:
-            if f["eligible"]:
+            if f["eligible"] and "blank" not in f["flags"]:  # rate_burst rejects these; the run left them out too
                 groups.setdefault((mode_of[burst], f["masked"]), []).append(f["score"])
     references = relative_references(groups) if settings.rank_mode == "relative" else {}
     out = []

@@ -41,18 +41,34 @@ from vehicle_detect import (  # noqa: E402
 from rating import (  # noqa: E402,F401
     STAR_THRESHOLDS, RELATIVE_REFERENCE_PERCENTILE, RELATIVE_MIN_FRAMES, GRADED_STEPS, TIER_THRESHOLDS,
     PEAK_TIER_THRESHOLDS, UNIFORMITY_TIER_THRESHOLDS, MOTION_TIER_THRESHOLDS, TIER_THRESHOLDS_BY_MODE,
-    FLAG_PENALTIES, tier_table, keepers_allowed, penalised_flags, relative_references, rate_burst,
+    FLAG_PENALTIES, tier_table, keepers_allowed, penalised_flags, blank_frames, relative_references, rate_burst,
 )
 
 MAX_DIM = 800
 SHADOW_CLIP = 5 / 255
 HIGHLIGHT_CLIP = 250 / 255
 CLIP_PCT_FLAG = 0.02
+# a frame with at least this share of its pixels within BLANK_TOLERANCE of its median
+# colour, on every channel, is blank: lens cap, a black barrier, blown sky, fog. Any
+# colour counts. rating.rate_burst rejects it. --blank-share overrides it; 0 = off.
+BLANK_SHARE = 0.95
+BLANK_TOLERANCE = 0.06 * 255
 
 
-def frame_flags(exposure: str, eyes_closed: bool = False) -> tuple:
+def frame_flags(exposure: str, eyes_closed: bool = False, blank: bool = False) -> tuple:
     flags = () if exposure == "ok" else (exposure,)
-    return flags + ("eyes_closed",) if eyes_closed else flags
+    flags += ("eyes_closed",) if eyes_closed else ()
+    return flags + ("blank",) if blank else flags
+
+
+def is_blank(rgb: np.ndarray, share: float = BLANK_SHARE) -> bool:
+    """True when at least `share` of the (downscaled) frame's pixels sit within
+    BLANK_TOLERANCE of its median colour on every channel. share 0 is never blank."""
+    if share <= 0:
+        return False
+    pixels = rgb.reshape(-1, rgb.shape[-1]).astype(np.float32)
+    distance = np.abs(pixels - np.median(pixels, axis=0)).max(axis=1)
+    return float(np.mean(distance <= BLANK_TOLERANCE)) >= share
 
 
 SALIENCY_GRID = 5
@@ -859,7 +875,8 @@ def frame_entry(rgb: np.ndarray, detector: str, detections):
 
 def process_single_image(filepath: str, sharp_mode: str, exp_mode: str, cancel_path: str = "",
                          fast_jpeg: bool = False, mask_path: str = "", detector: str = "",
-                         exposure: float = 0.0, focal: float = 0.0, detections=None):
+                         exposure: float = 0.0, focal: float = 0.0, detections=None,
+                         blank_share: float = BLANK_SHARE):
     """(filepath, score, flags, error, fresh detection entry or None). The detector sees
     the frame as decoded; scoring sees it downscaled to MAX_DIM."""
     if cancel_path and os.path.exists(cancel_path):
@@ -881,17 +898,19 @@ def process_single_image(filepath: str, sharp_mode: str, exp_mode: str, cancel_p
             sharp = motion_aware_score(filepath, rgb, entry, exposure, focal, None if fast_jpeg else full)
         else:
             sharp = sharpness_score(rgb, sharp_mode, mask_path)
-        return filepath, sharp, frame_flags(exposure_status(rgb, exp_mode), eyes_closed), None, fresh
+        flags = frame_flags(exposure_status(rgb, exp_mode), eyes_closed, is_blank(rgb, blank_share))
+        return filepath, sharp, flags, None, fresh
     except Exception as e:
         return filepath, None, None, str(e), None
 
 
 def process_single_saliency(filepath: str, fast_jpeg: bool = False, exp_mode: str = "whole_frame",
-                            detector: str = "", detections=None):
+                            detector: str = "", detections=None, blank_share: float = BLANK_SHARE):
     """The SAM prompt is a vehicle box (x0, y0, x1, y1) when `detector` finds one,
-    else the saliency point (x, y). Then the subject tag ("" without a detector),
-    the detector's log note and the fresh detection entry (None when `detections`
-    was the stored one or there is no detector)."""
+    else the saliency point (x, y). Then the fallback score, the frame's flags
+    ";"-joined, the subject tag ("" without a detector), the detector's log note
+    and the fresh detection entry (None when `detections` was the stored one or
+    there is no detector)."""
     try:
         full = decode_rgb(filepath, fast_jpeg)
         entry, fresh = frame_entry(full, detector, detections)
@@ -901,8 +920,9 @@ def process_single_saliency(filepath: str, fast_jpeg: bool = False, exp_mode: st
             subject = subject_tag(coco)
         else:
             prompt, subject, note = None, "", ""
+        flags = frame_flags(exposure_status(rgb, exp_mode), blank=is_blank(rgb, blank_share))
         return (filepath, prompt or saliency_point(rgb), sharpness_score(rgb, "subject_focus"),
-                exposure_status(rgb, exp_mode), None, subject, note, fresh)
+                ";".join(flags), None, subject, note, fresh)
     except Exception as e:
         return filepath, None, None, None, str(e), "", "", None
 
@@ -911,7 +931,7 @@ PRESCORE_FAILED = "failed"
 
 
 def read_prescores(path: str) -> tuple:
-    """(id → (fallback sharpness, exposure status, prompt, subject tag), ids stage A
+    """(id → (fallback sharpness, flags ";"-joined, prompt, subject tag), ids stage A
     couldn't decode) from a stage-A prescore file."""
     scored, failed = {}, set()
     if not path or not os.path.exists(path):
@@ -931,13 +951,14 @@ def emit_saliency_points(manifest, args, cache, detections):
     heuristic. A box prompt fills all four; a point prompt leaves x1,y1 empty.
     cached is "1" when the frame's masked score is already in the cache, so
     darktable needn't run SAM on it.
-    With args.prescores, also writes id,fallback_score,exposure,x0,y0,x1,y1,subject
+    With args.prescores, also writes id,fallback_score,flags,x0,y0,x1,y1,subject
     for every frame so the scoring pass needn't decode frames outside the
     shortlist again. Images that fail to decode get an id,failed row instead, so the
     scoring pass skips them without a second decode; they can't be keepers."""
     total = len(manifest)
     prescores = getattr(args, "prescores", "")
     exp_mode = getattr(args, "exp_mode", "whole_frame")
+    blank_share = getattr(args, "blank_share", BLANK_SHARE)
     detector = getattr(args, "detector", "")
     det_key = detector_key(detector)  # loads the model: a missing or unreadable one fails the run, not each frame
     with open(args.results, "w", newline="", encoding="utf-8"):
@@ -955,16 +976,16 @@ def emit_saliency_points(manifest, args, cache, detections):
     done = 0
 
     def stage_a_key(filepath):
-        return ("stage_a", file_key(filepath), exp_mode, args.fast_jpeg, det_key)
+        return ("stage_a", file_key(filepath), exp_mode, blank_share, args.fast_jpeg, det_key)
 
-    def record(image_id, prompt, heuristic, exposure, subject):
+    def record(image_id, prompt, heuristic, flags, subject):
         nonlocal done
         image_id, filepath, burst = row_of[image_id][:3]
         if prompt is not None:
             prompt = [round(v, 4) for v in prompt]
             found[burst][image_id] = (prompt, heuristic)
             if pre_writer:
-                pre_writer.writerow([image_id, heuristic, exposure] + prompt + [""] * (4 - len(prompt)) + [subject])
+                pre_writer.writerow([image_id, heuristic, flags] + prompt + [""] * (4 - len(prompt)) + [subject])
         elif pre_writer:
             pre_writer.writerow([image_id, PRESCORE_FAILED])
         remaining[burst] -= 1
@@ -989,7 +1010,7 @@ def emit_saliency_points(manifest, args, cache, detections):
         if hit:
             if hit.get("note"):
                 log(f"{row[0]} ({os.path.basename(row[1])}): {hit['note']} (cached)")
-            record(row[0], hit["prompt"], hit["heuristic"], hit["exposure"], hit["subject"])
+            record(row[0], hit["prompt"], hit["heuristic"], hit["flags"], hit["subject"])
         else:
             to_decode.append(row)
     log(f"finding subjects: {total} frames in {len(remaining)} bursts, {total - len(to_decode)} from cache, "
@@ -1004,7 +1025,7 @@ def emit_saliency_points(manifest, args, cache, detections):
                                                 initargs=(detector,)) as executor:
         future_to_id = {
             executor.submit(process_single_saliency, row[1], args.fast_jpeg, exp_mode, detector,
-                            stored.get(row[1])): row[0]
+                            stored.get(row[1]), blank_share): row[0]
             for row in to_decode
         }
         for future in concurrent.futures.as_completed(future_to_id):
@@ -1015,7 +1036,7 @@ def emit_saliency_points(manifest, args, cache, detections):
                 executor.shutdown(wait=False, cancel_futures=True)
                 sys.exit(130)
             image_id = future_to_id[future]
-            filepath, prompt, heuristic, exposure, err, subject, note, fresh = future.result()
+            filepath, prompt, heuristic, flags, err, subject, note, fresh = future.result()
             if fresh is not None:
                 detections.put(fresh, detection_key(filepath, detector_for(detector)))
                 detected += 1
@@ -1025,9 +1046,9 @@ def emit_saliency_points(manifest, args, cache, detections):
             else:
                 if note:
                     log(f"{image_id} ({os.path.basename(filepath)}): {note}")
-                cache.put({"prompt": [float(v) for v in prompt], "heuristic": float(heuristic), "exposure": exposure,
+                cache.put({"prompt": [float(v) for v in prompt], "heuristic": float(heuristic), "flags": flags,
                            "subject": subject, "note": note}, *stage_a_key(filepath))
-            record(image_id, prompt, heuristic, exposure, subject)
+            record(image_id, prompt, heuristic, flags, subject)
     if pre_file:
         pre_file.close()
     if detector:
@@ -1038,7 +1059,7 @@ def emit_saliency_points(manifest, args, cache, detections):
 # The one "Why|<reason>" tag every scored frame gets in results column 7, saying how
 # it was decided. Kept to a handful: a tag per score bucket floods darktable's tag list.
 WHY_REASONS = ("Keeper", "Keeper by margin", "Outranked", "Graded", "Not shortlisted",
-               "No vehicle", "Close call")
+               "No vehicle", "Close call", "Blank")
 # the subject tag of a sam_subject frame whose detector found no car
 NO_VEHICLE_SUBJECT = "Subject|Vehicle|Guessed"
 
@@ -1253,6 +1274,8 @@ def score_manifest(manifest, args, cache, detections):
                                    or burst_motion.get(i, (None, 0.0, False))[2])
             # an all-no-vehicle burst is left alone too; relative references skip these frames
             eligible = set(eligible) - no_vehicle
+        # rejected whatever their score, so they set no relative reference either
+        eligible = set(eligible) - blank_frames(burst_flags[burst_id], getattr(args, "tag_only_flags", frozenset()))
         burst_tags = []
         note = f"burst {burst_id}: {len(raw)} of {len(burst_groups[burst_id])} frames scored, mode {mode_of[burst_id]}"
         if mode_of[burst_id] != args.sharp_mode:
@@ -1296,6 +1319,7 @@ def score_manifest(manifest, args, cache, detections):
     # keyed on the burst's effective mode, so the EXIF rules and their
     # thresholds are part of the key without storing shutter or aperture
     motion = args.sharp_mode == "motion_aware"
+    blank_share = getattr(args, "blank_share", BLANK_SHARE)
     detector = getattr(args, "detector", "") if motion else ""
     det_key = detector_key(detector)  # loads the model: a missing or corrupt one fails the run here, not the centre third on every frame
     motion_of = {}  # burst → {id: (class, straightness, no vehicle)}, motion_aware only
@@ -1303,7 +1327,7 @@ def score_manifest(manifest, args, cache, detections):
     det_hits = det_fresh = 0
 
     def score_key(filepath, burst_id, image_id):
-        key = ("score", file_key(filepath), mode_of[burst_id], args.exp_mode, args.fast_jpeg)
+        key = ("score", file_key(filepath), mode_of[burst_id], args.exp_mode, blank_share, args.fast_jpeg)
         if motion:
             # the EXIF prior and the detector change the class, so they key it
             key += (det_key, [round(v, 6) for v in shot_of[image_id]])
@@ -1336,9 +1360,9 @@ def score_manifest(manifest, args, cache, detections):
                     burst_completion[burst_id] += 1
                     continue
                 if sam and not mask_path and image_id in prescored:
-                    fallback, exp, prompt, _ = prescored[image_id]
+                    fallback, flags, prompt, _ = prescored[image_id]
                     hit = cache.get(*masked_key(filepath, args, prompt, edited)) if shortlisted == "1" else None
-                    known = ((hit["masked"] if hit else None, fallback), frame_flags(exp))
+                    known = ((hit["masked"] if hit else None, fallback), tuple(filter(None, flags.split(";"))))
                 elif not sam:
                     hit = cache.get(*score_key(filepath, burst_id, image_id))
                     # a motion entry cached before no_vehicle was stored is scored again
@@ -1355,7 +1379,7 @@ def score_manifest(manifest, args, cache, detections):
                 det_hits += stored is not None
                 fut = executor.submit(process_single_image, filepath, mode_of[burst_id], args.exp_mode,
                                       cancel_path, args.fast_jpeg, mask_path, detector, *shot_of[image_id],
-                                      detections=stored)
+                                      detections=stored, blank_share=blank_share)
                 future_to_item[fut] = (burst_id, image_id, filepath, mask_path, edited)
         log(f"scoring: {total_images} frames in {total_bursts} bursts, {processed_count} from cache or stage A, "
             f"{len(future_to_item)} to decode, sharpness {args.sharp_mode}")
@@ -1469,6 +1493,9 @@ if __name__ == "__main__":
                         help="sam_subject: id of darktable's SAM model, part of the masked-score cache key")
     parser.add_argument("--tag-only-flags", default="", type=lambda s: frozenset(filter(None, s.split(","))),
                         help="Comma-separated flags that are still listed but never cost stars")
+    parser.add_argument("--blank-share", default=BLANK_SHARE, type=float,
+                        help="Flag a frame blank (rejected, Why|Blank) when at least this share of its pixels "
+                             "is one flat colour (0 = off)")
 
     args = parser.parse_args()
     unknown = args.tag_only_flags - set(FLAG_PENALTIES)
