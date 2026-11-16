@@ -303,6 +303,8 @@ class DetectionCache:
                             "(key TEXT PRIMARY KEY, value TEXT NOT NULL, used INTEGER NOT NULL)")
             self.prune()
         except sqlite3.DatabaseError as e:
+            if self.db:
+                self.db.close()  # Windows can't delete or replace a file held open
             raise InputError(f"detection cache {path} is unreadable ({e}); delete it to start a fresh one") from e
 
     def prune(self, days: int = CACHE_MAX_AGE_DAYS):

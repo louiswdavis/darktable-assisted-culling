@@ -34,7 +34,8 @@ def main(names: list) -> int:
             bad += 1
             print(f"SKIP {label}: no lua on PATH and no lupa; run: {sys.executable} -m pip install lupa")
             continue
-        run = subprocess.run(cmd, cwd=folder if t.endswith(".lua") else None, capture_output=True, text=True, encoding="utf-8", errors="replace")
+        run = subprocess.run(cmd, cwd=folder if t.endswith(".lua") else None, capture_output=True, text=True, encoding="utf-8", errors="replace",
+                             env=dict(os.environ, PYTHONIOENCODING="utf-8"))
         text = run.stdout + (("\n--- stderr ---\n" + run.stderr) if run.stderr else "")
         out = os.path.join(OUT, t.rsplit(".", 1)[0] + ".txt")
         with open(out, "w", encoding="utf-8") as f:
