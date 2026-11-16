@@ -923,7 +923,7 @@ def read_prescores(path: str) -> tuple:
     return scored, failed
 
 
-def emit_saliency_points(manifest, args, cache):
+def emit_saliency_points(manifest, args, cache, detections):
     """Writes id,x0,y0,x1,y1,cached rows to args.results for each burst's
     shortlist: the frames worth running SAM on, picked by the center-weighted
     heuristic. A box prompt fills all four; a point prompt leaves x1,y1 empty.

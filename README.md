@@ -488,18 +488,14 @@ Use a selection with at least two bursts of 3+ frames each.
 
 ### Tests
 
-Run these from the repo root (the `darktable-assisted-culling` folder).
-
-The pure-logic half of the plugin runs under any Lua 5.4:
+Run these from the repo root (the `darktable-assisted-culling` folder). One command runs every `python/test_*.py` and the Lua suite `lua/test_assisted_culling.lua` (or only the ones named, e.g. `score_images assisted_culling`) and writes each one's output to `tests/<name>.txt`. The Lua suite uses a `lua` on PATH if there is one, else lupa: run `pip install lupa` in the venv once (Windows has no `lua` by default):
 
 ```
-cd lua && lua test_assisted_culling.lua
-```
+# Linux / macOS
+.venv/bin/python python/run_tests.py
 
-No `lua` binary handy? `pip install lupa` in the venv, then:
-
-```
-.venv/bin/python -c "import lupa; L=lupa.LuaRuntime(); L.execute('package.path=\"./lua/?.lua;\"..package.path; dofile(\"lua/test_assisted_culling.lua\")')"
+# Windows
+.venv\Scripts\python python\run_tests.py
 ```
 
 The scorer's pure functions (saliency point, vehicle detection decoding, mask-aware sharpness, flags, manifest parsing) have their own tests on synthetic images, and a stress test runs 6000 mock frames through the whole scorer:
