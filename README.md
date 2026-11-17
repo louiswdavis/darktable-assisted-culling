@@ -50,13 +50,51 @@ python3 -m venv .venv
 .venv/bin/pip install -r python/requirements.txt
 ```
 
-### 2. Optional: models
+### 2. Models
 
-Only needed for the *subject tracking (SAM)* sharpness mode. Every other mode works without them.
+Every model is optional: culling scores without any. There are three jobs, and these are all the models culling uses:
 
-1. **SAM mask model** (needs darktable 5.6+). In darktable, open **preferences → AI**, then enable and download a SAM or SAM 2 mask model. darktable stores and manages it, and the plugin uses whichever mask model is enabled there. SegNext mask models aren't supported; if one is enabled, the run stops and says so.
-2. **Vehicle detector** (optional, for motorsport). Put a detector in the `models` folder in the repo; the best one there is used automatically. D-FINE-X finds more cars than YOLOX; see [Vehicle detector](#vehicle-detector) for the files and the download commands.
-3. **Sharpness judge** (optional, motorsport). Only for **Break close calls with the sharpness judge**. From [https://huggingface.co/86Cao/IQA-ONNX-Models](https://huggingface.co/86Cao/IQA-ONNX-Models) (Apache-2.0), download `hyperiqa_model.onnx` **and** `hyperiqa_model.onnx.data` (about 110 MB together) into the `models` folder. Keep both names as they are: the model looks for the `.data` file by name.
+| Job | Used by | Where it lives |
+|---|---|---|
+| Subject mask (SAM) | the *subject tracking (SAM)* sharpness mode | managed by darktable (below) |
+| Vehicle detector | motorsport: SAM's prompt box, *motion-aware* sharpness, burst direction | `models/` in this repo |
+| Sharpness judge (HyperIQA) | **Break close calls with the sharpness judge** only | `models/` in this repo |
+
+`models/` sits next to the venv; `.gitignore` skips `*.onnx` and `*.onnx.data`, so `git pull` leaves it alone. Re-cloning the repo deletes it.
+
+**Recommended** (about 360 MB). Run from the repo root, the folder holding `README.md`, not `python/` (Windows 10+ ships `curl`; `--create-dirs` makes `models/`). Then `pip install -r` again, as in [Python side](#1-python-side), for `onnxruntime`:
+
+```
+curl -L --create-dirs -o models/dfine_x_coco.onnx https://huggingface.co/onnx-community/dfine_x_coco-ONNX/resolve/main/onnx/model.onnx
+curl -L --create-dirs -o models/hyperiqa_model.onnx https://huggingface.co/86Cao/IQA-ONNX-Models/resolve/main/hyperiqa_model.onnx
+curl -L --create-dirs -o models/hyperiqa_model.onnx.data https://huggingface.co/86Cao/IQA-ONNX-Models/resolve/main/hyperiqa_model.onnx.data
+```
+
+Already have the tagging plugin's models? Copy its detector file into this `models` folder instead: the same file shares tagging's detection cache, so frames tagging already detected aren't detected again.
+
+**Subject mask (SAM)** (darktable 5.6+). In darktable, open **preferences → AI**, then enable and download a SAM or SAM 2 mask model. darktable stores and manages it, and the plugin uses whichever mask model is enabled there. SegNext mask models aren't supported; if one is enabled, the run stops and says so.
+
+**Vehicle detector.** The plugin uses the first of these in `models/`, best first, the same order as the tagging plugin. YOLOX runs on OpenCV; the rest need `onnxruntime`. See [Vehicle detector](#vehicle-detector) for what it does.
+
+| File | Size | Download | Notes |
+|---|---|---|---|
+| `dfine_x_coco.onnx` | 251 MB | `https://huggingface.co/onnx-community/dfine_x_coco-ONNX/resolve/main/onnx/model.onnx` | D-FINE-X, Apache-2.0. Best; in Recommended. |
+| `dfine_l_coco.onnx` | 125 MB | `https://huggingface.co/onnx-community/dfine_l_coco-ONNX/resolve/main/onnx/model.onnx` | D-FINE-L, Apache-2.0 |
+| `rtdetr_v2_r50vd.onnx` | 172 MB | `https://huggingface.co/onnx-community/rtdetr_v2_r50vd-ONNX/resolve/main/onnx/model.onnx` | RT-DETRv2 R50, Apache-2.0 |
+| `dfine_m_coco.onnx` | 79 MB | `https://huggingface.co/onnx-community/dfine_m_coco-ONNX/resolve/main/onnx/model.onnx` | D-FINE-M, Apache-2.0 |
+| `dfine_s_coco.onnx` | 42 MB | `https://huggingface.co/onnx-community/dfine_s_coco-ONNX/resolve/main/onnx/model.onnx` | D-FINE-S, Apache-2.0 |
+| `object_detection_yolox_2022nov.onnx` | 36 MB | `https://github.com/opencv/opencv_zoo/raw/main/models/object_detection_yolox/object_detection_yolox_2022nov.onnx` | YOLOX, Apache-2.0, OpenCV's model zoo. Fastest, misses more cars. |
+
+**Sharpness judge.** Both files, from [86Cao/IQA-ONNX-Models](https://huggingface.co/86Cao/IQA-ONNX-Models) (Apache-2.0). Keep both names: the model looks for the `.data` file by name. Needs `onnxruntime`.
+
+| File | Size | Download |
+|---|---|---|
+| `hyperiqa_model.onnx` | 0.4 MB | `https://huggingface.co/86Cao/IQA-ONNX-Models/resolve/main/hyperiqa_model.onnx` |
+| `hyperiqa_model.onnx.data` | 109 MB | `https://huggingface.co/86Cao/IQA-ONNX-Models/resolve/main/hyperiqa_model.onnx.data` |
+
+**Check what's installed.** Each file must be named exactly as above (curl's `-o` does that; a browser download saves `model.onnx`). The run log names the detector it picked, plus any better file you haven't installed, e.g. `vehicle detector: object_detection_yolox_2022nov.onnx (better, not installed: dfine_x_coco.onnx, …)`. A run with the judge setting on and its files missing stops and says so.
+
+**curl says `client returned ERROR on write` (error 23)?** curl got the data but couldn't save it. It isn't because the file already exists: curl overwrites. Either `models/` doesn't exist where you ran it (run from the repo root, or add `--create-dirs` as above), or the file is in use (close darktable, or wait for a run to finish, then retry).
 
 ### 3. darktable side
 
@@ -266,31 +304,7 @@ Needs darktable 5.6+ with a SAM or SAM 2 mask model enabled and downloaded (pref
 
 #### Vehicle detector
 
-Guessing the subject point works on a bright livery but can pick a sponsor board or kerb instead. For motorsport, give SAM a box around the car:
-
-1. Download one or more detector files into a `models` folder in the repo. It sits next to the venv, `.gitignore` already skips `*.onnx`, and `git pull` leaves it alone; re-cloning the repo deletes it. From the repo root (Windows 10+ ships `curl`):
-
-   ```
-   mkdir models
-   curl -L -o models/dfine_x_coco.onnx https://huggingface.co/onnx-community/dfine_x_coco-ONNX/resolve/main/onnx/model.onnx
-   curl -L -o models/object_detection_yolox_2022nov.onnx https://github.com/opencv/opencv_zoo/raw/main/models/object_detection_yolox/object_detection_yolox_2022nov.onnx
-   ```
-
-2. Run `pip install -r` again (as in [Python side](#1-python-side)): D-FINE and RT-DETR need `onnxruntime`.
-3. Nothing else: with the **plugins folder** preference set (or auto-detected), the best file in `models/` is used.
-
-The plugin uses the first of these it finds, the same order as the tagging plugin. Each file must be named exactly as below (curl's `-o` does that; a browser download saves `model.onnx`):
-
-| File | Size | Download | Notes |
-|---|---|---|---|
-| `dfine_x_coco.onnx` | 251 MB | `https://huggingface.co/onnx-community/dfine_x_coco-ONNX/resolve/main/onnx/model.onnx` | D-FINE-X, Apache-2.0. Best. |
-| `dfine_l_coco.onnx` | 125 MB | `https://huggingface.co/onnx-community/dfine_l_coco-ONNX/resolve/main/onnx/model.onnx` | D-FINE-L, Apache-2.0 |
-| `rtdetr_v2_r50vd.onnx` | 172 MB | `https://huggingface.co/onnx-community/rtdetr_v2_r50vd-ONNX/resolve/main/onnx/model.onnx` | RT-DETRv2 R50, Apache-2.0 |
-| `dfine_m_coco.onnx` | 79 MB | `https://huggingface.co/onnx-community/dfine_m_coco-ONNX/resolve/main/onnx/model.onnx` | D-FINE-M, Apache-2.0 |
-| `dfine_s_coco.onnx` | 42 MB | `https://huggingface.co/onnx-community/dfine_s_coco-ONNX/resolve/main/onnx/model.onnx` | D-FINE-S, Apache-2.0 |
-| `object_detection_yolox_2022nov.onnx` | 36 MB | `https://github.com/opencv/opencv_zoo/raw/main/models/object_detection_yolox/object_detection_yolox_2022nov.onnx` | YOLOX, Apache-2.0, OpenCV's model zoo. Fastest, misses more cars. |
-
-The run log names the pick, plus any better file you haven't installed, e.g. `vehicle detector: object_detection_yolox_2022nov.onnx (better, not installed: dfine_x_coco.onnx, …)`. Already have the tagging plugin's models? Copy its detector file into this `models` folder rather than downloading it again.
+Guessing the subject point works on a bright livery but can pick a sponsor board or kerb instead. For motorsport, give SAM a box around the car: install a detector file ([Models](#2-models)) and, with the **plugins folder** preference set (or auto-detected), the best one in `models/` is used.
 
 On each shortlisted frame, the detector finds cars, motorcycles and trucks (race cars are often labelled as trucks). The most prominent one, scored by confidence × size, becomes SAM's prompt, so a car filling a third of the frame beats a small one in the background. A frame with no vehicle (a crowd shot, a pit board) uses the point guess as before.
 
@@ -324,7 +338,7 @@ How many frames per burst survive: *single best only*, *portrait (1 or 2)*, *dyn
 
 **Break close calls on the number read** (default *off*, unproven) settles a close call (the last keeper and the best frame that lost score within 5%) on the car number instead of a few percent of sharpness. It needs a tagging run on the same collection: the reads come from tagging's `boxes.json`, and frames changed since that run, or missing from it, keep the sharpness ranking. Both frames must read the same number, and the dropped frame must read it at least 0.10 (`NUMBER_READ_MIN_GAP`) more confidently; then it is kept in place of the keeper and gets `Why|Number clearer`. When several numbers are shared, the one with the highest combined confidence decides. A keeper inside the keeper margin stays kept as well. Check it against your picks: after a run with it on, `eval_culling.py --sharp-mode <mode>` prints the hit rate with it off and on.
 
-**Break close calls with the sharpness judge** (default *off*, unproven; *motorsport* sharpness only) settles a close call with a learned image-quality model (HyperIQA) instead of a few percent of Laplacian sharpness, which a busy background or noise can tip. It needs the [sharpness judge](#2-optional-models) model files; with the setting on and the files missing, the run stops and says so. Per burst it scores at most 3 (`JUDGE_FRAMES`) frames, those within the close-call share of the best, on 3×3 tiles of the car crop at 224 px, averaged. When the dropped frame scores at least 5% (`JUDGE_MIN_GAP`) above the last keeper, it is kept instead and gets `Why|Subject clearer`. The number read decides first when it is on and settles the call; the judge only sees close calls the reads left. Judge scores are cached with the other scores. Runtime per judged frame is not measured yet. Check it against your picks: after a run with it on, `eval_culling.py --sharp-mode motion_aware` prints the hit rate with it off and on.
+**Break close calls with the sharpness judge** (default *off*, unproven; *motorsport* sharpness only) settles a close call with a learned image-quality model (HyperIQA) instead of a few percent of Laplacian sharpness, which a busy background or noise can tip. It needs the [sharpness judge](#2-models) model files; with the setting on and the files missing, the run stops and says so. Per burst it scores at most 3 (`JUDGE_FRAMES`) frames, those within the close-call share of the best, on 3×3 tiles of the car crop at 224 px, averaged. When the dropped frame scores at least 5% (`JUDGE_MIN_GAP`) above the last keeper, it is kept instead and gets `Why|Subject clearer`. The number read decides first when it is on and settles the call; the judge only sees close calls the reads left. Judge scores are cached with the other scores. Runtime per judged frame is not measured yet. Check it against your picks: after a run with it on, `eval_culling.py --sharp-mode motion_aware` prints the hit rate with it off and on.
 
 ### Non-keepers
 
