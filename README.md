@@ -29,7 +29,7 @@ Everything runs locally: a Lua plugin inside darktable and a small Python/OpenCV
 ## Requirements
 
 - darktable 5.4 or newer, built with Lua (the official builds are). The *subject tracking (SAM)* sharpness mode needs 5.6+ with an AI mask model downloaded.
-- Python 3.10+ with `opencv-python-headless` (4.x; `requirements.txt` pins `<5`), `numpy`, `Pillow` and `rawpy`.
+- Python 3.10+ with `opencv-python-headless` (4.x; `requirements.txt` pins `<5`), `numpy`, `Pillow`, `rawpy` and `onnxruntime` (only the D-FINE / RT-DETR detectors and the sharpness judge use it).
 
 `rawpy` needs `libraw`. The Windows and macOS wheels bundle it; on Linux install `libraw-dev` first, or skip `rawpy` if you only shoot JPEG. It's imported lazily, only when a raw file shows up.
 
@@ -55,8 +55,8 @@ python3 -m venv .venv
 Only needed for the *subject tracking (SAM)* sharpness mode. Every other mode works without them.
 
 1. **SAM mask model** (needs darktable 5.6+). In darktable, open **preferences → AI**, then enable and download a SAM or SAM 2 mask model. darktable stores and manages it, and the plugin uses whichever mask model is enabled there. SegNext mask models aren't supported; if one is enabled, the run stops and says so.
-2. **Vehicle detector** (optional, for motorsport). Download [`object_detection_yolox_2022nov.onnx`](https://github.com/opencv/opencv_zoo/raw/main/models/object_detection_yolox/object_detection_yolox_2022nov.onnx) (36 MB, Apache-2.0), into the `models` folder in the repo; it's used automatically once it's there. See [Vehicle detector](#vehicle-detector) for what it does.
-3. **Sharpness judge** (optional, motorsport). Only for **Break close calls with the sharpness judge**. From [https://huggingface.co/86Cao/IQA-ONNX-Models](https://huggingface.co/86Cao/IQA-ONNX-Models) (Apache-2.0), download `hyperiqa_model.onnx` **and** `hyperiqa_model.onnx.data` (about 110 MB together) into the `models` folder. Keep both names as they are: the model looks for the `.data` file by name. Needs `onnxruntime` in the venv (`pip install onnxruntime`).
+2. **Vehicle detector** (optional, for motorsport). Put a detector in the `models` folder in the repo; the best one there is used automatically. D-FINE-X finds more cars than YOLOX; see [Vehicle detector](#vehicle-detector) for the files and the download commands.
+3. **Sharpness judge** (optional, motorsport). Only for **Break close calls with the sharpness judge**. From [https://huggingface.co/86Cao/IQA-ONNX-Models](https://huggingface.co/86Cao/IQA-ONNX-Models) (Apache-2.0), download `hyperiqa_model.onnx` **and** `hyperiqa_model.onnx.data` (about 110 MB together) into the `models` folder. Keep both names as they are: the model looks for the `.data` file by name.
 
 ### 3. darktable side
 
@@ -268,21 +268,35 @@ Needs darktable 5.6+ with a SAM or SAM 2 mask model enabled and downloaded (pref
 
 Guessing the subject point works on a bright livery but can pick a sponsor board or kerb instead. For motorsport, give SAM a box around the car:
 
-1. Download [`object_detection_yolox_2022nov.onnx`](https://github.com/opencv/opencv_zoo/raw/main/models/object_detection_yolox/object_detection_yolox_2022nov.onnx) (36 MB, Apache-2.0, from OpenCV's model zoo). A `models` folder in the repo is the easiest place: it sits next to the venv, `.gitignore` already skips `*.onnx`, and `git pull` leaves it alone. From the repo root (Windows 10+ ships `curl`):
+1. Download one or more detector files into a `models` folder in the repo. It sits next to the venv, `.gitignore` already skips `*.onnx`, and `git pull` leaves it alone; re-cloning the repo deletes it. From the repo root (Windows 10+ ships `curl`):
 
    ```
    mkdir models
+   curl -L -o models/dfine_x_coco.onnx https://huggingface.co/onnx-community/dfine_x_coco-ONNX/resolve/main/onnx/model.onnx
    curl -L -o models/object_detection_yolox_2022nov.onnx https://github.com/opencv/opencv_zoo/raw/main/models/object_detection_yolox/object_detection_yolox_2022nov.onnx
    ```
 
-   Re-cloning the repo deletes it.
-2. Nothing else: with the **plugins folder** preference set (or auto-detected), the file is used whenever `models/object_detection_yolox_2022nov.onnx` exists.
+2. Run `pip install -r` again (as in [Python side](#1-python-side)): D-FINE and RT-DETR need `onnxruntime`.
+3. Nothing else: with the **plugins folder** preference set (or auto-detected), the best file in `models/` is used.
 
-On each shortlisted frame, YOLOX finds cars, motorcycles and trucks (race cars are often labelled as trucks). The most prominent one, scored by confidence × size, becomes SAM's prompt, so a car filling a third of the frame beats a small one in the background. A frame with no vehicle (a crowd shot, a pit board) uses the point guess as before.
+The plugin uses the first of these it finds, the same order as the tagging plugin. Each file must be named exactly as below (curl's `-o` does that; a browser download saves `model.onnx`):
 
-It runs on the CPU and adds about a tenth of a second per frame. If the file is missing or isn't a model, the run stops and says so. Remove the file from `models/` to switch it off.
+| File | Size | Download | Notes |
+|---|---|---|---|
+| `dfine_x_coco.onnx` | 251 MB | `https://huggingface.co/onnx-community/dfine_x_coco-ONNX/resolve/main/onnx/model.onnx` | D-FINE-X, Apache-2.0. Best. |
+| `dfine_l_coco.onnx` | 125 MB | `https://huggingface.co/onnx-community/dfine_l_coco-ONNX/resolve/main/onnx/model.onnx` | D-FINE-L, Apache-2.0 |
+| `rtdetr_v2_r50vd.onnx` | 172 MB | `https://huggingface.co/onnx-community/rtdetr_v2_r50vd-ONNX/resolve/main/onnx/model.onnx` | RT-DETRv2 R50, Apache-2.0 |
+| `dfine_m_coco.onnx` | 79 MB | `https://huggingface.co/onnx-community/dfine_m_coco-ONNX/resolve/main/onnx/model.onnx` | D-FINE-M, Apache-2.0 |
+| `dfine_s_coco.onnx` | 42 MB | `https://huggingface.co/onnx-community/dfine_s_coco-ONNX/resolve/main/onnx/model.onnx` | D-FINE-S, Apache-2.0 |
+| `object_detection_yolox_2022nov.onnx` | 36 MB | `https://github.com/opencv/opencv_zoo/raw/main/models/object_detection_yolox/object_detection_yolox_2022nov.onnx` | YOLOX, Apache-2.0, OpenCV's model zoo. Fastest, misses more cars. |
 
-Vehicle boxes are cached in `assisted_plugins/detections.sqlite` in darktable's config directory, shared with the tagging plugin so a frame both plugins see is detected once. The key is the file (path, modified time, size), the detector model file and a fingerprint of the shared detector code, so a new detector or a `vehicle_detect.py` change re-detects everything once; rows unused for 90 days are dropped. Delete the file to start over. The tagging plugin's `compare_detectors.py` measures a second detector against YOLOX on your own photos; switching this plugin to a `dfine_*.onnx` or `rtdetr*.onnx` file (`DETECTOR_FILE` in `lua/assisted_culling.lua`) needs `onnxruntime` in this venv.
+The run log names the pick, plus any better file you haven't installed, e.g. `vehicle detector: object_detection_yolox_2022nov.onnx (better, not installed: dfine_x_coco.onnx, …)`. Already have the tagging plugin's models? Copy its detector file into this `models` folder rather than downloading it again.
+
+On each shortlisted frame, the detector finds cars, motorcycles and trucks (race cars are often labelled as trucks). The most prominent one, scored by confidence × size, becomes SAM's prompt, so a car filling a third of the frame beats a small one in the background. A frame with no vehicle (a crowd shot, a pit board) uses the point guess as before.
+
+It runs on the CPU. YOLOX adds about a tenth of a second per frame; D-FINE-X is slower, but a frame tagging already detected with the same file comes from the shared cache. If the picked file isn't a model, the run stops and says so. Remove every detector file from `models/` to switch it off.
+
+Vehicle boxes are cached in `assisted_plugins/detections.sqlite` in darktable's config directory, shared with the tagging plugin so a frame both plugins see with the same detector is detected once. The key is the file (path, modified time, size), the detector model (its name, size and content, not its folder) and a fingerprint of the shared detector code, so a new detector or a `vehicle_detect.py` change re-detects everything once; rows unused for 90 days are dropped. Delete the file to start over. The tagging plugin's `compare_detectors.py` measures two detectors against each other on your own photos.
 
 #### Car boxes from tagging
 
@@ -415,7 +429,7 @@ A photo with no group is its own group, and a selection with no groups at all st
 
 `darktable.ai` is a generic ONNX runtime for Lua (`load_model` / `ctx:run`, plus a model registry keyed by task: `denoise`, `upscale`, `mask`). The `mask` model is SAM, which needs a prompt; darktable's darkroom object-mask tool supplies one with a click, and there's no "find the subject" task. And `darktable.ai` only runs inside darktable's Lua process, while scoring happens in the separate Python process. So this mode runs in three stages instead of two:
 
-1. **Shortlist and prompt** (Python). `score_images.py --emit-saliency-points --keep-mode … [--detector yolox.onnx]` shortlists each burst and writes one prompt per shortlisted frame as `id,x0,y0,x1,y1,cached` in frame fractions. A vehicle box fills all four; a salient point leaves `x1,y1` empty. `cached` is `1` when that frame's masked score is already in the score cache.
+1. **Shortlist and prompt** (Python). `score_images.py --emit-saliency-points --keep-mode … [--detector <detector>.onnx]` shortlists each burst and writes one prompt per shortlisted frame as `id,x0,y0,x1,y1,cached` in frame fractions. A vehicle box fills all four; a salient point leaves `x1,y1` empty. `cached` is `1` when that frame's masked score is already in the score cache.
 2. **Mask** (Lua). The plugin runs SAM on each prompt that isn't cached and writes a mask PNG. A box goes to SAM as two corner points labelled 2 and 3, the encoding darktable's `dt_seg_point_t` documents.
 3. **Score** (Python). The scorer reads the mask path, shortlist flag and darktable edit time from the 4th, 5th and 6th manifest columns. Every mode gets shutter and aperture in the 7th and 8th.
 

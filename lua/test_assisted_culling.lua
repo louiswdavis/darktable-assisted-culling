@@ -351,6 +351,13 @@ check("preset schema: a label for a choice falls back",
 check("preset schema: car boxes from tagging default on", cd.car_boxes_only, true)
 check("car_boxes_path: tagging's last-run boxes.json, backslashes folded",
     C.car_boxes_path("C:\\Users\\me\\dt\\", "rallye"), "C:/Users/me/dt/assisted_tagging/last-run/rallye.boxes.json")
+local only = function(...) local set = {} for _, f in ipairs({ ... }) do set[f] = true end return function(f) return set[f] end end
+check("pick_detector: YOLOX alone is picked, better files listed",
+    select(2, C.pick_detector(only("object_detection_yolox_2022nov.onnx"))),
+    "vehicle detector: object_detection_yolox_2022nov.onnx (better, not installed: dfine_x_coco.onnx, dfine_l_coco.onnx, rtdetr_v2_r50vd.onnx, dfine_m_coco.onnx, dfine_s_coco.onnx)")
+check("pick_detector: D-FINE beats YOLOX", (C.pick_detector(only("dfine_s_coco.onnx", "object_detection_yolox_2022nov.onnx"))), "dfine_s_coco.onnx")
+check("pick_detector: the best has no 'not installed' note", select(2, C.pick_detector(only("dfine_x_coco.onnx"))), "vehicle detector: dfine_x_coco.onnx")
+check("pick_detector: none installed is nil", (C.pick_detector(only())), nil)
 
 print("")
 if failures == 0 then

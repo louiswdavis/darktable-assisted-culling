@@ -2,3 +2,4 @@ opencv-python-headless<5
 numpy
 Pillow
 rawpy
+onnxruntime

@@ -270,7 +270,6 @@ function M.genre_matches(genre, s)
     return true
 end
 
--- Every panel setting a preset stores, in panel order.
 -- Tagging's boxes.json for its selected collection (its last run there): the car boxes its
 -- SigLIP 2 box check kept, which score_images.py --car-boxes scores on. The path is built
 -- the way tagging builds it; a missing file means raw detector boxes.
@@ -278,6 +277,27 @@ function M.car_boxes_path(config_dir, collection)
     return ((config_dir .. "/assisted_tagging/last-run/" .. (collection or "") .. ".boxes.json"):gsub("\\", "/"):gsub("/+", "/"))
 end
 
+-- Vehicle detector files, best first, in tagging's order (its M.MODEL_LISTS "vehicles").
+-- The DETR family (D-FINE, RT-DETR) runs on onnxruntime; YOLOX on OpenCV.
+M.DETECTOR_FILES = { "dfine_x_coco.onnx", "dfine_l_coco.onnx", "rtdetr_v2_r50vd.onnx",
+    "dfine_m_coco.onnx", "dfine_s_coco.onnx", "object_detection_yolox_2022nov.onnx" }
+
+-- The first of M.DETECTOR_FILES for which `exists(file)` holds (nil when none), and the
+-- run-log line naming it plus the better files not installed (nil when none is installed).
+function M.pick_detector(exists)
+    local missing = {}
+    for _, file in ipairs(M.DETECTOR_FILES) do
+        if exists(file) then
+            local line = "vehicle detector: " .. file
+            if #missing > 0 then line = line .. " (better, not installed: " .. table.concat(missing, ", ") .. ")" end
+            return file, line
+        end
+        missing[#missing + 1] = file
+    end
+    return nil, nil
+end
+
+-- Every panel setting a preset stores, in panel order.
 M.PRESET_SCHEMA = {
     { key = "genre", kind = "choice", choices = genre_opts, default = "landscape" },
     { key = "rank_mode", kind = "choice", choices = rank_opts, default = "universal" },
@@ -500,7 +520,6 @@ local function mask_path_for(id)
     return MASK_BASE .. "mask_" .. tostring(id) .. ".png"
 end
 
-local DETECTOR_FILE = "object_detection_yolox_2022nov.onnx"
 -- HyperIQA from huggingface.co/86Cao/IQA-ONNX-Models; its weights sit beside it in
 -- hyperiqa_model.onnx.data, a name the model file holds, so neither can be renamed
 local JUDGE_FILE = "hyperiqa_model.onnx"
@@ -557,6 +576,15 @@ local function plugin_root(script)
     if folder ~= "" then return folder end
     local script_dir = (script and script:match("^(.*)[/\\]")) or THIS_DIR
     return script_dir:match("^(.*)[/\\]python$") or script_dir
+end
+
+-- The best installed vehicle detector in models/ (M.pick_detector), logged; "" when none is.
+local function detector_path(script)
+    local dir = plugin_root(script) .. "/models/"
+    local file, line = M.pick_detector(function(f) return file_exists(dir .. f) end)
+    if not file then return "" end
+    log(line)
+    return dir .. file
 end
 
 local function python_bin(script)
@@ -1036,8 +1064,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
 
             -- Stage A: the scorer shortlists each burst's best frames by the fast heuristic
             -- and picks one prompt per shortlisted frame: a vehicle box or a salient point.
-            local detector = plugin_root(sc_script) .. "/models/" .. DETECTOR_FILE
-            if not file_exists(detector) then detector = "" end
+            local detector = detector_path(sc_script)
             local points_argv = { sc_script, MANIFEST_PATH, POINTS_PATH, "--emit-saliency-points" }
             if detector ~= "" then
                 local det = detector_argv(detector, settings)
@@ -1174,8 +1201,8 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                 dt.preferences.read("assisted_tagging", "last_collection", "string"))) }, 1, 2, #argv + 1, argv)
         end
         if sharp_mode == "motion_aware" then
-            local detector = plugin_root(sc_script) .. "/models/" .. DETECTOR_FILE
-            if file_exists(detector) then
+            local detector = detector_path(sc_script)
+            if detector ~= "" then
                 local det = detector_argv(detector, settings)
                 table.move(det, 1, #det, #argv + 1, argv)
             end
