@@ -70,6 +70,8 @@ curl -L --create-dirs -o models/hyperiqa_model.onnx https://huggingface.co/86Cao
 curl -L --create-dirs -o models/hyperiqa_model.onnx.data https://huggingface.co/86Cao/IQA-ONNX-Models/resolve/main/hyperiqa_model.onnx.data
 ```
 
+Not in the block on purpose: the other five detectors (`dfine_l`, `rtdetr_v2`, `dfine_m`, `dfine_s`, YOLOX). They're smaller, faster or older steps below D-FINE-X, and the plugin falls back to them only when D-FINE-X isn't installed. Their downloads are in the table below.
+
 Already have the tagging plugin's models? Copy its detector file into this `models` folder instead: the same file shares tagging's detection cache, so frames tagging already detected aren't detected again.
 
 **Subject mask (SAM)** (darktable 5.6+). In darktable, open **preferences → AI**, then enable and download a SAM or SAM 2 mask model. darktable stores and manages it, and the plugin uses whichever mask model is enabled there. SegNext mask models aren't supported; if one is enabled, the run stops and says so.
