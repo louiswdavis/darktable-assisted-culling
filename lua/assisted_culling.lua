@@ -456,6 +456,10 @@ C.sweep_temp(TMP_DIR, "dt_assisted_culling_", 86400)
 -- config dir, which outlives tmp_dir; the run before it is kept as .prev.log.
 local LOG_PATH = dt.configuration.config_dir .. "/assisted_culling.log"
 local PREV_LOG_PATH = dt.configuration.config_dir .. "/assisted_culling.prev.log"
+-- Lua errors (panel build, callbacks, events) go to their own log, which runs never rotate.
+local LUA_LOG_PATH = dt.configuration.config_dir .. "/assisted_culling.lua.log"
+local guard = C.error_guard(dt, LUA_LOG_PATH, "Assisted Culling")
+local new_widget = C.guarded_widget_maker(dt, guard)
 
 -- A run's temp files. Each run gets its own names, so a cancelled scorer that
 -- outlives the run's wait keeps its own cancel flag and can't write into the next run.
@@ -1778,7 +1782,7 @@ local function install_panel()
     end
 
     local function choice_combo(key, label, tooltip, labels)
-        local c = dt.new_widget("combobox") {
+        local c = new_widget("combobox") {
             label = label,
             tooltip = tooltip,
             changed_callback = on_choice(key),
@@ -1821,25 +1825,25 @@ local function install_panel()
         _("Scales the sharpness every star needs, in universal and relative ranking, and how fast graded non-keepers lose stars. Stricter: fewer stars for the same frame. More generous: more stars. The scores themselves don't change."),
         { _("much more generous (×0.5)"), _("more generous (×0.75)"), _("standard (×1)"), _("stricter (×1.25)"), _("much stricter (×1.5)"), _("strictest (×2)") })
 
-    action_button = dt.new_widget("button") {
+    action_button = new_widget("button") {
         label = _("Cull selection"),
         tooltip = _("Score the selected images in bursts and rate/tag them. Click again to cancel."),
     }
 
-    action_button.clicked_callback = function()
+    action_button.clicked_callback = C.guarded_callback(guard, "button action", function()
         changed()
         start_culling(true)
-    end
+    end)
 
     local group_support_combo = choice_combo("group_support", _("grouping support"),
         _("What groups photos before keepers are picked. Native groups: darktable's image groups. Grouping tags: the children of the tag node below. None: every photo is judged alone.\nDefault: native groups. Pick grouping tags after an Assisted Grouping run you have not applied as darktable groups."),
         { _("Native groups"), _("Grouping tags"), _("None") })
-    local group_node_entry = dt.new_widget("entry") {
+    local group_node_entry = new_widget("entry") {
         placeholder = _("Grouping tag node (blank = latest run per photo)"),
         tooltip = _("Grouping tags only: the tag node whose children are the groups, e.g. Assisted Grouping|2026-01-01 12:00:00|Group. Blank uses each photo's own latest Assisted Grouping run, so photos regrouped by a later run and photos left on an earlier run both keep their groups.\nDefault: blank. Set it to pin one run."),
         text = "",
     }
-    local car_node_entry = dt.new_widget("entry") {
+    local car_node_entry = new_widget("entry") {
         placeholder = _("Car tag node (blank = off)"),
         tooltip = _("Keepers per car: the tag node whose children are car numbers, e.g. Rally|2026 from Assisted Tagging. Each group is split by car before keepers are picked; frames with no car tag share one pool per group.\nDefault: blank (off). Set it after Assisted Tagging has run on these photos."),
         text = "",
@@ -1848,7 +1852,7 @@ local function install_panel()
     -- Check buttons by schema key, in panel order.
     local checks, check_order = {}, {}
     local function check(key, label, tooltip)
-        local c = dt.new_widget("check_button") {
+        local c = new_widget("check_button") {
             label = label,
             tooltip = tooltip,
             value = shown[key],
@@ -1888,7 +1892,7 @@ local function install_panel()
     for _i, k in ipairs(M.TAG_KINDS) do kind_labels[k.kind] = k.label end
     for _i, t in ipairs(M.tag_rows_in_order()) do
         if t.kind ~= last_kind then
-            tag_checks[#tag_checks + 1] = dt.new_widget("section_label") { label = _(kind_labels[t.kind]) }
+            tag_checks[#tag_checks + 1] = new_widget("section_label") { label = _(kind_labels[t.kind]) }
             last_kind = t.kind
         end
         tag_checks[#tag_checks + 1] = check("tag_" .. t.key, t.label,
@@ -1913,12 +1917,12 @@ local function install_panel()
         car_node_entry.text = s.car_tag_node
     end
 
-    clear_button = dt.new_widget("button") {
+    clear_button = new_widget("button") {
         label = _("Clear culling marks"),
         tooltip = _("Remove the Assisted Culling tags from the selected images. Star ratings and colour labels are not changed."),
     }
 
-    clear_button.clicked_callback = function()
+    clear_button.clicked_callback = C.guarded_callback(guard, "button clear", function()
         local selected = copy_images(dt.gui.action_images)
         if queue_if_busy(_("Clear culling marks"), #selected > 0, function()
             is_clearing = true
@@ -1935,14 +1939,14 @@ local function install_panel()
         local ok_c, err_c = pcall(M.clear_marks, dt.gui.action_images)
         is_clearing = false
         if not ok_c then notify_error("Assisted Culling: clearing marks failed: " .. tostring(err_c)) end
-    end
+    end)
 
-    local why_button = dt.new_widget("button") {
+    local why_button = new_widget("button") {
         label = _("Why these ratings?"),
         tooltip = _("Explain the selected images from the last run's report: stars, rank in the burst, flags. Changes nothing."),
     }
 
-    why_button.clicked_callback = function()
+    why_button.clicked_callback = C.guarded_callback(guard, "button why", function()
         local text = read_file(REPORT_PATH)
         if not text then
             dt.print(_("Assisted Culling: no report yet. Run culling first."))
@@ -1966,14 +1970,14 @@ local function install_panel()
             dt.print(string.format(_("Assisted Culling: %d explained, %d not in the last run. Full text in the log."),
                 #lines, #missing))
         end
-    end
+    end)
 
-    local report_button = dt.new_widget("button") {
+    local report_button = new_widget("button") {
         label = _("Open last report"),
         tooltip = _("Open last-run.csv (every frame's rank, score, stars and why) in your spreadsheet app. The newest 20 runs are kept in assisted_culling/reports in darktable's config folder."),
     }
 
-    report_button.clicked_callback = function()
+    report_button.clicked_callback = C.guarded_callback(guard, "button report", function()
         if not file_exists(REPORT_PATH) then
             dt.print(_("Assisted Culling: no report yet. Run culling first."))
             return
@@ -1985,7 +1989,7 @@ local function install_panel()
         else
             os.execute("xdg-open " .. shell_quote(REPORT_PATH) .. " >/dev/null 2>&1 &")
         end
-    end
+    end)
 
     local store = preset_file_store(dt.configuration.config_dir .. "/assisted_culling/presets")
     local raw_read = store.read
@@ -2029,9 +2033,9 @@ local function install_panel()
           non_keeper_combo, star_scale_combo },
         {
             group_support_combo,
-            dt.new_widget("label") { label = _("grouping tag node"), halign = "start" },
+            new_widget("label") { label = _("grouping tag node"), halign = "start" },
             group_node_entry,
-            dt.new_widget("label") { label = _("car tag node"), halign = "start" },
+            new_widget("label") { label = _("car tag node"), halign = "start" },
             car_node_entry,
         },
         option_checks,
@@ -2044,7 +2048,7 @@ local function install_panel()
         pages[i] = { number = page.number, title = _(page.title), widgets = page_widgets[i] }
     end
 
-    local panel_box = dt.new_widget("box") {
+    local panel_box = new_widget("box") {
         orientation = "vertical",
         -- shows the template defaults; nothing is saved
         reset_callback = function()
@@ -2077,7 +2081,7 @@ local function restart()
     pcall(dt.destroy_event, "assisted_culling_run", "shortcut")
     dt.register_event("assisted_culling_run", "shortcut",
         function(event, shortcut)
-            start_culling(false)
+            guard("shortcut cull", start_culling, false)
         end, _("execute Assisted Culling on selected images")
     )
 end
@@ -2095,14 +2099,18 @@ M.metadata = {
 
 if dt.gui then
     if dt.gui.current_view().id == "lighttable" then
-        install_panel()
-        restart()
+        guard("panel install", function()
+            install_panel()
+            restart()
+        end)
     else
         if not M.event_registered then
             dt.register_event("assisted_culling", "view-changed", function(event, old_view, new_view)
                 if new_view.name == "lighttable" or new_view.id == "lighttable" then
-                    install_panel()
-                    restart()
+                    guard("panel install", function()
+                        install_panel()
+                        restart()
+                    end)
                 end
             end)
             M.event_registered = true
