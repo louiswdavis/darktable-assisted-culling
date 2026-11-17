@@ -238,6 +238,57 @@ function C.write_file_atomic(path, text)
     return true
 end
 
+-- Lua error log ------------------------------------------------------------------
+-- One file per plugin, <config dir>/<plugin>.lua.log, separate from the run log (which
+-- each run rotates). Holds only Lua errors: timestamp, label and traceback. Past
+-- `max_bytes` (default 256 KB) the older half is dropped, cut at a line start.
+
+-- Appends one entry to `log_path`, trimming first. `now` is os.date's text (tests pin it).
+function C.append_error_log(log_path, label, message, max_bytes, now)
+    max_bytes = max_bytes or 262144
+    local old = C.read_file(log_path)
+    if old and #old > max_bytes then
+        local keep = old:sub(#old - max_bytes // 2 + 1)
+        keep = keep:match("\n(.*)$") or keep
+        C.write_file_atomic(log_path, keep)
+    end
+    local f = io.open(log_path, "a")
+    if not f then return end
+    f:write(string.format("[%s] %s\n%s\n\n", now or os.date("%Y-%m-%d %H:%M:%S"), label, message))
+    f:close()
+end
+
+-- Returns guard(label, fn, ...): runs fn(...) under xpcall and returns its results. On
+-- an error it logs the traceback to `log_path`, prints it to the console, shows the
+-- toast "<title>: Lua error, see <log file name>" and returns nil. `dt` may be nil (tests).
+function C.error_guard(dt, log_path, title)
+    local toast = title .. ": Lua error, see " .. (log_path:match("[^/\\]+$") or log_path)
+    return function(label, fn, ...)
+        local res = table.pack(xpcall(fn, debug.traceback, ...))
+        if res[1] then return table.unpack(res, 2, res.n) end
+        C.append_error_log(log_path, label, tostring(res[2]))
+        print(title .. " " .. label .. ": " .. tostring(res[2]))
+        if dt and dt.print then pcall(dt.print, toast) end
+        return nil
+    end
+end
+
+-- Returns new_widget(kind)(props): dt.new_widget(kind)(props) with every *_callback
+-- function in `props` run through `guard` (from error_guard), labelled by kind and label.
+function C.guarded_widget_maker(dt, guard)
+    return function(kind)
+        return function(props)
+            for key, fn in pairs(props) do
+                if type(key) == "string" and key:match("_callback$") and type(fn) == "function" then
+                    local label = kind .. " " .. tostring(props.label or key)
+                    props[key] = function(...) return guard(label, fn, ...) end
+                end
+            end
+            return dt.new_widget(kind)(props)
+        end
+    end
+end
+
 -- Names in `dir` (files and folders, no dots), or an empty list when it can't be listed.
 function C.list_dir(dir, windows)
     if windows == nil then windows = C.IS_WINDOWS end
