@@ -60,7 +60,7 @@ Every model is optional: culling scores without any. There are three jobs, and t
 | Vehicle detector | motorsport: SAM's prompt box, *motion-aware* sharpness, burst direction | `models/` in this repo |
 | Sharpness judge (HyperIQA) | **Break close calls with the sharpness judge** only | `models/` in this repo |
 
-`models/` sits next to the venv; `.gitignore` skips `*.onnx` and `*.onnx.data`, so `git pull` leaves it alone. Re-cloning the repo deletes it.
+`models/` sits next to the venv; `.gitignore` skips the whole folder, so `git pull` leaves it alone. Re-cloning the repo deletes it.
 
 **Recommended** (about 360 MB). Run from the repo root, the folder holding `README.md`, not `python/` (Windows 10+ ships `curl`; `--create-dirs` makes `models/`). Then `pip install -r` again, as in [Python side](#1-python-side), for `onnxruntime`:
 
