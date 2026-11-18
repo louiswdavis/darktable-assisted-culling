@@ -1,12 +1,92 @@
-17:02:11 lua: run started: darktable 5.6.2, 1 images (0 locked left out)
-17:02:11 lua: settings: rank universal, sharpness motion_aware, exposure none, keepers dynamic_burst, non-keepers leave
-17:02:11 lua: Assisted Culling: started on 1 image…
-17:02:11 lua: group support native: 0 of 1 photos in groups of 2+
-17:02:12 lua: fast JPEG true, apply while scoring true, SAM model none
-17:02:12 lua: Assisted Culling: scoring 1 images in 1 groups (dynamic burst keepers, universal ranking, native grouping)
-17:02:12 lua: vehicle detector: dfine_x_coco.onnx
-17:02:12 lua: scoring: "C:\Users\Louis\Pictures\DarkTable\Settings\Plugins/darktable-assisted-culling/.venv/Scripts/python.exe" -u "C:\Users\Louis\Pictures\DarkTable\Settings\Plugins/darktable-assisted-culling/python/score_images.py" "C:\Users\Louis\AppData\Local\Temp/dt_assisted_culling_1795021331_3_manifest.csv" "C:\Users\Louis\AppData\Local\Temp/dt_assisted_culling_1795021331_3_results.csv" "--progress" "C:\Users\Louis\AppData\Local\Temp/dt_assisted_culling_1795021331_3_progress.txt" "--rank-mode" "universal" "--sharp-mode" "motion_aware" "--exp-mode" "none" "--keep-mode" "dynamic_burst" "--nk-mode" "leave" "--tag-only-flags" "overexposed,underexposed,eyes_closed" "--star-scale" "1" "--keep-margin" "0.95" "--blank-share" "0.95" "--fast-jpeg" "--spread-keepers" "--keep-angles" "--motion-look" "--star-slope" "--detector" "C:\Users\Louis\Pictures\DarkTable\Settings\Plugins/darktable-assisted-culling/models/dfine_x_coco.onnx" "--detections" "C:/Users/Louis/AppData/Local/darktable/assisted_plugins/detections.sqlite" "--car-boxes" "C:/Users/Louis/AppData/Local/darktable/assisted_tagging/last-run/Rallye.boxes.json" "--cache" "C:\Users\Louis\AppData\Local\darktable/assisted_culling/scores.sqlite" "--report" "C:\Users\Louis\AppData\Local\darktable/assisted_culling/last-run.csv" "--report-archive-dir" "C:\Users\Louis\AppData\Local\darktable/assisted_culling/reports"
-17:02:18 py: scoring: 1 frames in 1 bursts, 0 from cache or stage A, 1 to decode, sharpness motion_aware
-17:02:20 py: cancelled
-17:02:21 lua: Assisted Culling: cancelled. No images were changed.
-17:02:21 lua: run finished
+17:02:23 lua: run started: darktable 5.6.2, 110 images (0 locked left out)
+17:02:23 lua: settings: rank universal, sharpness motion_aware, exposure none, keepers dynamic_burst, non-keepers leave
+17:02:23 lua: Assisted Culling: started on 110 images…
+17:02:23 lua: group support native: 55 of 55 photos in groups of 2+
+17:02:23 lua: fast JPEG true, apply while scoring true, SAM model none
+17:02:23 lua: Assisted Culling: scoring 55 images in 6 groups (dynamic burst keepers, universal ranking, native grouping)
+17:02:23 lua: Assisted Culling: 55 image(s) share a shot with another (a duplicate, or the RAW of a RAW+JPEG pair); each shot is scored once and its result copied to all of it.
+17:02:23 lua: vehicle detector: dfine_x_coco.onnx
+17:02:23 lua: scoring: "C:\Users\Louis\Pictures\DarkTable\Settings\Plugins/darktable-assisted-culling/.venv/Scripts/python.exe" -u "C:\Users\Louis\Pictures\DarkTable\Settings\Plugins/darktable-assisted-culling/python/score_images.py" "C:\Users\Louis\AppData\Local\Temp/dt_assisted_culling_1795021343_4_manifest.csv" "C:\Users\Louis\AppData\Local\Temp/dt_assisted_culling_1795021343_4_results.csv" "--progress" "C:\Users\Louis\AppData\Local\Temp/dt_assisted_culling_1795021343_4_progress.txt" "--rank-mode" "universal" "--sharp-mode" "motion_aware" "--exp-mode" "none" "--keep-mode" "dynamic_burst" "--nk-mode" "leave" "--tag-only-flags" "overexposed,underexposed,eyes_closed" "--star-scale" "1" "--keep-margin" "0.95" "--blank-share" "0.95" "--fast-jpeg" "--spread-keepers" "--keep-angles" "--motion-look" "--star-slope" "--detector" "C:\Users\Louis\Pictures\DarkTable\Settings\Plugins/darktable-assisted-culling/models/dfine_x_coco.onnx" "--detections" "C:/Users/Louis/AppData/Local/darktable/assisted_plugins/detections.sqlite" "--car-boxes" "C:/Users/Louis/AppData/Local/darktable/assisted_tagging/last-run/Rallye.boxes.json" "--cache" "C:\Users\Louis\AppData\Local\darktable/assisted_culling/scores.sqlite" "--report" "C:\Users\Louis\AppData\Local\darktable/assisted_culling/last-run.csv" "--report-archive-dir" "C:\Users\Louis\AppData\Local\darktable/assisted_culling/reports"
+17:02:26 py: scoring: 55 frames in 6 bursts, 0 from cache or stage A, 55 to decode, sharpness motion_aware
+17:02:36 py: motion 203967 (DSC09172.JPG): ordinary, straightness 0.00, subject 280, crop 1600x889, car box 0.35,0.38-0.62,0.60 from tagging (19 other boxes dropped)
+17:02:36 py: motion 203969 (DSC09173.JPG): ordinary, straightness 0.00, subject 289, crop 1600x981, car box 0.39,0.37-0.64,0.60 from tagging (27 other boxes dropped)
+17:02:36 py: motion 203971 (DSC09174.JPG): ordinary, straightness 0.00, subject 314, crop 1600x1073, car box 0.41,0.35-0.65,0.58 from tagging (7 other boxes dropped)
+17:02:37 py: motion 203973 (DSC09175.JPG): ordinary, straightness 0.00, subject 311, crop 1576x1162, car box 0.42,0.33-0.64,0.57 from tagging (5 other boxes dropped)
+17:02:37 py: motion 203991 (DSC09184.JPG): motion_blur, straightness 0.76, subject 222, crop 1600x745, car box 0.30,0.42-0.73,0.72 from tagging (2 other boxes dropped)
+17:02:37 py: motion 203981 (DSC09179.JPG): ordinary, straightness 0.00, subject 295, crop 1600x1160, car box 0.36,0.36-0.60,0.62 from tagging (11 other boxes dropped)
+17:02:37 py: motion 203983 (DSC09180.JPG): motion_blur, straightness 0.60, subject 219, crop 1600x1036, car box 0.34,0.38-0.61,0.64 from tagging (6 other boxes dropped)
+17:02:37 py: motion 203987 (DSC09182.JPG): motion_blur, straightness 0.70, subject 224, crop 1600x861, car box 0.32,0.38-0.67,0.66 from tagging (3 other boxes dropped)
+17:02:37 py: motion 203977 (DSC09177.JPG): ordinary, straightness 0.00, subject 296, crop 1331x1228, car box 0.43,0.33-0.62,0.58 from tagging (7 other boxes dropped)
+17:02:37 py: motion 203985 (DSC09181.JPG): motion_blur, straightness 0.65, subject 213, crop 1600x934, car box 0.33,0.38-0.64,0.65 from tagging (7 other boxes dropped)
+17:02:37 py: motion 203989 (DSC09183.JPG): motion_blur, straightness 0.74, subject 252, crop 1600x789, car box 0.31,0.39-0.70,0.68 from tagging (2 other boxes dropped)
+17:02:37 py: motion 203975 (DSC09176.JPG): ordinary, straightness 0.00, subject 261, crop 1433x1242, car box 0.44,0.32-0.64,0.57 from tagging (6 other boxes dropped)
+17:02:37 py: motion 203993 (DSC09185.JPG): motion_blur, straightness 0.79, subject 242, crop 1600x705, car box 0.28,0.45-0.74,0.75 from tagging (1 other boxes dropped)
+17:02:37 py: motion 203979 (DSC09178.JPG): ordinary, straightness 0.00, subject 380, crop 1478x1237, car box 0.40,0.34-0.61,0.60 from tagging (4 other boxes dropped)
+17:02:37 py: motion 203995 (DSC09186.JPG): motion_blur, straightness 0.78, subject 225, crop 1600x680, car box 0.27,0.48-0.75,0.78 from tagging (3 other boxes dropped)
+17:02:38 py: motion 203997 (DSC09187.JPG): ordinary, straightness 0.00, subject 411, crop 1278x779, car box 0.43,0.51-0.61,0.67 from tagging (22 other boxes dropped)
+17:02:38 py: motion 203999 (DSC09188.JPG): ordinary, straightness 0.00, subject 389, crop 1310x822, car box 0.41,0.51-0.59,0.68 from tagging (23 other boxes dropped)
+17:02:38 py: motion 204001 (DSC09189.JPG): ordinary, straightness 0.00, subject 384, crop 1329x804, car box 0.40,0.52-0.58,0.69 from tagging (26 other boxes dropped)
+17:02:38 py: motion 204003 (DSC09190.JPG): ordinary, straightness 0.00, subject 420, crop 1356x839, car box 0.38,0.52-0.57,0.70 from tagging (28 other boxes dropped)
+17:02:38 py: motion 204005 (DSC09191.JPG): motion_blur, straightness 0.65, subject 209, crop 1600x883, car box 0.28,0.37-0.71,0.72 from tagging (44 other boxes dropped)
+17:02:38 py: motion 204009 (DSC09193.JPG): motion_blur, straightness 0.73, subject 232, crop 1600x919, car box 0.20,0.29-0.80,0.81 from tagging (9 other boxes dropped)
+17:02:38 py: motion 204007 (DSC09192.JPG): motion_blur, straightness 0.69, subject 238, crop 1600x898, car box 0.24,0.33-0.74,0.75 from tagging (27 other boxes dropped)
+17:02:38 py: motion 204013 (DSC09195.JPG): motion_blur, straightness 0.75, subject 193, crop 1600x945, car box 0.17,0.26-1.00,0.99 from tagging (4 other boxes dropped)
+17:02:38 py: motion 204011 (DSC09194.JPG): motion_blur, straightness 0.74, subject 225, crop 1600x933, car box 0.17,0.27-0.90,0.90 from tagging (8 other boxes dropped)
+17:02:38 py: motion 204017 (DSC09197.JPG): motion_blur, straightness 0.83, subject 136, crop 1208x1600, car box 0.54,0.00-1.00,0.99 from tagging (9 other boxes dropped)
+17:02:38 py: motion 199967 (DSC00886.JPG): ordinary, straightness 0.00, subject 248, crop 1600x899, car box 0.50,0.51-0.79,0.75 from tagging (10 other boxes dropped)
+17:02:38 py: motion 199971 (DSC00888.JPG): motion_blur, straightness 0.67, subject 244, crop 1600x727, car box 0.31,0.47-0.73,0.76 from tagging (23 other boxes dropped)
+17:02:38 py: motion 204015 (DSC09196.JPG): motion_blur, straightness 0.82, subject 152, crop 1600x979, car box 0.26,0.32-1.00,0.99 from tagging (11 other boxes dropped)
+17:02:38 py: motion 199969 (DSC00887.JPG): ordinary, straightness 0.00, subject 279, crop 1600x924, car box 0.47,0.52-0.75,0.76 from tagging (7 other boxes dropped)
+17:02:39 py: motion 199973 (DSC00889.JPG): motion_blur, straightness 0.68, subject 250, crop 1600x605, car box 0.35,0.50-0.81,0.77 from tagging (48 other boxes dropped)
+17:02:39 py: motion 199975 (DSC00890.JPG): motion_blur, straightness 0.68, subject 237, crop 1600x582, car box 0.28,0.51-0.81,0.80 from tagging (39 other boxes dropped)
+17:02:39 py: motion 199979 (DSC00892.JPG): motion_blur, straightness 0.72, subject 262, crop 1600x665, car box 0.28,0.53-0.74,0.82 from tagging (51 other boxes dropped)
+17:02:39 py: motion 199977 (DSC00891.JPG): motion_blur, straightness 0.68, subject 241, crop 1600x635, car box 0.26,0.51-0.78,0.82 from tagging (42 other boxes dropped)
+17:02:39 py: motion 199981 (DSC00893.JPG): motion_blur, straightness 0.75, subject 226, crop 1600x694, car box 0.29,0.53-0.77,0.85 from tagging (26 other boxes dropped)
+17:02:40 py: motion 199983 (DSC00894.JPG): motion_blur, straightness 0.76, subject 227, crop 1600x605, car box 0.37,0.52-0.90,0.82 from tagging (23 other boxes dropped)
+17:02:40 py: motion 199985 (DSC00895.JPG): motion_blur, straightness 0.73, subject 222, crop 1600x597, car box 0.45,0.49-1.00,0.77 from tagging (32 other boxes dropped)
+17:02:40 py: motion 199993 (DSC00899.JPG): motion_blur, straightness 0.68, subject 206, crop 1600x781, car box 0.51,0.42-1.00,0.75 from tagging (17 other boxes dropped)
+17:02:40 py: motion 199989 (DSC00897.JPG): motion_blur, straightness 0.69, subject 254, crop 1600x878, car box 0.53,0.43-0.92,0.75 from tagging (16 other boxes dropped)
+17:02:40 py: motion 199991 (DSC00898.JPG): motion_blur, straightness 0.70, subject 243, crop 1600x880, car box 0.57,0.43-1.00,0.75 from tagging (19 other boxes dropped)
+17:02:40 py: motion 199987 (DSC00896.JPG): motion_blur, straightness 0.72, subject 255, crop 1600x907, car box 0.60,0.46-0.95,0.75 from tagging (25 other boxes dropped)
+17:02:40 py: motion 199999 (DSC00902.JPG): motion_blur, straightness 0.73, subject 176, crop 1600x623, car box 0.27,0.56-0.86,0.90 from tagging (5 other boxes dropped)
+17:02:40 py: motion 199995 (DSC00900.JPG): motion_blur, straightness 0.76, subject 213, crop 1600x863, car box 0.55,0.44-1.00,0.77 from tagging (8 other boxes dropped)
+17:02:40 py: motion 200001 (DSC00903.JPG): motion_blur, straightness 0.68, subject 209, crop 1600x678, car box 0.30,0.60-0.84,0.95 from tagging (3 other boxes dropped)
+17:02:40 py: motion 199997 (DSC00901.JPG): motion_blur, straightness 0.76, subject 211, crop 1600x794, car box 0.34,0.48-0.79,0.82 from tagging (13 other boxes dropped)
+17:02:40 py: motion 200003 (DSC00904.JPG): pan, straightness 0.75, subject 188, crop 1600x498, car box 0.27,0.60-0.86,0.87 from tagging (30 other boxes dropped)
+17:02:40 py: motion 200005 (DSC00905.JPG): motion_blur, straightness 0.74, subject 174, crop 1600x595, car box 0.33,0.50-0.92,0.82 from tagging (17 other boxes dropped)
+17:02:40 py: motion 200007 (DSC00906.JPG): missed_pan, straightness 0.75, subject 226, crop 1600x660, car box 0.39,0.46-0.96,0.80 from tagging (18 other boxes dropped)
+17:02:40 py: motion 200009 (DSC00907.JPG): motion_blur, straightness 0.74, subject 264, crop 1600x684, car box 0.38,0.46-0.91,0.80 from tagging (15 other boxes dropped)
+17:02:41 py: motion 200011 (DSC00908.JPG): motion_blur, straightness 0.75, subject 205, crop 1600x621, car box 0.39,0.49-0.89,0.78 from tagging (31 other boxes dropped)
+17:02:41 py: motion 200013 (DSC00909.JPG): motion_blur, straightness 0.65, subject 245, crop 1600x931, car box 0.11,0.29-0.62,0.73 from tagging (17 other boxes dropped)
+17:02:41 py: motion 200015 (DSC00910.JPG): motion_blur, straightness 0.74, subject 219, crop 1600x931, car box 0.08,0.27-0.72,0.82 from tagging (20 other boxes dropped)
+17:02:41 py: motion 200023 (DSC00914.JPG): motion_blur, straightness 0.82, subject 298, crop 1136x1600, car box 0.80,0.57-1.00,0.99 from tagging (38 other boxes dropped)
+17:02:41 py: motion 200021 (DSC00913.JPG): motion_blur, straightness 0.85, subject 184, crop 1600x962, car box 0.32,0.39-1.00,0.99 from tagging (20 other boxes dropped)
+17:02:41 py: motion 200019 (DSC00912.JPG): motion_blur, straightness 0.77, subject 187, crop 1600x862, car box 0.14,0.30-1.00,0.99 from tagging (11 other boxes dropped)
+17:02:41 py: motion 200017 (DSC00911.JPG): motion_blur, straightness 0.74, subject 232, crop 1600x855, car box 0.08,0.27-0.91,0.99 from tagging (19 other boxes dropped)
+17:02:42 py: detections: 55 cached, 0 detected
+17:02:42 py: car boxes: 55 frames from C:/Users/Louis/AppData/Local/darktable/assisted_tagging/last-run/Rallye.boxes.json; checked 55 frames: 6 boxes removed, 0 frames left with no vehicle
+17:02:42 py: star slope: 9 keepers, under 10, so the tier tables rate them
+17:02:42 py: burst 1: 15 of 15 frames scored, mode motion_aware, keepers 203979, 203989, 203971, 203973, 203993
+17:02:42 py: burst 2: 4 of 4 frames scored, mode motion_aware, keepers 204003
+17:02:42 py: burst 3: 7 of 7 frames scored, mode motion_aware, keepers 204007, 204009, 204013
+17:02:42 py: burst 4: 2 of 2 frames scored, mode motion_aware, keepers 199969
+17:02:42 py: burst 5: 21 of 21 frames scored, mode motion_aware, keepers 200009, 199979, 199987, 199989, 199997
+17:02:42 py: burst 6: 6 of 6 frames scored, mode motion_aware, keepers 200013
+17:02:42 py: archived report: C:\Users\Louis\AppData\Local\darktable/assisted_culling/reports\20261118-170242.csv
+17:02:43 lua: scoring: scorer exit 0
+17:02:43 lua: Assisted Culling: analysis done, applying ratings to the last 52 images...
+17:02:43 lua: applying: results 4 of 55
+17:02:51 lua: ratings: selecting 2 images for 1 stars
+17:02:51 lua: ratings: rating action
+17:02:52 lua: ratings: selecting 4 images for 2 stars
+17:02:52 lua: ratings: rating action
+17:02:52 lua: ratings: selecting 6 images for 3 stars
+17:02:52 lua: ratings: rating action
+17:02:52 lua: ratings: restoring selection of 110
+17:02:52 lua: applying: results 41 of 55
+17:02:54 lua: ratings: selecting 2 images for 2 stars
+17:02:54 lua: ratings: rating action
+17:02:55 lua: ratings: restoring selection of 110
+17:02:55 lua: Assisted Culling: done. 16 keepers, 39 not kept, 9 cut off.
+17:02:55 lua: apply: timing: 0.1s in tag and rating-per-image calls, 11.3s in rating batches, 0.7s paused, 0.0s in progress updates; final drain took 12s
+17:02:55 lua: run finished
