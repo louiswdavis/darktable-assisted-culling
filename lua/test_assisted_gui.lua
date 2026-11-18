@@ -51,7 +51,7 @@ end
 
 -- score_images.py -----------------------------------------------------------------
 -- What the fake process writes, and what it was last asked.
-local PYTHON = { results = "", progress = "", exit = 0, runs = {} }
+local PYTHON = { results = "", points = "", progress = "", exit = 0, runs = {} }
 
 -- The launch as plugin_common.run_async_python writes it: a job file on Windows, a shell line elsewhere.
 os.execute = function(cmd)
@@ -74,7 +74,9 @@ os.execute = function(cmd)
     for i, arg in ipairs(argv) do
         if arg == "--progress" then write_file(argv[i + 1], PYTHON.progress) end
     end
-    write_file(argv[3], PYTHON.results)
+    local finds_subjects = false
+    for _, arg in ipairs(argv) do finds_subjects = finds_subjects or arg == "--emit-saliency-points" end
+    write_file(argv[3], finds_subjects and PYTHON.points or PYTHON.results)
     write_file(done_path, PYTHON.exit .. "\n")
     return true
 end
@@ -85,8 +87,38 @@ local hinter_calls, rating_actions = 0, 0
 local prefs = { ["assisted_plugins/plugins_root"] = ROOT .. "/plugins" }
 local PREF_EMPTY = { string = "", directory = "", file = "", integer = 0, float = 0, bool = false }
 
+-- darktable's AI tensors and mask models: every element reads `fill`, a saved tensor is a file
+local AI = { saved = {}, closed = 0 }
+local function tensor(shape, fill)
+    return {
+        shape = function() return shape end,
+        linear_to_srgb = function() end,
+        scale_add_planes = function() end,
+        paste = function() end,
+        set = function() end,
+        get = function() return fill or 0 end,
+        save = function(_, path)
+            write_file(path, "mask")
+            AI.saved[#AI.saved + 1] = path
+        end,
+    }
+end
+local MASK_MODELS = {
+    ["encoder.onnx"] = function() return tensor({ 1, 256, 64, 64 }) end,
+    ["decoder.onnx"] = function() return tensor({ 1, 1, 256, 256 }, 1), tensor({ 1, 1 }, 1) end,
+}
+
 local dt
 dt = {
+    ai = {
+        model_for_task = function() return "sam2-test" end,
+        models = function() return { { id = "sam2-test", name = "SAM 2", description = "mask" } } end,
+        load_model = function(_id, _provider, file)
+            return { run = MASK_MODELS[file], close = function() AI.closed = AI.closed + 1 end }
+        end,
+        load_image = function() return tensor({ 1, 3, 683, 1024 }) end,
+        create_tensor = function(shape) return tensor(shape) end,
+    },
     configuration = { tmp_dir = ROOT .. "/tmp", config_dir = ROOT .. "/config", version = "test", running_os = WINDOWS and "windows" or "macos" },
     gettext = { gettext = function(msgid) return msgid end },
     preferences = {
@@ -332,6 +364,35 @@ check("cull, every argument option on: each one reaches the scorer", table.conca
     .. PLUGIN .. "/models/hyperiqa_model.onnx")
 check("cull, detector installed: the keeper is rated", jpeg1.rating, 3)
 check("cull, detector installed: no Lua error", lua_errors(), nil)
+
+-- Cull with subject tracking: the scorer finds the subjects, darktable's mask model outlines them, the scorer scores
+sharp_combo.selected = 6 -- subject tracking (SAM)
+sharp_combo.changed_callback(sharp_combo)
+PYTHON.points = "1,0.500,0.500,,,0\n2,0.200,0.300,0.600,0.700,0\n"
+jpeg1.rating, jpeg2.rating = 0, 0
+click("Cull selection", { jpeg1, jpeg2 })
+check("cull, subject tracking: the scorer ran twice", #PYTHON.runs, 2)
+local points_run, scoring_run = PYTHON.runs[1] or { argv = {} }, PYTHON.runs[2] or { argv = {} }
+local function options(argv, names)
+    local found = {}
+    for i, arg in ipairs(argv) do
+        for _, name in ipairs(names) do
+            if arg == name then found[#found + 1] = arg .. " " .. tostring(argv[i + 1]) end
+        end
+    end
+    return table.concat(found, "; ")
+end
+check("cull, subject tracking: the first run finds subjects with the detector and the mask model",
+    tostring(points_run.argv[4]) .. "; " .. options(points_run.argv, { "--detector", "--detections", "--sam-model" }),
+    "--emit-saliency-points; --detector " .. PLUGIN .. "/models/dfine_x_coco.onnx; --detections " .. ROOT
+    .. "/config/assisted_plugins/detections.sqlite; --sam-model sam2-test")
+check("cull, subject tracking: both frames are outlined and the models are closed",
+    #AI.saved .. " masks, " .. AI.closed .. " closed", "2 masks, 2 closed")
+check("cull, subject tracking: the scoring run gets the mask model and each frame's mask",
+    options(scoring_run.argv, { "--sam-model" }) .. "; " .. tostring((scoring_run.manifest or ""):find(AI.saved[1] or "no mask", 1, true) ~= nil)
+    .. " " .. tostring((scoring_run.manifest or ""):find(AI.saved[2] or "no mask", 1, true) ~= nil), "--sam-model sam2-test; true true")
+check("cull, subject tracking: the keeper is rated", jpeg1.rating, 3)
+check("cull, subject tracking: no Lua error", lua_errors(), nil)
 os.remove(PLUGIN .. "/models/dfine_x_coco.onnx")
 os.remove(PLUGIN .. "/models/hyperiqa_model.onnx")
 set_argument_checks(false)
