@@ -878,8 +878,6 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
     local sam_ids = {}
     local main_started = false
     local stage_a_alive = false
-    -- the selection as it was before the final drain emptied it; restored below even after an error
-    local hidden_selection = nil
     -- image id → { path, previous, written }: the rating each image had when the run first met it
     local previous_ratings = {}
 
@@ -1415,6 +1413,19 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             rating_batch = {}
             local in_lighttable = dt.gui.current_view().id == "lighttable"
             local saved = in_lighttable and dt.gui.selection() or nil
+            if saved then
+                -- dt.gui.selection() leaves out the hidden members of collapsed groups; the act-on list has them
+                local acted, in_acted = {}, {}
+                for _, img in ipairs(dt.gui.action_images) do
+                    acted[#acted + 1] = img
+                    in_acted[img.id] = true
+                end
+                local covers = #acted > #saved
+                for _, img in ipairs(saved) do
+                    if not in_acted[img.id] then covers = false; break end
+                end
+                if covers then saved = acted end
+            end
             for rating, imgs in pairs(batch) do
                 local used_action = false
                 if in_lighttable then
@@ -1560,7 +1571,6 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             local started = os.time()
             local last_toast_pct = 0
             rating_batch = {}
-            if remaining > 0 then hidden_selection = C.hide_selection(dt, log) end
 
             while pending_idx <= total_lines do
                 if M.cancel_requested or (culling_job and not culling_job.valid) or file_exists(CANCEL_PATH) then
@@ -1652,16 +1662,11 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         end
     end)
 
-    -- guarded: an error here would leave the panel busy until darktable restarts
-    local restored, restore_err = pcall(C.restore_selection, dt, hidden_selection)
     is_running = false
     if action_button then
         action_button.label = _("Cull selection")
     end
     show_status("")
-    if not restored then
-        notify_error(_("Assisted Culling: couldn't restore the selection: ") .. tostring(restore_err))
-    end
 
     if not success then
         if culling_job then pcall(function() culling_job.valid = false end) end
@@ -1735,7 +1740,6 @@ function M.clear_marks(images)
 
     local total, cleared, failed = #images, 0, 0
     local i = 1
-    local hidden_selection = C.hide_selection(dt, log)
     local ok, err = pcall(function()
         while i <= total do
             local budget = STAGE2_WRITE_BUDGET
@@ -1768,11 +1772,7 @@ function M.clear_marks(images)
                 math.min(STAGE2_SLEEP_MAX_MS, math.floor((os.clock() - slice_start) * 1000))))
         end
     end)
-    local restored, restore_err = pcall(C.restore_selection, dt, hidden_selection)
     show_status("")
-    if not restored then
-        notify_error(_("Assisted Culling: couldn't restore the selection: ") .. tostring(restore_err))
-    end
     if not ok then notify_error("Assisted Culling: clearing marks failed: " .. tostring(err)); return end
     dt.print(string.format("Assisted Culling: removed culling tags from %d of %d images%s. Star ratings were not changed.",
         cleared, total, failed > 0 and (", " .. failed .. " couldn't be updated") or ""))
@@ -1798,7 +1798,6 @@ function M.restore_ratings(images)
 
     local total, restored, rated_since, failed = #images, 0, 0, 0
     local i = 1
-    local hidden_selection = C.hide_selection(dt, log)
     local ok, err = pcall(function()
         while i <= total do
             local budget = STAGE2_WRITE_BUDGET
@@ -1827,11 +1826,7 @@ function M.restore_ratings(images)
                 math.min(STAGE2_SLEEP_MAX_MS, math.floor((os.clock() - slice_start) * 1000))))
         end
     end)
-    local reselected, reselect_err = pcall(C.restore_selection, dt, hidden_selection)
     show_status("")
-    if not reselected then
-        notify_error(_("Assisted Culling: couldn't restore the selection: ") .. tostring(reselect_err))
-    end
     if not ok then notify_error("Assisted Culling: restoring ratings failed: " .. tostring(err)); return end
     dt.print(string.format("Assisted Culling: restored the previous rating of %d of %d images%s%s. Tags were not changed.",
         restored, total, rated_since > 0 and (", " .. rated_since .. " rated since the run left alone") or "",

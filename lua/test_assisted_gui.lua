@@ -84,6 +84,8 @@ end
 -- darktable -----------------------------------------------------------------------
 local prints, jobs, images_by_id, tags_by_name, tag_list, panel = {}, {}, {}, {}, {}, nil
 local hinter_calls, rating_actions = 0, 0
+-- image id → true for members darktable hides in a collapsed group; writes to the selection so far
+local hidden_ids, selection_sets = {}, 0
 -- called at each dt.control.sleep, where darktable runs its own events (a cancel click, an error)
 local on_sleep = nil
 -- how many images were selected at each tag attach
@@ -185,10 +187,17 @@ dt = {
     gui = {
         libs = {},
         views = { lighttable = {} },
-        -- the act-on images follow the selection
+        -- the act-on images follow the selection; like darktable, reading the selection leaves out
+        -- the hidden members of collapsed groups
         selection = function(images)
-            local before = dt.gui.action_images
-            if images then dt.gui.action_images = images end
+            local before = {}
+            for _, img in ipairs(dt.gui.action_images) do
+                if not hidden_ids[img.id] then before[#before + 1] = img end
+            end
+            if images then
+                selection_sets = selection_sets + 1
+                dt.gui.action_images = images
+            end
             return before
         end,
         action_images = {},
@@ -298,8 +307,8 @@ check("cull, nothing selected: the scorer is not started", #PYTHON.runs, 0)
 selected_at_attach = {}
 click("Cull selection", all)
 check("cull: tags were attached", #selected_at_attach > 0, true)
-check("cull: nothing is selected while tags are attached", math.max(table.unpack(selected_at_attach)), 0)
-check("cull: the selection is back at the end", dt.gui.action_images, all)
+check("cull: the selection stays while tags are attached", math.min(table.unpack(selected_at_attach)), #all)
+check("cull: the selection is the same at the end", #dt.gui.action_images, #all)
 check("cull: says it started as soon as it is clicked", prints[1], "Assisted Culling: started on 3 images…")
 check("cull: one job bar", #jobs, 1)
 check("cull: the job bar is titled", jobs[1] and jobs[1].title, "Assisted Culling")
@@ -421,20 +430,12 @@ PYTHON.exit = 0
 click("Cull selection", { jpeg4 })
 check("cull, all locked: explains", last_print():find("every selected image is tagged Assisted Culling|Locked", 1, true) ~= nil, true)
 
--- darktable refuses to select again (an image left the library during the run): the run still ends
-local real_selection = dt.gui.selection
-dt.gui.selection = function(images)
-    if images and #images > 0 then error("selection refused") end
-    return real_selection(images)
-end
+-- a collapsed group: darktable reports only jpeg1 as selected, the act-on list also holds the hidden jpeg2
 jpeg1.rating, jpeg2.rating = 0, 0
+hidden_ids = { [jpeg2.id] = true }
 click("Cull selection", { jpeg1, jpeg2 })
-check("cull, selection not restored: says so", printed("Assisted Culling: couldn't restore the selection: "), true)
-check("cull, selection not restored: the button is back to its label", button(panel, "Cull selection") ~= nil, true)
-dt.gui.selection = real_selection
-jpeg1.rating = 0
-click("Cull selection", { jpeg1, jpeg2 })
-check("cull, selection not restored: the next click starts a run", #PYTHON.runs .. " run, keeper rated " .. jpeg1.rating, "1 run, keeper rated 3")
+check("cull, collapsed group: the hidden member is still selected at the end", #dt.gui.action_images, 2)
+hidden_ids = {}
 
 -- darktable raises while the selection's Locked tag is read, before the scorer starts: the panel is not left busy
 local real_find = dt.tags.find
@@ -492,16 +493,9 @@ check("clear: the hinter is never used", hinter_calls, 0)
 check("clear: no Lua error", lua_errors(), nil)
 
 dt.tags.attach(dt.tags.create("Assisted Culling|Keeper"), jpeg1)
-dt.gui.selection = function(images)
-    if images and #images > 0 then error("selection refused") end
-    return real_selection(images)
-end
+selection_sets = 0
 click("Clear culling marks", { jpeg1, jpeg2 })
-dt.gui.selection = real_selection
-check("clear, selection not restored: says so and still reports the clear",
-    tostring(printed("Assisted Culling: couldn't restore the selection: ")) .. "; " .. last_print(),
-    "true; Assisted Culling: removed culling tags from 1 of 2 images. Star ratings were not changed.")
-check("clear, selection not restored: the panel line is cleared", status_label.label, "")
+check("clear: the selection is never changed", selection_sets, 0)
 
 -- Restore previous ratings ----------------------------------------------------------
 local PREVIOUS_RATINGS = ROOT .. "/config/assisted_culling.previous-ratings.csv"
@@ -525,15 +519,14 @@ check("restore: a run that changes no rating keeps the saved ratings", read_file
     "1,5,3,/photos/DSC00001.JPG\n2,4,1,/photos/DSC00002.JPG\n")
 
 jpeg2.rating = 2
-selected_at_attach = {}
-local restore_selection = { jpeg1, jpeg2, jpeg3 }
-click("Restore previous ratings", restore_selection)
+selection_sets = 0
+click("Restore previous ratings", { jpeg1, jpeg2, jpeg3 })
 check("restore: the frame the run rated is back", jpeg1.rating, 5)
 check("restore: a frame rated since the run is left alone", jpeg2.rating, 2)
 check("restore: a frame the run did not rate is left alone", jpeg3.rating, 2)
 check("restore: progress goes to the panel line", status_shown("restoring ratings 3 / 3"), true)
 check("restore: the panel line is cleared at the end", status_label.label, "")
-check("restore: the selection is back at the end", dt.gui.action_images, restore_selection)
+check("restore: the selection is never changed", selection_sets, 0)
 check("restore: tags are kept", has_tag(jpeg1, "Assisted Culling|Keeper"), true)
 check("restore: the end message", last_print(),
     "Assisted Culling: restored the previous rating of 1 of 3 images, 1 rated since the run left alone. Tags were not changed.")
