@@ -1,25 +1,12 @@
-15:46:03 lua: run started: darktable 5.6.2, 110 images (0 locked left out)
-15:46:03 lua: settings: rank universal, sharpness motion_aware, exposure none, keepers dynamic_burst, non-keepers leave
-15:46:03 lua: Assisted Culling: started on 110 images…
-15:46:03 lua: group support native: 55 of 55 photos in groups of 2+
-15:46:03 lua: fast JPEG true, apply while scoring true, SAM model none
-15:46:03 lua: Assisted Culling: scoring 55 images in 6 groups (dynamic burst keepers, universal ranking, native grouping)
-15:46:03 lua: Assisted Culling: 55 image(s) share a shot with another (a duplicate, or the RAW of a RAW+JPEG pair); each shot is scored once and its result copied to all of it.
-15:46:03 lua: vehicle detector: dfine_x_coco.onnx
-15:46:03 lua: scoring: "C:\Users\Louis\Pictures\DarkTable\Settings\Plugins/darktable-assisted-culling/.venv/Scripts/python.exe" -u "C:\Users\Louis\Pictures\DarkTable\Settings\Plugins/darktable-assisted-culling/python/score_images.py" "C:\Users\Louis\AppData\Local\Temp/dt_assisted_culling_1795016763_3_manifest.csv" "C:\Users\Louis\AppData\Local\Temp/dt_assisted_culling_1795016763_3_results.csv" "--progress" "C:\Users\Louis\AppData\Local\Temp/dt_assisted_culling_1795016763_3_progress.txt" "--rank-mode" "universal" "--sharp-mode" "motion_aware" "--exp-mode" "none" "--keep-mode" "dynamic_burst" "--nk-mode" "leave" "--tag-only-flags" "overexposed,underexposed,eyes_closed" "--star-scale" "1" "--keep-margin" "0.95" "--blank-share" "0.95" "--fast-jpeg" "--spread-keepers" "--detector" "C:\Users\Louis\Pictures\DarkTable\Settings\Plugins/darktable-assisted-culling/models/dfine_x_coco.onnx" "--detections" "C:/Users/Louis/AppData/Local/darktable/assisted_plugins/detections.sqlite" "--car-boxes" "C:/Users/Louis/AppData/Local/darktable/assisted_tagging/last-run/Rallye.boxes.json" "--cache" "C:\Users\Louis\AppData\Local\darktable/assisted_culling/scores.sqlite" "--report" "C:\Users\Louis\AppData\Local\darktable/assisted_culling/last-run.csv" "--report-archive-dir" "C:\Users\Louis\AppData\Local\darktable/assisted_culling/reports"
-15:46:05 py: scoring: 55 frames in 6 bursts, 55 from cache or stage A, 0 to decode, sharpness motion_aware
-15:46:05 py: burst 1: 15 of 15 frames scored, mode motion_aware, keepers 203979, 203971, 203973, 203969
-15:46:05 py: burst 2: 4 of 4 frames scored, mode motion_aware, keepers 204003
-15:46:05 py: burst 3: 7 of 7 frames scored, mode motion_aware, keepers 204017, 204015
-15:46:05 py: burst 4: 2 of 2 frames scored, mode motion_aware, keepers 199969
-15:46:05 py: burst 5: 21 of 21 frames scored, mode motion_aware, keepers 200009, 199979, 199987, 199989, 199973
-15:46:05 py: burst 6: 6 of 6 frames scored, mode motion_aware, keepers 200021, 200023
-15:46:05 py: detections: 0 cached, 0 detected
-15:46:05 py: car boxes: 55 frames from C:/Users/Louis/AppData/Local/darktable/assisted_tagging/last-run/Rallye.boxes.json; checked 55 frames: 6 boxes removed, 0 frames left with no vehicle
-15:46:05 py: archived report: C:\Users\Louis\AppData\Local\darktable/assisted_culling/reports\20261118-154605.csv
-15:46:05 lua: scoring: scorer exit 0
-15:46:05 lua: Assisted Culling: analysis done, applying ratings to the last 7 images...
-15:46:05 lua: applying: results 49 of 55
-15:46:05 lua: Assisted Culling: done. 15 keepers, 40 not kept, 9 cut off.
-15:46:05 lua: apply: timing: 0.0s in tag and rating-per-image calls, 0.0s in rating batches, 0.1s paused
-15:46:05 lua: run finished
+17:02:11 lua: run started: darktable 5.6.2, 1 images (0 locked left out)
+17:02:11 lua: settings: rank universal, sharpness motion_aware, exposure none, keepers dynamic_burst, non-keepers leave
+17:02:11 lua: Assisted Culling: started on 1 image…
+17:02:11 lua: group support native: 0 of 1 photos in groups of 2+
+17:02:12 lua: fast JPEG true, apply while scoring true, SAM model none
+17:02:12 lua: Assisted Culling: scoring 1 images in 1 groups (dynamic burst keepers, universal ranking, native grouping)
+17:02:12 lua: vehicle detector: dfine_x_coco.onnx
+17:02:12 lua: scoring: "C:\Users\Louis\Pictures\DarkTable\Settings\Plugins/darktable-assisted-culling/.venv/Scripts/python.exe" -u "C:\Users\Louis\Pictures\DarkTable\Settings\Plugins/darktable-assisted-culling/python/score_images.py" "C:\Users\Louis\AppData\Local\Temp/dt_assisted_culling_1795021331_3_manifest.csv" "C:\Users\Louis\AppData\Local\Temp/dt_assisted_culling_1795021331_3_results.csv" "--progress" "C:\Users\Louis\AppData\Local\Temp/dt_assisted_culling_1795021331_3_progress.txt" "--rank-mode" "universal" "--sharp-mode" "motion_aware" "--exp-mode" "none" "--keep-mode" "dynamic_burst" "--nk-mode" "leave" "--tag-only-flags" "overexposed,underexposed,eyes_closed" "--star-scale" "1" "--keep-margin" "0.95" "--blank-share" "0.95" "--fast-jpeg" "--spread-keepers" "--keep-angles" "--motion-look" "--star-slope" "--detector" "C:\Users\Louis\Pictures\DarkTable\Settings\Plugins/darktable-assisted-culling/models/dfine_x_coco.onnx" "--detections" "C:/Users/Louis/AppData/Local/darktable/assisted_plugins/detections.sqlite" "--car-boxes" "C:/Users/Louis/AppData/Local/darktable/assisted_tagging/last-run/Rallye.boxes.json" "--cache" "C:\Users\Louis\AppData\Local\darktable/assisted_culling/scores.sqlite" "--report" "C:\Users\Louis\AppData\Local\darktable/assisted_culling/last-run.csv" "--report-archive-dir" "C:\Users\Louis\AppData\Local\darktable/assisted_culling/reports"
+17:02:18 py: scoring: 1 frames in 1 bursts, 0 from cache or stage A, 1 to decode, sharpness motion_aware
+17:02:20 py: cancelled
+17:02:21 lua: Assisted Culling: cancelled. No images were changed.
+17:02:21 lua: run finished
