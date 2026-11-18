@@ -31,6 +31,12 @@ ok   cull, detector installed: the argument after the cache path is an option
 ok   cull, every argument option on: each one reaches the scorer
 ok   cull, detector installed: the keeper is rated
 ok   cull, detector installed: no Lua error
+ok   cull, subject tracking: the scorer ran twice
+ok   cull, subject tracking: the first run finds subjects with the detector and the mask model
+ok   cull, subject tracking: both frames are outlined and the models are closed
+ok   cull, subject tracking: the scoring run gets the mask model and each frame's mask
+ok   cull, subject tracking: the keeper is rated
+ok   cull, subject tracking: no Lua error
 ok   cull, scorer fails: says so
 ok   cull, scorer fails: the panel line is cleared
 ok   cull, scorer fails: the job bar is closed
