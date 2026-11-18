@@ -6,12 +6,6 @@ ok   parse_csv_line: wrong field count is nil
 ok   lead_rank: full-size JPEG beats RAW
 ok   detections_path: <config_dir>/assisted_plugins/detections.sqlite, backslashes folded
 ok   detections_path: one value, so it can end an argument list
-ok   hide_selection: selection emptied
-ok   hide_selection: returns what was selected
-ok   hide_selection: logs the count
-ok   restore_selection: selection back
-ok   hide_selection: empty selection logs nothing
-ok   restore_selection: nil leaves the selection
 ok   temp_base: <dir>/<prefix><epoch>_<seq>_
 ok   sweep_temp: removes only this prefix's stale files
 ok   sweep_temp: newer file kept
@@ -55,6 +49,12 @@ ok   upgrade_preset_text: tag_subject false gives Guessed off
 ok   upgrade_preset_text: tag_subject true gives Guessed on
 ok   upgrade_preset_text: no-op when tag_subject_guessed is present
 ok   upgrade_preset_text: no-op on text that is not JSON
+ok   upgrade_preset_text: native keeps native groups on
+ok   upgrade_preset_text: native with a car node puts it in node 1
+ok   upgrade_preset_text: tags with a node turns native off, node first
+ok   upgrade_preset_text: tags with a blank node uses the latest grouping run
+ok   upgrade_preset_text: none drops the car node
+ok   upgrade_preset_text: no-op on today's grouping keys
 ok   parse_flags reads every flag
 ok   parse_flags: empty field is no flags
 ok   parse_report_line: quoted commas and doubled quotes
@@ -141,18 +141,20 @@ ok   preset name quote
 ok   preset order
 ok   preset order empty
 ok   preset schema: mode defaults
+ok   preset schema: grouping defaults to native groups and no tag nodes
 ok   preset schema: switch defaults
 ok   preset schema: every tag switch defaults on
 ok   preset schema: no key twice
 ok   PANEL_PAGES: every preset key is on one page or listed off-stack
 ok   PANEL_PAGES: titles match the README sections
-ok   split_by_car: cars split a group, untagged frames share the group pool
-ok   split_by_car: a frame with no group key stays alone
-ok   split_by_car: several cars → shared pool
-ok   split_by_car: no cars → keys unchanged
-ok   no_groups_notice: all singletons in native mode
+ok   split_by_tag: child tags split a group, untagged frames share the group pool
+ok   split_by_tag: a frame with no group key stays alone
+ok   split_by_tag: several children → shared pool
+ok   split_by_tag: no child tags → keys unchanged
+ok   split_by_tag: a second node cuts each pool of the first
+ok   no_groups_notice: all singletons with grouping on
 ok   no_groups_notice: grouped selection is silent
-ok   no_groups_notice: none mode and single frame are silent
+ok   no_groups_notice: grouping off and single frame are silent
 ok   preset schema: keeper margin defaults off
 ok   preset schema: spread keepers defaults off
 ok   preset schema: number reads defaults off

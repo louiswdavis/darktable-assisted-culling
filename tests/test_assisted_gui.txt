@@ -6,8 +6,8 @@ ok   cull, nothing selected: asks for a selection
 ok   cull, nothing selected: no job bar
 ok   cull, nothing selected: the scorer is not started
 ok   cull: tags were attached
-ok   cull: nothing is selected while tags are attached
-ok   cull: the selection is back at the end
+ok   cull: the selection stays while tags are attached
+ok   cull: the selection is the same at the end
 ok   cull: says it started as soon as it is clicked
 ok   cull: one job bar
 ok   cull: the job bar is titled
@@ -44,14 +44,32 @@ ok   cull, scorer fails: says so
 ok   cull, scorer fails: the panel line is cleared
 ok   cull, scorer fails: the job bar is closed
 ok   cull, all locked: explains
-ok   cull, selection not restored: says so
-ok   cull, selection not restored: the button is back to its label
-ok   cull, selection not restored: the next click starts a run
+ok   cull, collapsed group: the hidden member is still selected at the end
+ok   cull: both frames are rated
+ok   cull: the selection is never changed
+ok   cull: darktable's rating action is never fired
 ok   cull, error before the run starts: says so and the button is back to its label
 ok   cull, error before the run starts: the next click starts a run
 ok   cull, error during the run: says so, the panel line is cleared and the button is back to its label
 ok   cull, cancelled while scoring: the message names the way to undo what was written
 ok   cull, cancelled while scoring: no Lua error
+ok   bursts page: native groups on and three blank tag node boxes by default
+ok   bursts page: native groups alone
+ok   bursts page: a tag node cuts the native groups, untagged frames share a pool, column 10 has the child
+ok   bursts page: a later node cuts further, children joined in column 10
+ok   bursts page: native off, node 1 forms the groups and a frame without its tag is alone
+ok   bursts page: native off, node 2 cuts node 1's groups
+ok   bursts page: native off, Assisted Grouping groups by each frame's latest run
+ok   bursts page: nothing set, every frame alone
+ok   bursts page: nothing set, the end message has no grouping notice
+ok   bursts page: a node that matches no frame leaves every frame alone
+ok   bursts page: a node that matches no frame ends with the grouping notice
+ok   bursts page: an old tags preset shows native off, the latest grouping run, then the car node
+ok   bursts page: the upgraded preset is saved back in today's keys
+ok   bursts page: the upgrade is logged
+ok   bursts page: updating the preset saves the typed node, trimmed
+ok   bursts page: the template puts the defaults back
+ok   bursts page: no Lua error
 ok   clear, nothing selected: asks for a selection
 ok   clear: says it started
 ok   clear: progress goes to the panel line
@@ -61,8 +79,7 @@ ok   clear: no culling tags left
 ok   clear: the end message
 ok   clear: the hinter is never used
 ok   clear: no Lua error
-ok   clear, selection not restored: says so and still reports the clear
-ok   clear, selection not restored: the panel line is cleared
+ok   clear: the selection is never changed
 ok   restore, nothing selected: asks for a selection
 ok   restore, no run yet: says so
 ok   restore: the run rated both scored frames
@@ -73,7 +90,7 @@ ok   restore: a frame rated since the run is left alone
 ok   restore: a frame the run did not rate is left alone
 ok   restore: progress goes to the panel line
 ok   restore: the panel line is cleared at the end
-ok   restore: the selection is back at the end
+ok   restore: the selection is never changed
 ok   restore: tags are kept
 ok   restore: the end message
 ok   restore, twice: the second click changes nothing
@@ -81,4 +98,20 @@ ok   restore, another library's file: left alone
 ok   restore, comma and line break in the file name: the frame is back
 ok   restore, an image removed from the library: the others are back
 ok   restore: no Lua error
+ok   reset, nothing selected: asks for a selection
+ok   reset, nothing selected: no job bar
+ok   reset: every frame is at 0 stars, the rejected one too
+ok   reset: progress goes to the panel line
+ok   reset: the panel line is cleared at the end
+ok   reset: one job bar, closed at the end
+ok   reset: the selection is never changed
+ok   reset: tags are kept
+ok   reset: the end message
+ok   reset, cancelled: the first slice is at 0, the rest keep their rating
+ok   reset, cancelled: the message counts both
+ok   reset, cancelled: the panel line is cleared
+ok   reset, after a cancel: the next reset runs, the panel isn't left busy
+ok   reset, an image removed from the library: the others are at 0
+ok   reset: no Lua error
+ok   no job bar is closed twice
 all passed
