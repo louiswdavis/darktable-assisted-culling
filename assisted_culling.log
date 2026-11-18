@@ -35,3 +35,19 @@
 20:08:26 lua: applying: results 32 of 55
 20:08:26 lua: ratings: waiting for darktable
 20:08:26 lua: ratings: darktable answered
+20:08:38 lua: ratings: selecting 2 images for 1 stars
+20:08:38 lua: ratings: rating action
+20:08:39 lua: ratings: selecting 2 images for 2 stars
+20:08:39 lua: ratings: rating action
+20:08:39 lua: ratings: selecting 2 images for 3 stars
+20:08:39 lua: ratings: rating action
+20:08:39 lua: ratings: restoring selection of 110
+20:08:39 lua: Assisted Culling: done. 16 keepers, 39 not kept, 9 cut off.
+20:08:39 lua: apply: timing: 0.1s in tag and rating-per-image calls, 24.0s in rating batches, 0.6s paused, 0.0s in progress updates; final drain took 24s
+20:08:39 lua: run finished
+20:16:19 lua: reset ratings: 110 images, 0s
+20:16:19 lua: Assisted Culling: set 0 of 110 images to 0 stars, 110 already at 0. Tags were not changed.
+20:16:41 lua: reset ratings: 110 images, 2s
+20:16:41 lua: Assisted Culling: set 110 of 110 images to 0 stars. Tags were not changed.
+20:17:04 lua: reset ratings: 110 images, 2s
+20:17:04 lua: Assisted Culling: set 110 of 110 images to 0 stars. Tags were not changed.
