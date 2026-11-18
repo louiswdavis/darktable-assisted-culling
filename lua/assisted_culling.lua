@@ -1325,6 +1325,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         local diag_tag_objs = {}
 
         -- left_alone: a frame left alone for no vehicle is neither keeper nor rejected
+        local rating_writes, all_writes = 0, 0
         local function apply_to_image(img, want_rating, is_keeper, flags, diag, left_alone)
             local writes = 0
             local have = tags_of(img)
@@ -1335,6 +1336,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                 record.written = want_rating
                 previous_ratings[img.id] = record
                 img.rating = want_rating; writes = writes + 1
+                rating_writes = rating_writes + 1
             end
 
             writes = writes + sync_tag(img, have, TAG_KEEPER, is_keeper and tag_on.keeper)
@@ -1390,6 +1392,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                 if ok_apply then
                     applied_total = applied_total + 1
                     writes = writes + res
+                    all_writes = all_writes + res
                 else
                     failed_total = failed_total + 1
                     first_error = first_error or tostring(res)
@@ -1537,7 +1540,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                     break
                 end
 
-                trace(string.format("applying: results %d of %d", pending_idx, total_lines))
+                local slice_from, ratings_before, writes_before = pending_idx, rating_writes, all_writes
                 apply_slice()
 
                 local bar_start = os.clock()
@@ -1554,6 +1557,9 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                     math.floor(((pending_idx - 1) / total_lines) * 100), fmt_eta(os.time() - started, done, remaining)))
                 local toast_start = os.clock()
                 label_s = label_s + toast_start - label_start
+                trace(string.format("applying: results %d to %d of %d: %d rating writes, %d tag writes, panel line waited %.1fs",
+                    slice_from, pending_idx - 1, total_lines, rating_writes - ratings_before,
+                    all_writes - writes_before - (rating_writes - ratings_before), toast_start - label_start))
                 local milestone = math.floor(((pending_idx - 1) / total_lines) * 4) * 25
                 if milestone > last_toast_pct and milestone < 100 then
                     last_toast_pct = milestone
@@ -1614,8 +1620,8 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             local notice = M.no_groups_notice(grouping_on, n_primary, n_groups_before_split)
             if notice then msg = msg .. " " .. notice:gsub("^%l", string.upper) .. "." end
             say(msg)
-            log(string.format("apply: timing: %.1fs in tag and rating writes, %.1fs paused, %.1fs in progress updates (job bar %.1fs, panel line %.1fs, toast %.1fs); final drain took %ds",
-                write_s, pause_s, bar_s + label_s + toast_s, bar_s, label_s, toast_s, drain_s))
+            log(string.format("apply: timing: %.1fs in tag and rating writes, %.1fs paused, %.1fs in progress updates (job bar %.1fs, panel line %.1fs, toast %.1fs); %d rating writes, %d tag writes; final drain took %ds",
+                write_s, pause_s, bar_s + label_s + toast_s, bar_s, label_s, toast_s, rating_writes, all_writes - rating_writes, drain_s))
             if first_error then
                 dt.print_error("Assisted Culling: first apply error: " .. first_error)
                 log("first apply error: " .. first_error)

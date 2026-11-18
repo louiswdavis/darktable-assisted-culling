@@ -560,7 +560,7 @@ check("bursts page: a node that matches no frame ends with the grouping notice",
     "Assisted Culling: done. 1 keepers, 4 not kept. No groups found: every frame judged alone (group first for keepers).")
 check("timing line splits the progress updates into job bar, panel line and toast",
     (read_file(ROOT .. "/config/assisted_culling.log") or ""):find(
-        "in progress updates %(job bar [%d.]+s, panel line [%d.]+s, toast [%d.]+s%); final drain took") ~= nil, true)
+        "in progress updates %(job bar [%d.]+s, panel line [%d.]+s, toast [%d.]+s%); %d+ rating writes, %d+ tag writes; final drain took") ~= nil, true)
 PYTHON.results = earlier_results
 
 -- the old dropdown preset is upgraded when it is picked, shown on the page and saved back
