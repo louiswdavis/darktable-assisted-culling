@@ -17,7 +17,7 @@ end
 -- plugin_common.lua ---------------------------------------------------------------
 -- The same file in all three plugin repos; COMMON_HASH pins it. After changing it, copy it to the
 -- other two repos and put the hash this prints into their tests too.
-local COMMON_HASH = "68b9ff8a"
+local COMMON_HASH = "a1814a00"
 local script_dir = (arg and arg[0] or ""):match("^(.*)[/\\]") or "."
 local PC = dofile(script_dir .. "/plugin_common.lua")
 local function fnv1a(text)
@@ -38,20 +38,6 @@ check("detections_path: <config_dir>/assisted_plugins/detections.sqlite, backsla
     PC.detections_path({ configuration = { config_dir = "C:\\Users\\me\\dt" } }), "C:/Users/me/dt/assisted_plugins/detections.sqlite")
 check("detections_path: one value, so it can end an argument list",
     select("#", PC.detections_path({ configuration = { config_dir = "C:\\Users\\me\\dt" } })), 1)
-do -- hide_selection / restore_selection: the selection is emptied for the writes, then put back
-    local current, logged = { "a", "b" }, {}
-    local fake_dt = { gui = { selection = function(new) if new then current = new end; return current end } }
-    local selected = PC.hide_selection(fake_dt, function(msg) logged[#logged + 1] = msg end)
-    check("hide_selection: selection emptied", #current, 0)
-    check("hide_selection: returns what was selected", table.concat(selected, ","), "a,b")
-    check("hide_selection: logs the count", logged[1], "selection: 2 images deselected while tags are written")
-    PC.restore_selection(fake_dt, selected)
-    check("restore_selection: selection back", table.concat(current, ","), "a,b")
-    check("hide_selection: empty selection logs nothing", #PC.hide_selection({ gui = { selection = function() return {} end } },
-        function(msg) logged[#logged + 1] = msg end) + #logged, 1)
-    PC.restore_selection(fake_dt, nil)
-    check("restore_selection: nil leaves the selection", table.concat(current, ","), "a,b")
-end
 do -- temp_base / sweep_temp: leftovers older than max_age go, newer ones and other prefixes stay
     local dir = os.tmpname()
     os.remove(dir)
