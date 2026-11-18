@@ -1,53 +1,743 @@
-20:08:10 lua: run started: darktable 5.6.2, 110 images (0 locked left out)
-20:08:10 lua: settings: rank universal, sharpness motion_aware, exposure none, keepers dynamic_burst, non-keepers leave
-20:08:10 lua: Assisted Culling: started on 110 images…
-20:08:10 lua: group support native: 55 of 55 photos in groups of 2+
-20:08:10 lua: fast JPEG true, apply while scoring true, SAM model none
-20:08:10 lua: Assisted Culling: scoring 55 images in 6 groups (dynamic burst keepers, universal ranking, native grouping)
-20:08:10 lua: Assisted Culling: 55 image(s) share a shot with another (a duplicate, or the RAW of a RAW+JPEG pair); each shot is scored once and its result copied to all of it.
-20:08:10 lua: vehicle detector: dfine_x_coco.onnx
-20:08:10 lua: scoring: "C:\Users\Louis\Pictures\DarkTable\Settings\Plugins/darktable-assisted-culling/.venv/Scripts/python.exe" -u "C:\Users\Louis\Pictures\DarkTable\Settings\Plugins/darktable-assisted-culling/python/score_images.py" "C:\Users\Louis\AppData\Local\Temp/dt_assisted_culling_1795032490_3_manifest.csv" "C:\Users\Louis\AppData\Local\Temp/dt_assisted_culling_1795032490_3_results.csv" "--progress" "C:\Users\Louis\AppData\Local\Temp/dt_assisted_culling_1795032490_3_progress.txt" "--rank-mode" "universal" "--sharp-mode" "motion_aware" "--exp-mode" "none" "--keep-mode" "dynamic_burst" "--nk-mode" "leave" "--tag-only-flags" "overexposed,underexposed,eyes_closed" "--star-scale" "1" "--keep-margin" "0.95" "--blank-share" "0.95" "--fast-jpeg" "--spread-keepers" "--keep-angles" "--motion-look" "--star-slope" "--detector" "C:\Users\Louis\Pictures\DarkTable\Settings\Plugins/darktable-assisted-culling/models/dfine_x_coco.onnx" "--detections" "C:/Users/Louis/AppData/Local/darktable/assisted_plugins/detections.sqlite" "--car-boxes" "C:/Users/Louis/AppData/Local/darktable/assisted_tagging/last-run/Rallye.boxes.json" "--cache" "C:\Users\Louis\AppData\Local\darktable/assisted_culling/scores.sqlite" "--report" "C:\Users\Louis\AppData\Local\darktable/assisted_culling/last-run.csv" "--report-archive-dir" "C:\Users\Louis\AppData\Local\darktable/assisted_culling/reports"
-20:08:14 py: scoring: 55 frames in 6 bursts, 55 from cache or stage A, 0 to decode, sharpness motion_aware
-20:08:14 py: detections: 0 cached, 0 detected
-20:08:14 py: car boxes: 55 frames from C:/Users/Louis/AppData/Local/darktable/assisted_tagging/last-run/Rallye.boxes.json; checked 55 frames: 6 boxes removed, 0 frames left with no vehicle
-20:08:14 py: star slope: 9 keepers, under 10, so the tier tables rate them
-20:08:14 py: burst 1: 15 of 15 frames scored, mode motion_aware, keepers 203979, 203989, 203971, 203973, 203993
-20:08:14 py: burst 2: 4 of 4 frames scored, mode motion_aware, keepers 204003
-20:08:14 py: burst 3: 7 of 7 frames scored, mode motion_aware, keepers 204007, 204009, 204013
-20:08:14 py: burst 4: 2 of 2 frames scored, mode motion_aware, keepers 199969
-20:08:14 py: burst 5: 21 of 21 frames scored, mode motion_aware, keepers 200009, 199979, 199987, 199989, 199997
-20:08:14 py: burst 6: 6 of 6 frames scored, mode motion_aware, keepers 200013
-20:08:14 py: archived report: C:\Users\Louis\AppData\Local\darktable/assisted_culling/reports\20261118-200814.csv
-20:08:15 lua: scoring: scorer exit 0
-20:08:15 lua: Assisted Culling: analysis done, applying ratings to the last 52 images...
-20:08:15 lua: applying: results 4 of 55
-20:08:15 lua: ratings: waiting for darktable
-20:08:15 lua: ratings: darktable answered
-20:08:24 lua: ratings: selecting 4 images for 1 stars
-20:08:24 lua: ratings: rating action
-20:08:25 lua: ratings: selecting 10 images for 2 stars
-20:08:25 lua: ratings: rating action
-20:08:25 lua: ratings: selecting 4 images for 3 stars
-20:08:25 lua: ratings: rating action
-20:08:26 lua: ratings: selecting 2 images for 4 stars
-20:08:26 lua: ratings: rating action
-20:08:26 lua: ratings: restoring selection of 110
-20:08:26 lua: applying: results 32 of 55
-20:08:26 lua: ratings: waiting for darktable
-20:08:26 lua: ratings: darktable answered
-20:08:38 lua: ratings: selecting 2 images for 1 stars
-20:08:38 lua: ratings: rating action
-20:08:39 lua: ratings: selecting 2 images for 2 stars
-20:08:39 lua: ratings: rating action
-20:08:39 lua: ratings: selecting 2 images for 3 stars
-20:08:39 lua: ratings: rating action
-20:08:39 lua: ratings: restoring selection of 110
-20:08:39 lua: Assisted Culling: done. 16 keepers, 39 not kept, 9 cut off.
-20:08:39 lua: apply: timing: 0.1s in tag and rating-per-image calls, 24.0s in rating batches, 0.6s paused, 0.0s in progress updates; final drain took 24s
-20:08:39 lua: run finished
-20:16:19 lua: reset ratings: 110 images, 0s
-20:16:19 lua: Assisted Culling: set 0 of 110 images to 0 stars, 110 already at 0. Tags were not changed.
-20:16:41 lua: reset ratings: 110 images, 2s
-20:16:41 lua: Assisted Culling: set 110 of 110 images to 0 stars. Tags were not changed.
-20:17:04 lua: reset ratings: 110 images, 2s
-20:17:04 lua: Assisted Culling: set 110 of 110 images to 0 stars. Tags were not changed.
+20:49:28 lua: run started: darktable 5.6.2, 1170 images (0 locked left out)
+20:49:28 lua: settings: rank universal, sharpness motion_aware, exposure none, keepers dynamic_burst, non-keepers leave
+20:49:28 lua: Assisted Culling: started on 1170 images…
+20:49:28 lua: grouping: native groups on, 584 of 585 photos in groups of 2+
+20:49:28 lua: fast JPEG true, apply while scoring true, SAM model none
+20:49:28 lua: Assisted Culling: scoring 585 images in 109 groups (dynamic burst keepers, universal ranking, native grouping)
+20:49:28 lua: Assisted Culling: 585 image(s) share a shot with another (a duplicate, or the RAW of a RAW+JPEG pair); each shot is scored once and its result copied to all of it.
+20:49:28 lua: vehicle detector: dfine_x_coco.onnx
+20:49:28 lua: scoring: "C:\Users\Louis\Pictures\DarkTable\Settings\Plugins/darktable-assisted-culling/.venv/Scripts/python.exe" -u "C:\Users\Louis\Pictures\DarkTable\Settings\Plugins/darktable-assisted-culling/python/score_images.py" "C:\Users\Louis\AppData\Local\Temp/dt_assisted_culling_1795034968_3_manifest.csv" "C:\Users\Louis\AppData\Local\Temp/dt_assisted_culling_1795034968_3_results.csv" "--progress" "C:\Users\Louis\AppData\Local\Temp/dt_assisted_culling_1795034968_3_progress.txt" "--rank-mode" "universal" "--sharp-mode" "motion_aware" "--exp-mode" "none" "--keep-mode" "dynamic_burst" "--nk-mode" "leave" "--tag-only-flags" "overexposed,underexposed,eyes_closed" "--star-scale" "1" "--keep-margin" "0.95" "--blank-share" "0.95" "--fast-jpeg" "--spread-keepers" "--keep-angles" "--motion-look" "--star-slope" "--detector" "C:\Users\Louis\Pictures\DarkTable\Settings\Plugins/darktable-assisted-culling/models/dfine_x_coco.onnx" "--detections" "C:/Users/Louis/AppData/Local/darktable/assisted_plugins/detections.sqlite" "--car-boxes" "C:/Users/Louis/AppData/Local/darktable/assisted_tagging/last-run/Rallye.boxes.json" "--cache" "C:\Users\Louis\AppData\Local\darktable/assisted_culling/scores.sqlite" "--report" "C:\Users\Louis\AppData\Local\darktable/assisted_culling/last-run.csv" "--report-archive-dir" "C:\Users\Louis\AppData\Local\darktable/assisted_culling/reports"
+20:49:31 py: scoring: 585 frames in 109 bursts, 0 from cache or stage A, 585 to decode, sharpness motion_aware
+20:49:40 py: motion 201997 (DSC08183.JPG): ordinary, straightness 0.00, subject 281, crop 1600x1207
+20:49:40 py: motion 201995 (DSC08182.JPG): ordinary, straightness 0.00, subject 302, crop 1090x819
+20:49:40 py: motion 201993 (DSC08181.JPG): ordinary, straightness 0.00, subject 295, crop 1029x806
+20:49:41 py: motion 202003 (DSC08186.JPG): ordinary, straightness 0.00, subject 267, crop 1600x1154
+20:49:41 py: motion 202001 (DSC08185.JPG): ordinary, straightness 0.00, subject 266, crop 1600x1136
+20:49:41 py: motion 201999 (DSC08184.JPG): ordinary, straightness 0.00, subject 288, crop 1600x1166
+20:49:41 py: motion 202007 (DSC08188.JPG): motion_blur, straightness 0.57, subject 158, crop 1600x1264
+20:49:42 py: motion 202005 (DSC08187.JPG): ordinary, straightness 0.00, subject 96, crop 1600x1205
+20:49:42 py: motion 202009 (DSC08189.JPG): motion_blur, straightness 0.58, subject 160, crop 1600x1218
+20:49:42 py: motion 202015 (DSC08192.JPG): ordinary, straightness 0.00, subject 118, crop 1600x1146
+20:49:42 py: motion 202013 (DSC08191.JPG): pan, straightness 0.58, subject 181, crop 1600x1144
+20:49:42 py: motion 202021 (DSC08195.JPG): motion_blur, straightness 0.66, subject 184, crop 1600x718
+20:49:42 py: motion 202017 (DSC08193.JPG): ordinary, straightness 0.00, subject 133, crop 1556x1131
+20:49:42 py: motion 202011 (DSC08190.JPG): motion_blur, straightness 0.57, subject 165, crop 1600x1167
+20:49:42 py: motion 202023 (DSC08196.JPG): motion_blur, straightness 0.73, subject 258, crop 1600x600
+20:49:42 py: motion 202027 (DSC08198.JPG): motion_blur, straightness 0.77, subject 233, crop 1600x321
+20:49:42 py: motion 202019 (DSC08194.JPG): ordinary, straightness 0.00, subject 133, crop 1503x1090
+20:49:42 py: motion 202033 (DSC08201.JPG): motion_blur, straightness 0.74, subject 131, crop 1600x643
+20:49:42 py: motion 202025 (DSC08197.JPG): motion_blur, straightness 0.75, subject 240, crop 1600x692
+20:49:42 py: motion 202029 (DSC08199.JPG): motion_blur, straightness 0.75, subject 185, crop 1600x327
+20:49:43 py: motion 202031 (DSC08200.JPG): motion_blur, straightness 0.74, subject 125, crop 1600x673
+20:49:43 py: motion 202035 (DSC08202.JPG): motion_blur, straightness 0.81, subject 145, crop 1600x703
+20:49:43 py: motion 202039 (DSC08204.JPG): ordinary, straightness 0.00, subject 262, crop 785x703
+20:49:43 py: motion 202041 (DSC08205.JPG): ordinary, straightness 0.00, subject 246, crop 813x714
+20:49:43 py: motion 202055 (DSC08212.JPG): ordinary, straightness 0.00, subject 110, crop 1600x231
+20:49:43 py: motion 202045 (DSC08207.JPG): ordinary, straightness 0.00, subject 285, crop 901x728
+20:49:44 py: motion 202047 (DSC08208.JPG): ordinary, straightness 0.00, subject 293, crop 952x803
+20:49:44 py: motion 202049 (DSC08209.JPG): ordinary, straightness 0.00, subject 340, crop 1013x789
+20:49:44 py: motion 202043 (DSC08206.JPG): ordinary, straightness 0.00, subject 261, crop 872x732
+20:49:44 py: motion 202053 (DSC08211.JPG): ordinary, straightness 0.00, subject 365, crop 1105x838
+20:49:44 py: motion 202057 (DSC08213.JPG): ordinary, straightness 0.00, subject 145, crop 1600x241
+20:49:44 py: motion 202059 (DSC08214.JPG): ordinary, straightness 0.00, subject 143, crop 1600x250
+20:49:44 py: motion 202051 (DSC08210.JPG): ordinary, straightness 0.00, subject 305, crop 1055x798
+20:49:44 py: motion 202061 (DSC08215.JPG): ordinary, straightness 0.00, subject 198, crop 1600x177
+20:49:44 py: motion 202063 (DSC08216.JPG): ordinary, straightness 0.00, subject 161, crop 1600x181
+20:49:49 py: motion 202065 (DSC08217.JPG): ordinary, straightness 0.00, subject 133, crop 1600x352
+20:49:50 py: motion 202071 (DSC08220.JPG): ordinary, straightness 0.00, subject 136, crop 1600x228
+20:49:51 py: motion 202067 (DSC08218.JPG): ordinary, straightness 0.00, subject 101, crop 1600x471
+20:49:52 py: motion 202069 (DSC08219.JPG): ordinary, straightness 0.00, subject 146, crop 1600x601
+20:49:52 py: motion 202079 (DSC08224.JPG): motion_blur, straightness 0.63, subject 155, crop 1600x862
+20:49:55 py: motion 202073 (DSC08221.JPG): ordinary, straightness 0.00, subject 105, crop 1600x271
+20:49:56 py: motion 202081 (DSC08225.JPG): motion_blur, straightness 0.61, subject 251, crop 1600x633
+20:49:56 py: motion 202075 (DSC08222.JPG): ordinary, straightness 0.00, subject 123, crop 1600x464
+20:49:57 py: motion 202085 (DSC08227.JPG): motion_blur, straightness 0.62, subject 167, crop 1600x941
+20:49:58 py: motion 202091 (DSC08230.JPG): ordinary, straightness 0.00, subject 191, crop 1600x892
+20:49:59 py: motion 202087 (DSC08228.JPG): missed_pan, straightness 0.58, subject 181, crop 1600x715
+20:49:59 py: motion 202093 (DSC08231.JPG): ordinary, straightness 0.00, subject 213, crop 1600x1218
+20:49:59 py: motion 202089 (DSC08229.JPG): ordinary, straightness 0.00, subject 191, crop 1600x895
+20:50:00 py: motion 202083 (DSC08226.JPG): pan, straightness 0.64, subject 196, crop 1600x667
+20:50:09 py: motion 202077 (DSC08223.JPG): motion_blur, straightness 0.63, subject 142, crop 1600x990
+20:50:10 py: motion 202095 (DSC08232.JPG): missed_pan, straightness 0.66, subject 213, crop 1600x1068
+20:50:10 py: motion 202097 (DSC08233.JPG): ordinary, straightness 0.00, subject 209, crop 1600x1133
+20:50:10 py: motion 202099 (DSC08234.JPG): ordinary, straightness 0.00, subject 174, crop 1600x940
+20:50:10 py: motion 202101 (DSC08235.JPG): ordinary, straightness 0.00, subject 221, crop 1600x1296
+20:50:10 py: motion 202103 (DSC08236.JPG): motion_blur, straightness 0.63, subject 182, crop 1600x799
+20:50:11 py: motion 202105 (DSC08237.JPG): motion_blur, straightness 0.65, subject 156, crop 1600x626
+20:50:12 py: motion 202107 (DSC08238.JPG): ordinary, straightness 0.00, subject 264, crop 1310x903
+20:50:13 py: motion 202109 (DSC08239.JPG): ordinary, straightness 0.00, subject 276, crop 1276x916
+20:50:14 py: motion 202111 (DSC08240.JPG): ordinary, straightness 0.00, subject 282, crop 1256x944
+20:50:17 py: motion 202115 (DSC08242.JPG): ordinary, straightness 0.00, subject 278, crop 1440x1025
+20:50:18 py: motion 202113 (DSC08241.JPG): ordinary, straightness 0.00, subject 362, crop 1600x361
+20:50:18 py: motion 202117 (DSC08243.JPG): ordinary, straightness 0.00, subject 252, crop 1463x1035
+20:50:19 py: motion 202119 (DSC08244.JPG): ordinary, straightness 0.00, subject 264, crop 1497x1050
+20:50:22 py: motion 202123 (DSC08246.JPG): ordinary, straightness 0.00, subject 325, crop 1600x601
+20:50:22 py: motion 202121 (DSC08245.JPG): ordinary, straightness 0.00, subject 296, crop 1527x1064
+20:50:23 py: motion 202127 (DSC08248.JPG): ordinary, straightness 0.00, subject 313, crop 1276x799
+20:50:26 py: motion 202135 (DSC08252.JPG): motion_blur, straightness 0.78, subject 191, crop 1600x676
+20:50:26 py: motion 202133 (DSC08251.JPG): ordinary, straightness 0.00, subject 286, crop 1378x814
+20:50:26 py: motion 202131 (DSC08250.JPG): pan, straightness 0.64, subject 361, crop 1320x814
+20:50:26 py: motion 202137 (DSC08253.JPG): missed_pan, straightness 0.82, subject 167, crop 1600x654
+20:50:26 py: motion 202139 (DSC08254.JPG): pan, straightness 0.82, subject 259, crop 1600x692
+20:50:26 py: motion 202125 (DSC08247.JPG): ordinary, straightness 0.00, subject 358, crop 1600x624
+20:50:26 py: motion 202129 (DSC08249.JPG): pan, straightness 0.63, subject 343, crop 1297x818
+20:50:27 py: motion 202141 (DSC08255.JPG): motion_blur, straightness 0.83, subject 152, crop 1600x680
+20:50:28 py: motion 202143 (DSC08256.JPG): motion_blur, straightness 0.85, subject 213, crop 1600x456
+20:50:28 py: motion 202145 (DSC08257.JPG): motion_blur, straightness 0.79, subject 208, crop 1600x480
+20:50:28 py: motion 202147 (DSC08258.JPG): pan, straightness 0.78, subject 156, crop 1600x500
+20:50:29 py: motion 202149 (DSC08259.JPG): motion_blur, straightness 0.79, subject 173, crop 1600x838
+20:50:32 py: motion 202151 (DSC08260.JPG): ordinary, straightness 0.00, subject 174, crop 1600x1229
+20:50:32 py: motion 202153 (DSC08261.JPG): ordinary, straightness 0.00, subject 193, crop 1600x1166
+20:50:34 py: motion 202155 (DSC08262.JPG): motion_blur, straightness 0.65, subject 286, crop 1386x927
+20:50:34 py: motion 202159 (DSC08264.JPG): motion_blur, straightness 0.77, subject 179, crop 1600x904
+20:50:37 py: motion 202167 (DSC08268.JPG): motion_blur, straightness 0.68, subject 157, crop 1600x923
+20:50:37 py: motion 202163 (DSC08266.JPG): motion_blur, straightness 0.71, subject 191, crop 1600x749
+20:50:37 py: motion 202165 (DSC08267.JPG): motion_blur, straightness 0.74, subject 180, crop 1600x714
+20:50:37 py: motion 202157 (DSC08263.JPG): motion_blur, straightness 0.75, subject 232, crop 1553x931
+20:50:38 py: motion 202171 (DSC08270.JPG): pan, straightness 0.78, subject 195, crop 1600x739
+20:50:40 py: motion 202161 (DSC08265.JPG): pan, straightness 0.78, subject 197, crop 1600x887
+20:50:40 py: motion 202173 (DSC08271.JPG): pan, straightness 0.74, subject 202, crop 1600x768
+20:50:40 py: motion 202169 (DSC08269.JPG): motion_blur, straightness 0.77, subject 162, crop 1600x1281
+20:50:41 py: motion 202175 (DSC08272.JPG): missed_pan, straightness 0.76, subject 214, crop 1600x758
+20:50:42 py: motion 202177 (DSC08273.JPG): motion_blur, straightness 0.74, subject 194, crop 1600x844
+20:50:42 py: motion 202179 (DSC08274.JPG): pan, straightness 0.80, subject 132, crop 1600x703
+20:50:44 py: motion 202181 (DSC08275.JPG): motion_blur, straightness 0.78, subject 230, crop 1600x929
+20:50:44 py: motion 202183 (DSC08276.JPG): motion_blur, straightness 0.84, subject 135, crop 1600x732
+20:50:45 py: motion 202185 (DSC08277.JPG): motion_blur, straightness 0.78, subject 135, crop 1600x690
+20:50:45 py: motion 202187 (DSC08278.JPG): motion_blur, straightness 0.85, subject 224, crop 1600x433
+20:50:47 py: motion 202189 (DSC08279.JPG): motion_blur, straightness 0.84, subject 191, crop 1600x439
+20:50:49 py: motion 202191 (DSC08280.JPG): ordinary, straightness 0.00, subject 311, crop 1475x1064
+20:50:51 py: motion 202193 (DSC08281.JPG): ordinary, straightness 0.00, subject 297, crop 1499x1104
+20:50:51 py: motion 202199 (DSC08284.JPG): motion_blur, straightness 0.65, subject 161, crop 1600x1287
+20:50:51 py: motion 202195 (DSC08282.JPG): ordinary, straightness 0.00, subject 267, crop 1509x1149
+20:50:52 py: motion 202201 (DSC08285.JPG): pan, straightness 0.68, subject 138, crop 1600x1211
+20:50:53 py: motion 202203 (DSC08286.JPG): motion_blur, straightness 0.68, subject 179, crop 1600x1177
+20:50:53 py: motion 202205 (DSC08287.JPG): ordinary, straightness 0.00, subject 190, crop 1600x1079
+20:50:53 py: motion 202197 (DSC08283.JPG): ordinary, straightness 0.00, subject 258, crop 1526x1204
+20:50:54 py: motion 202209 (DSC08289.JPG): motion_blur, straightness 0.74, subject 86, crop 1600x888
+20:50:54 py: motion 202213 (DSC08291.JPG): motion_blur, straightness 0.84, subject 154, crop 1600x1031
+20:50:55 py: motion 202215 (DSC08292.JPG): missed_pan, straightness 0.82, subject 124, crop 1600x785
+20:50:56 py: motion 202217 (DSC08293.JPG): missed_pan, straightness 0.82, subject 214, crop 1600x914
+20:50:56 py: motion 202207 (DSC08288.JPG): pan, straightness 0.62, subject 229, crop 1548x934
+20:50:56 py: motion 202211 (DSC08290.JPG): motion_blur, straightness 0.67, subject 367, crop 1600x890
+20:50:57 py: motion 202219 (DSC08294.JPG): missed_pan, straightness 0.85, subject 198, crop 1600x706
+20:50:59 py: motion 202221 (DSC08295.JPG): motion_blur, straightness 0.81, subject 129, crop 1600x711
+20:51:00 py: motion 202223 (DSC08296.JPG): ordinary, straightness 0.00, subject 190, crop 1600x1110
+20:51:00 py: motion 202225 (DSC08297.JPG): ordinary, straightness 0.00, subject 167, crop 1600x1136
+20:51:01 py: motion 202227 (DSC08298.JPG): ordinary, straightness 0.00, subject 163, crop 1600x1151
+20:51:01 py: motion 202229 (DSC08299.JPG): motion_blur, straightness 0.65, subject 160, crop 1600x1314
+20:51:02 py: motion 202233 (DSC08301.JPG): pan, straightness 0.69, subject 145, crop 1600x1237
+20:51:02 py: motion 202231 (DSC08300.JPG): pan, straightness 0.65, subject 189, crop 1600x1289
+20:51:03 py: motion 202237 (DSC08303.JPG): ordinary, straightness 0.00, subject 146, crop 1600x1178
+20:51:03 py: motion 202235 (DSC08302.JPG): motion_blur, straightness 0.61, subject 141, crop 1600x1205
+20:51:03 py: motion 202239 (DSC08304.JPG): motion_blur, straightness 0.82, subject 98, crop 1600x630
+20:51:04 py: motion 202241 (DSC08305.JPG): motion_blur, straightness 0.80, subject 88, crop 1600x730
+20:51:04 py: motion 202245 (DSC08307.JPG): motion_blur, straightness 0.80, subject 91, crop 1600x688
+20:51:04 py: motion 202243 (DSC08306.JPG): motion_blur, straightness 0.79, subject 98, crop 1600x654
+20:51:05 py: motion 202247 (DSC08308.JPG): motion_blur, straightness 0.84, subject 174, crop 1600x447
+20:51:07 py: motion 202249 (DSC08309.JPG): ordinary, straightness 0.00, subject 251, crop 1278x1033
+20:51:08 py: motion 202255 (DSC08312.JPG): motion_blur, straightness 0.68, subject 213, crop 1424x815
+20:51:08 py: motion 202251 (DSC08310.JPG): ordinary, straightness 0.00, subject 203, crop 1344x1088
+20:51:09 py: motion 202257 (DSC08313.JPG): motion_blur, straightness 0.74, subject 156, crop 1529x833
+20:51:09 py: motion 202253 (DSC08311.JPG): ordinary, straightness 0.00, subject 236, crop 1277x798
+20:51:09 py: motion 202259 (DSC08314.JPG): motion_blur, straightness 0.76, subject 157, crop 1600x777
+20:51:10 py: motion 202261 (DSC08315.JPG): motion_blur, straightness 0.80, subject 149, crop 1600x740
+20:51:10 py: motion 202263 (DSC08316.JPG): motion_blur, straightness 0.84, subject 170, crop 1600x703
+20:51:11 py: motion 202267 (DSC08318.JPG): motion_blur, straightness 0.80, subject 205, crop 1600x783
+20:51:11 py: motion 202265 (DSC08317.JPG): motion_blur, straightness 0.79, subject 193, crop 1600x684
+20:51:12 py: motion 202269 (DSC08319.JPG): pan, straightness 0.87, subject 144, crop 1600x668
+20:51:12 py: motion 202271 (DSC08320.JPG): motion_blur, straightness 0.83, subject 125, crop 1600x642
+20:51:12 py: motion 202275 (DSC08322.JPG): pan, straightness 0.80, subject 236, crop 1396x961
+20:51:12 py: motion 202273 (DSC08321.JPG): pan, straightness 0.82, subject 211, crop 1600x763
+20:51:13 py: motion 202277 (DSC08323.JPG): pan, straightness 0.82, subject 235, crop 1600x779
+20:51:14 py: motion 202279 (DSC08324.JPG): motion_blur, straightness 0.85, subject 175, crop 1600x777
+20:51:15 py: motion 202281 (DSC08325.JPG): motion_blur, straightness 0.83, subject 189, crop 1600x726
+20:51:15 py: motion 202283 (DSC08326.JPG): motion_blur, straightness 0.82, subject 236, crop 1600x769
+20:51:16 py: motion 202285 (DSC08327.JPG): pan, straightness 0.77, subject 137, crop 1600x879
+20:51:16 py: motion 202287 (DSC08328.JPG): motion_blur, straightness 0.83, subject 178, crop 1600x823
+20:51:17 py: motion 202291 (DSC08330.JPG): motion_blur, straightness 0.76, subject 150, crop 1600x716
+20:51:17 py: motion 202293 (DSC08331.JPG): motion_blur, straightness 0.82, subject 94, crop 1600x637
+20:51:19 py: motion 202295 (DSC08332.JPG): motion_blur, straightness 0.76, subject 87, crop 1600x574
+20:51:19 py: motion 202289 (DSC08329.JPG): motion_blur, straightness 0.72, subject 129, crop 1600x734
+20:51:19 py: motion 202297 (DSC08333.JPG): motion_blur, straightness 0.81, subject 100, crop 1600x566
+20:51:19 py: motion 202299 (DSC08334.JPG): motion_blur, straightness 0.80, subject 184, crop 1600x593
+20:51:19 py: motion 202301 (DSC08335.JPG): motion_blur, straightness 0.80, subject 209, crop 1600x598
+20:51:20 py: motion 202303 (DSC08336.JPG): motion_blur, straightness 0.81, subject 205, crop 1600x408
+20:51:20 py: motion 202305 (DSC08337.JPG): motion_blur, straightness 0.84, subject 158, crop 1600x343
+20:51:21 py: motion 202307 (DSC08338.JPG): motion_blur, straightness 0.80, subject 137, crop 1600x530
+20:51:33 py: motion 202313 (DSC08341.JPG): ordinary, straightness 0.00, subject 233, crop 1149x724
+20:51:33 py: motion 202309 (DSC08339.JPG): ordinary, straightness 0.00, subject 208, crop 1097x686
+20:51:33 py: motion 202311 (DSC08340.JPG): ordinary, straightness 0.00, subject 210, crop 1126x695
+20:51:33 py: motion 202315 (DSC08342.JPG): ordinary, straightness 0.00, subject 278, crop 1171x757
+20:51:33 py: motion 202317 (DSC08343.JPG): pan, straightness 0.65, subject 166, crop 1600x993
+20:51:33 py: motion 202319 (DSC08344.JPG): pan, straightness 0.67, subject 149, crop 1600x970
+20:51:33 py: motion 202321 (DSC08345.JPG): motion_blur, straightness 0.67, subject 163, crop 1600x979
+20:51:33 py: motion 202323 (DSC08346.JPG): motion_blur, straightness 0.63, subject 138, crop 1600x964
+20:51:34 py: motion 202325 (DSC08347.JPG): ordinary, straightness 0.00, subject 524, crop 1067x1600, centre third (no vehicle at 0.35: strongest vehicle 0.27 (0.05x0.04 of frame))
+20:51:34 py: motion 202327 (DSC08348.JPG): ordinary, straightness 0.00, subject 491, crop 866x577
+20:51:34 py: motion 202329 (DSC08349.JPG): ordinary, straightness 0.00, subject 389, crop 1023x596
+20:51:34 py: motion 202331 (DSC08350.JPG): ordinary, straightness 0.00, subject 293, crop 1142x613
+20:51:34 py: motion 202333 (DSC08351.JPG): ordinary, straightness 0.00, subject 265, crop 1234x637
+20:51:34 py: motion 202335 (DSC08352.JPG): ordinary, straightness 0.00, subject 300, crop 1316x648
+20:51:34 py: motion 202337 (DSC08353.JPG): ordinary, straightness 0.00, subject 189, crop 1301x680
+20:51:34 py: motion 202339 (DSC08354.JPG): ordinary, straightness 0.00, subject 216, crop 671x581
+20:51:34 py: motion 202343 (DSC08356.JPG): ordinary, straightness 0.00, subject 330, crop 1600x1172
+20:51:34 py: motion 202341 (DSC08355.JPG): ordinary, straightness 0.00, subject 300, crop 1600x766
+20:51:34 py: motion 202345 (DSC08357.JPG): ordinary, straightness 0.00, subject 259, crop 1034x1518
+20:51:37 py: motion 202355 (DSC08362.JPG): pan, straightness 0.73, subject 121, crop 1600x869
+20:51:38 py: motion 202351 (DSC08360.JPG): motion_blur, straightness 0.68, subject 205, crop 1518x870
+20:51:38 py: motion 202347 (DSC08358.JPG): ordinary, straightness 0.00, subject 482, crop 1067x1600, centre third (no vehicle at 0.35: strongest vehicle 0.08 (0.04x0.02 of frame))
+20:51:38 py: motion 202349 (DSC08359.JPG): ordinary, straightness 0.00, subject 478, crop 1067x1600, centre third (no vehicle at 0.35: strongest vehicle 0.10 (0.04x0.02 of frame))
+20:51:39 py: motion 202361 (DSC08365.JPG): pan, straightness 0.81, subject 85, crop 1600x701
+20:51:39 py: motion 202363 (DSC08366.JPG): motion_blur, straightness 0.77, subject 79, crop 1600x668
+20:51:39 py: motion 202371 (DSC08370.JPG): motion_blur, straightness 0.75, subject 181, crop 1268x1020
+20:51:39 py: motion 202367 (DSC08368.JPG): motion_blur, straightness 0.76, subject 65, crop 1600x585
+20:51:39 py: motion 202357 (DSC08363.JPG): ordinary, straightness 0.00, subject 109, crop 1600x775
+20:51:39 py: motion 202365 (DSC08367.JPG): pan, straightness 0.79, subject 74, crop 1600x584
+20:51:39 py: motion 202373 (DSC08371.JPG): missed_pan, straightness 0.76, subject 171, crop 1600x869
+20:51:40 py: motion 202369 (DSC08369.JPG): pan, straightness 0.75, subject 139, crop 1600x590
+20:51:40 py: motion 202375 (DSC08372.JPG): missed_pan, straightness 0.73, subject 132, crop 1600x660
+20:51:40 py: motion 202353 (DSC08361.JPG): motion_blur, straightness 0.75, subject 147, crop 1562x897
+20:51:40 py: motion 202359 (DSC08364.JPG): ordinary, straightness 0.00, subject 195, crop 1600x850
+20:51:41 py: motion 202377 (DSC08373.JPG): motion_blur, straightness 0.78, subject 178, crop 1600x582
+20:51:42 py: motion 202379 (DSC08374.JPG): motion_blur, straightness 0.67, subject 135, crop 1600x625
+20:51:43 py: motion 202381 (DSC08375.JPG): motion_blur, straightness 0.80, subject 144, crop 1600x615
+20:51:43 py: motion 202383 (DSC08376.JPG): motion_blur, straightness 0.78, subject 146, crop 1600x651
+20:51:44 py: motion 202385 (DSC08377.JPG): motion_blur, straightness 0.73, subject 137, crop 1600x588
+20:51:44 py: motion 202387 (DSC08378.JPG): motion_blur, straightness 0.76, subject 159, crop 1600x579
+20:51:44 py: motion 202389 (DSC08379.JPG): motion_blur, straightness 0.77, subject 166, crop 1600x571
+20:51:44 py: motion 202391 (DSC08380.JPG): missed_pan, straightness 0.85, subject 115, crop 1600x603
+20:51:45 py: motion 202393 (DSC08381.JPG): motion_blur, straightness 0.83, subject 113, crop 1600x600
+20:51:45 py: motion 202395 (DSC08382.JPG): motion_blur, straightness 0.81, subject 102, crop 1600x917
+20:51:46 py: motion 202401 (DSC08385.JPG): ordinary, straightness 0.00, subject 91, crop 1600x1166
+20:51:46 py: motion 202399 (DSC08384.JPG): ordinary, straightness 0.00, subject 93, crop 1600x1199
+20:51:46 py: motion 202397 (DSC08383.JPG): motion_blur, straightness 0.80, subject 137, crop 1600x1010
+20:51:46 py: motion 202403 (DSC08386.JPG): motion_blur, straightness 0.69, subject 77, crop 1600x1081
+20:51:46 py: motion 202405 (DSC08387.JPG): motion_blur, straightness 0.77, subject 67, crop 1600x941
+20:51:47 py: motion 202407 (DSC08388.JPG): motion_blur, straightness 0.80, subject 273, crop 1600x563
+20:51:47 py: motion 202409 (DSC08389.JPG): pan, straightness 0.82, subject 252, crop 1600x607
+20:51:48 py: motion 202413 (DSC08391.JPG): motion_blur, straightness 0.84, subject 331, crop 1600x541
+20:51:49 py: motion 202417 (DSC08393.JPG): ordinary, straightness 0.00, subject 393, crop 1131x750
+20:51:49 py: motion 202411 (DSC08390.JPG): pan, straightness 0.85, subject 154, crop 1600x568
+20:51:50 py: motion 202419 (DSC08394.JPG): ordinary, straightness 0.00, subject 365, crop 1235x768
+20:51:50 py: motion 202415 (DSC08392.JPG): motion_blur, straightness 0.90, subject 148, crop 1600x559
+20:51:50 py: motion 202421 (DSC08395.JPG): ordinary, straightness 0.00, subject 347, crop 1150x771
+20:51:51 py: motion 202423 (DSC08396.JPG): ordinary, straightness 0.00, subject 330, crop 1160x789
+20:51:51 py: motion 202425 (DSC08397.JPG): ordinary, straightness 0.00, subject 294, crop 1181x815
+20:51:52 py: motion 202429 (DSC08399.JPG): motion_blur, straightness 0.71, subject 186, crop 1600x902
+20:51:52 py: motion 202431 (DSC08400.JPG): motion_blur, straightness 0.69, subject 214, crop 1600x842
+20:51:53 py: motion 202427 (DSC08398.JPG): ordinary, straightness 0.00, subject 370, crop 1192x832
+20:51:53 py: motion 202433 (DSC08401.JPG): missed_pan, straightness 0.72, subject 176, crop 1600x730
+20:51:53 py: motion 202435 (DSC08402.JPG): motion_blur, straightness 0.75, subject 205, crop 1600x596
+20:51:53 py: motion 202437 (DSC08403.JPG): motion_blur, straightness 0.74, subject 282, crop 1600x481
+20:51:54 py: motion 202439 (DSC08404.JPG): motion_blur, straightness 0.78, subject 203, crop 1600x432
+20:51:54 py: motion 202441 (DSC08405.JPG): pan, straightness 0.73, subject 202, crop 1423x707
+20:51:55 py: motion 202443 (DSC08406.JPG): motion_blur, straightness 0.68, subject 217, crop 1578x727
+20:51:55 py: motion 202445 (DSC08407.JPG): motion_blur, straightness 0.70, subject 216, crop 1600x667
+20:51:56 py: motion 202447 (DSC08408.JPG): motion_blur, straightness 0.74, subject 207, crop 1600x660
+20:51:57 py: motion 202449 (DSC08409.JPG): motion_blur, straightness 0.75, subject 219, crop 1600x608
+20:51:57 py: motion 202451 (DSC08410.JPG): pan, straightness 0.78, subject 210, crop 1600x585
+20:51:58 py: motion 202453 (DSC08411.JPG): motion_blur, straightness 0.72, subject 193, crop 1600x595
+20:51:59 py: motion 202455 (DSC08412.JPG): motion_blur, straightness 0.66, subject 159, crop 1600x539
+20:52:00 py: motion 202457 (DSC08413.JPG): ordinary, straightness 0.00, subject 387, crop 960x525
+20:52:00 py: motion 202459 (DSC08414.JPG): ordinary, straightness 0.00, subject 277, crop 1025x542
+20:52:01 py: motion 202461 (DSC08415.JPG): ordinary, straightness 0.00, subject 275, crop 1088x556
+20:52:02 py: motion 202463 (DSC08416.JPG): ordinary, straightness 0.00, subject 282, crop 1159x574
+20:52:02 py: motion 202465 (DSC08417.JPG): ordinary, straightness 0.00, subject 256, crop 1235x593
+20:52:03 py: motion 202467 (DSC08418.JPG): motion_blur, straightness 0.62, subject 484, crop 1600x903
+20:52:03 py: motion 202469 (DSC08419.JPG): motion_blur, straightness 0.60, subject 481, crop 1600x850
+20:52:04 py: motion 202471 (DSC08420.JPG): motion_blur, straightness 0.60, subject 504, crop 1600x781
+20:52:04 py: motion 202473 (DSC08421.JPG): motion_blur, straightness 0.63, subject 350, crop 1600x753
+20:52:05 py: motion 202475 (DSC08422.JPG): motion_blur, straightness 0.62, subject 400, crop 1600x716
+20:52:05 py: motion 202477 (DSC08423.JPG): motion_blur, straightness 0.61, subject 418, crop 1600x679
+20:52:06 py: motion 202479 (DSC08424.JPG): ordinary, straightness 0.00, subject 453, crop 496x329
+20:52:07 py: motion 202481 (DSC08425.JPG): ordinary, straightness 0.00, subject 401, crop 515x336
+20:52:07 py: motion 202483 (DSC08426.JPG): ordinary, straightness 0.00, subject 363, crop 526x336
+20:52:08 py: motion 202485 (DSC08427.JPG): ordinary, straightness 0.00, subject 403, crop 560x358
+20:52:09 py: motion 202487 (DSC08428.JPG): ordinary, straightness 0.00, subject 360, crop 594x361
+20:52:09 py: motion 202489 (DSC08429.JPG): ordinary, straightness 0.00, subject 478, crop 812x466
+20:52:10 py: motion 202491 (DSC08430.JPG): ordinary, straightness 0.00, subject 518, crop 861x500
+20:52:11 py: motion 202493 (DSC08431.JPG): ordinary, straightness 0.00, subject 490, crop 915x524
+20:52:11 py: motion 202495 (DSC08432.JPG): ordinary, straightness 0.00, subject 420, crop 971x546
+20:52:12 py: motion 202497 (DSC08433.JPG): ordinary, straightness 0.00, subject 386, crop 1169x677
+20:52:12 py: motion 202499 (DSC08434.JPG): ordinary, straightness 0.00, subject 287, crop 1243x727
+20:52:12 py: motion 202501 (DSC08435.JPG): ordinary, straightness 0.00, subject 304, crop 1335x777
+20:52:12 py: motion 202503 (DSC08436.JPG): ordinary, straightness 0.00, subject 341, crop 1423x801
+20:52:13 py: motion 202505 (DSC08437.JPG): ordinary, straightness 0.00, subject 277, crop 1562x848
+20:52:13 py: motion 202507 (DSC08438.JPG): ordinary, straightness 0.00, subject 253, crop 1289x907
+20:52:14 py: motion 202509 (DSC08439.JPG): ordinary, straightness 0.00, subject 436, crop 937x518
+20:52:14 py: motion 202511 (DSC08440.JPG): ordinary, straightness 0.00, subject 342, crop 868x513
+20:52:14 py: motion 202513 (DSC08441.JPG): ordinary, straightness 0.00, subject 365, crop 909x536
+20:52:15 py: motion 202515 (DSC08442.JPG): ordinary, straightness 0.00, subject 421, crop 921x543
+20:52:15 py: motion 202517 (DSC08443.JPG): ordinary, straightness 0.00, subject 440, crop 948x542
+20:52:16 py: motion 202519 (DSC08444.JPG): pan, straightness 0.67, subject 217, crop 1139x630
+20:52:17 py: motion 202521 (DSC08445.JPG): pan, straightness 0.70, subject 186, crop 1599x612
+20:52:17 py: motion 202523 (DSC08446.JPG): pan, straightness 0.72, subject 202, crop 1328x606
+20:52:18 py: motion 202525 (DSC08447.JPG): motion_blur, straightness 0.70, subject 361, crop 1509x579
+20:52:19 py: motion 202527 (DSC08448.JPG): pan, straightness 0.71, subject 204, crop 1600x723
+20:52:19 py: motion 202529 (DSC08449.JPG): motion_blur, straightness 0.69, subject 309, crop 1273x474
+20:52:20 py: motion 202531 (DSC08450.JPG): motion_blur, straightness 0.71, subject 209, crop 1600x438
+20:52:20 py: motion 202533 (DSC08451.JPG): ordinary, straightness 0.00, subject 254, crop 1045x732
+20:52:21 py: motion 202535 (DSC08452.JPG): ordinary, straightness 0.00, subject 225, crop 1069x737
+20:52:21 py: motion 202537 (DSC08453.JPG): ordinary, straightness 0.00, subject 249, crop 1120x758
+20:52:22 py: motion 202539 (DSC08454.JPG): ordinary, straightness 0.00, subject 270, crop 1176x798
+20:52:22 py: motion 202541 (DSC08455.JPG): ordinary, straightness 0.00, subject 257, crop 1249x815
+20:52:23 py: motion 202545 (DSC08457.JPG): ordinary, straightness 0.00, subject 169, crop 1408x906
+20:52:23 py: motion 202547 (DSC08458.JPG): ordinary, straightness 0.00, subject 275, crop 1527x932
+20:52:24 py: motion 202549 (DSC08459.JPG): ordinary, straightness 0.00, subject 229, crop 1600x958
+20:52:24 py: motion 202543 (DSC08456.JPG): ordinary, straightness 0.00, subject 315, crop 1336x855
+20:52:25 py: motion 202551 (DSC08460.JPG): ordinary, straightness 0.00, subject 253, crop 1015x683
+20:52:25 py: motion 202553 (DSC08461.JPG): ordinary, straightness 0.00, subject 381, crop 804x901
+20:52:26 py: motion 202555 (DSC08462.JPG): ordinary, straightness 0.00, subject 377, crop 803x899
+20:52:27 py: motion 202557 (DSC08463.JPG): ordinary, straightness 0.00, subject 374, crop 808x914
+20:52:28 py: motion 202559 (DSC08464.JPG): ordinary, straightness 0.00, subject 451, crop 1178x1010
+20:52:29 py: motion 202561 (DSC08465.JPG): ordinary, straightness 0.00, subject 485, crop 1365x1022
+20:52:30 py: motion 202563 (DSC08466.JPG): ordinary, straightness 0.00, subject 365, crop 1585x1055
+20:52:30 py: motion 202565 (DSC08467.JPG): ordinary, straightness 0.00, subject 332, crop 1600x954
+20:52:31 py: motion 202567 (DSC08468.JPG): motion_blur, straightness 0.58, subject 576, crop 1600x858
+20:52:31 py: motion 202571 (DSC08470.JPG): ordinary, straightness 0.00, subject 469, crop 698x522
+20:52:32 py: motion 202573 (DSC08471.JPG): ordinary, straightness 0.00, subject 366, crop 687x536
+20:52:32 py: motion 202569 (DSC08469.JPG): pan, straightness 0.57, subject 666, crop 1600x797
+20:52:33 py: motion 202575 (DSC08472.JPG): ordinary, straightness 0.00, subject 387, crop 672x548
+20:52:33 py: motion 202577 (DSC08473.JPG): ordinary, straightness 0.00, subject 352, crop 665x569
+20:52:33 py: motion 202579 (DSC08474.JPG): ordinary, straightness 0.00, subject 381, crop 653x576
+20:52:34 py: motion 202581 (DSC08475.JPG): ordinary, straightness 0.00, subject 381, crop 668x581
+20:52:34 py: motion 202583 (DSC08476.JPG): ordinary, straightness 0.00, subject 343, crop 1300x865
+20:52:35 py: motion 202585 (DSC08477.JPG): ordinary, straightness 0.00, subject 382, crop 1386x897
+20:52:35 py: motion 202587 (DSC08478.JPG): ordinary, straightness 0.00, subject 516, crop 616x601
+20:52:36 py: motion 202589 (DSC08479.JPG): ordinary, straightness 0.00, subject 402, crop 591x329
+20:52:37 py: motion 202591 (DSC08480.JPG): ordinary, straightness 0.00, subject 574, crop 594x582
+20:52:37 py: motion 202593 (DSC08481.JPG): ordinary, straightness 0.00, subject 552, crop 485x331
+20:52:37 py: motion 202595 (DSC08482.JPG): ordinary, straightness 0.00, subject 561, crop 506x332
+20:52:38 py: motion 202597 (DSC08483.JPG): ordinary, straightness 0.00, subject 550, crop 510x326
+20:52:39 py: motion 202599 (DSC08484.JPG): ordinary, straightness 0.00, subject 550, crop 535x333
+20:52:39 py: motion 202601 (DSC08485.JPG): motion_blur, straightness 0.65, subject 178, crop 1600x1033
+20:52:39 py: motion 202603 (DSC08486.JPG): missed_pan, straightness 0.69, subject 234, crop 1600x1034
+20:52:40 py: motion 202605 (DSC08487.JPG): missed_pan, straightness 0.69, subject 211, crop 1600x1027
+20:52:40 py: motion 202609 (DSC08489.JPG): motion_blur, straightness 0.67, subject 254, crop 1600x975
+20:52:41 py: motion 202611 (DSC08490.JPG): motion_blur, straightness 0.62, subject 240, crop 1600x866
+20:52:41 py: motion 202613 (DSC08491.JPG): motion_blur, straightness 0.63, subject 245, crop 1600x776
+20:52:42 py: motion 202615 (DSC08492.JPG): missed_pan, straightness 0.62, subject 247, crop 1600x709
+20:52:42 py: motion 202607 (DSC08488.JPG): motion_blur, straightness 0.66, subject 253, crop 1600x1032
+20:52:42 py: motion 202627 (DSC08498.JPG): motion_blur, straightness 0.65, subject 210, crop 1600x1103
+20:52:42 py: motion 202617 (DSC08493.JPG): missed_pan, straightness 0.65, subject 252, crop 1600x688
+20:52:43 py: motion 202629 (DSC08499.JPG): pan, straightness 0.66, subject 182, crop 1600x696
+20:52:44 py: motion 202631 (DSC08500.JPG): motion_blur, straightness 0.66, subject 178, crop 1600x648
+20:52:44 py: motion 202633 (DSC08501.JPG): missed_pan, straightness 0.69, subject 159, crop 1600x589
+20:52:44 py: motion 202635 (DSC08502.JPG): missed_pan, straightness 0.67, subject 192, crop 1600x687
+20:52:45 py: motion 202637 (DSC08503.JPG): motion_blur, straightness 0.62, subject 187, crop 1600x827
+20:52:46 py: motion 202639 (DSC08504.JPG): pan, straightness 0.57, subject 219, crop 1600x552
+20:52:46 py: motion 202641 (DSC08505.JPG): motion_blur, straightness 0.65, subject 136, crop 1600x659
+20:52:47 py: motion 202643 (DSC08506.JPG): missed_pan, straightness 0.62, subject 160, crop 1600x625
+20:52:47 py: motion 202645 (DSC08507.JPG): pan, straightness 0.68, subject 159, crop 1600x820
+20:52:48 py: motion 202647 (DSC08508.JPG): ordinary, straightness 0.00, subject 183, crop 1600x1231
+20:52:48 py: motion 202649 (DSC08509.JPG): ordinary, straightness 0.00, subject 193, crop 1600x1188
+20:52:49 py: motion 202651 (DSC08510.JPG): ordinary, straightness 0.00, subject 210, crop 1600x1134
+20:52:49 py: motion 202653 (DSC08511.JPG): ordinary, straightness 0.00, subject 204, crop 1600x1110
+20:52:49 py: motion 202655 (DSC08512.JPG): ordinary, straightness 0.00, subject 223, crop 1600x1096
+20:52:50 py: motion 202657 (DSC08513.JPG): ordinary, straightness 0.00, subject 169, crop 1600x1474
+20:52:51 py: motion 202659 (DSC08514.JPG): missed_pan, straightness 0.59, subject 195, crop 1600x1255
+20:52:51 py: motion 202661 (DSC08515.JPG): missed_pan, straightness 0.60, subject 152, crop 1600x1378
+20:52:51 py: motion 202663 (DSC08516.JPG): motion_blur, straightness 0.61, subject 193, crop 1600x1476
+20:52:51 py: motion 202665 (DSC08517.JPG): motion_blur, straightness 0.65, subject 219, crop 1600x668
+20:52:52 py: motion 202667 (DSC08518.JPG): motion_blur, straightness 0.60, subject 202, crop 1600x724
+20:52:53 py: motion 202669 (DSC08519.JPG): ordinary, straightness 0.00, subject 237, crop 1600x892
+20:52:53 py: motion 202671 (DSC08520.JPG): ordinary, straightness 0.00, subject 160, crop 1600x605
+20:52:53 py: motion 202673 (DSC08521.JPG): ordinary, straightness 0.00, subject 213, crop 1600x680
+20:52:54 py: motion 202675 (DSC08522.JPG): ordinary, straightness 0.00, subject 236, crop 1493x1361
+20:52:55 py: motion 202677 (DSC08523.JPG): ordinary, straightness 0.00, subject 211, crop 1582x1386
+20:52:55 py: motion 202679 (DSC08524.JPG): ordinary, straightness 0.00, subject 208, crop 1600x1471
+20:52:56 py: motion 202681 (DSC08525.JPG): ordinary, straightness 0.00, subject 217, crop 1600x1322
+20:52:56 py: motion 202683 (DSC08526.JPG): ordinary, straightness 0.00, subject 222, crop 1600x1272
+20:52:57 py: motion 202685 (DSC08527.JPG): ordinary, straightness 0.00, subject 232, crop 1600x1263
+20:52:57 py: motion 202687 (DSC08528.JPG): ordinary, straightness 0.00, subject 241, crop 1600x1251
+20:52:58 py: motion 202689 (DSC08529.JPG): ordinary, straightness 0.00, subject 233, crop 1600x1250
+20:52:58 py: motion 202691 (DSC08530.JPG): ordinary, straightness 0.00, subject 237, crop 1600x1210
+20:52:59 py: motion 202693 (DSC08531.JPG): ordinary, straightness 0.00, subject 233, crop 1600x1189
+20:52:59 py: motion 202695 (DSC08532.JPG): ordinary, straightness 0.00, subject 259, crop 1600x1175
+20:53:01 py: motion 202697 (DSC08533.JPG): ordinary, straightness 0.00, subject 226, crop 975x735
+20:53:01 py: motion 202699 (DSC08534.JPG): ordinary, straightness 0.00, subject 230, crop 1000x720
+20:53:06 py: motion 202701 (DSC08535.JPG): ordinary, straightness 0.00, subject 221, crop 1040x708
+20:53:06 py: motion 202703 (DSC08536.JPG): ordinary, straightness 0.00, subject 288, crop 1343x661
+20:53:06 py: motion 202705 (DSC08537.JPG): ordinary, straightness 0.00, subject 212, crop 1600x1005
+20:53:06 py: motion 202707 (DSC08538.JPG): ordinary, straightness 0.00, subject 263, crop 1600x916
+20:53:06 py: motion 202709 (DSC08539.JPG): missed_pan, straightness 0.63, subject 318, crop 1600x878
+20:53:06 py: motion 202711 (DSC08540.JPG): motion_blur, straightness 0.66, subject 322, crop 1600x881
+20:53:06 py: motion 202715 (DSC08542.JPG): ordinary, straightness 0.00, subject 179, crop 1600x669
+20:53:06 py: motion 202713 (DSC08541.JPG): motion_blur, straightness 0.65, subject 339, crop 1600x910
+20:53:06 py: motion 202717 (DSC08543.JPG): ordinary, straightness 0.00, subject 164, crop 1600x662
+20:53:07 py: motion 202719 (DSC08544.JPG): ordinary, straightness 0.00, subject 262, crop 1445x1173
+20:53:07 py: motion 202721 (DSC08545.JPG): ordinary, straightness 0.00, subject 248, crop 1429x1203
+20:53:08 py: motion 202723 (DSC08546.JPG): ordinary, straightness 0.00, subject 263, crop 1411x1234
+20:53:08 py: motion 202725 (DSC08547.JPG): ordinary, straightness 0.00, subject 244, crop 1384x1256
+20:53:11 py: motion 202729 (DSC08549.JPG): ordinary, straightness 0.00, subject 208, crop 1600x1193
+20:53:11 py: motion 202735 (DSC08552.JPG): pan, straightness 0.62, subject 195, crop 1600x607
+20:53:11 py: motion 202739 (DSC08554.JPG): motion_blur, straightness 0.84, subject 126, crop 1600x834
+20:53:11 py: motion 202727 (DSC08548.JPG): ordinary, straightness 0.00, subject 239, crop 1366x1255
+20:53:11 py: motion 202737 (DSC08553.JPG): ordinary, straightness 0.00, subject 196, crop 1600x594
+20:53:11 py: motion 202753 (DSC08561.JPG): motion_blur, straightness 0.88, subject 244, crop 1600x556
+20:53:11 py: motion 202755 (DSC08562.JPG): motion_blur, straightness 0.84, subject 247, crop 1600x521
+20:53:11 py: motion 202743 (DSC08556.JPG): motion_blur, straightness 0.82, subject 123, crop 1600x883
+20:53:11 py: motion 202733 (DSC08551.JPG): motion_blur, straightness 0.64, subject 322, crop 1600x611
+20:53:11 py: motion 202731 (DSC08550.JPG): ordinary, straightness 0.00, subject 224, crop 1600x1182
+20:53:11 py: motion 202751 (DSC08560.JPG): motion_blur, straightness 0.83, subject 178, crop 1600x618
+20:53:11 py: motion 202745 (DSC08557.JPG): motion_blur, straightness 0.85, subject 109, crop 1600x805
+20:53:11 py: motion 202741 (DSC08555.JPG): motion_blur, straightness 0.81, subject 112, crop 1600x840
+20:53:12 py: motion 202747 (DSC08558.JPG): motion_blur, straightness 0.90, subject 101, crop 1600x767
+20:53:12 py: motion 202749 (DSC08559.JPG): motion_blur, straightness 0.84, subject 261, crop 1600x536
+20:53:12 py: motion 202757 (DSC08563.JPG): motion_blur, straightness 0.81, subject 184, crop 1600x599
+20:53:12 py: motion 202759 (DSC08564.JPG): motion_blur, straightness 0.81, subject 195, crop 1591x810
+20:53:13 py: motion 202771 (DSC08570.JPG): motion_blur, straightness 0.88, subject 178, crop 1600x605
+20:53:13 py: motion 202769 (DSC08569.JPG): motion_blur, straightness 0.89, subject 168, crop 1600x660
+20:53:13 py: motion 202761 (DSC08565.JPG): motion_blur, straightness 0.86, subject 175, crop 1600x794
+20:53:13 py: motion 202779 (DSC08574.JPG): motion_blur, straightness 0.83, subject 196, crop 1547x509
+20:53:13 py: motion 202777 (DSC08573.JPG): motion_blur, straightness 0.85, subject 208, crop 1600x531
+20:53:13 py: motion 202773 (DSC08571.JPG): motion_blur, straightness 0.88, subject 197, crop 1600x569
+20:53:13 py: motion 202775 (DSC08572.JPG): motion_blur, straightness 0.87, subject 232, crop 1600x544
+20:53:13 py: motion 202763 (DSC08566.JPG): motion_blur, straightness 0.83, subject 155, crop 1600x794
+20:53:13 py: motion 202767 (DSC08568.JPG): motion_blur, straightness 0.87, subject 176, crop 1600x948
+20:53:13 py: motion 202781 (DSC08575.JPG): motion_blur, straightness 0.81, subject 133, crop 1417x571
+20:53:13 py: motion 202783 (DSC08576.JPG): motion_blur, straightness 0.84, subject 118, crop 1600x805
+20:53:13 py: motion 202765 (DSC08567.JPG): motion_blur, straightness 0.83, subject 163, crop 1600x892
+20:53:13 py: motion 202785 (DSC08577.JPG): motion_blur, straightness 0.81, subject 127, crop 1600x837
+20:53:13 py: motion 202787 (DSC08578.JPG): motion_blur, straightness 0.84, subject 103, crop 1600x908
+20:53:14 py: motion 202799 (DSC08584.JPG): motion_blur, straightness 0.87, subject 170, crop 1600x640
+20:53:14 py: motion 202801 (DSC08585.JPG): motion_blur, straightness 0.83, subject 192, crop 1600x584
+20:53:14 py: motion 202789 (DSC08579.JPG): motion_blur, straightness 0.91, subject 82, crop 1600x787
+20:53:14 py: motion 202797 (DSC08583.JPG): motion_blur, straightness 0.87, subject 132, crop 1600x680
+20:53:14 py: motion 202805 (DSC08587.JPG): pan, straightness 0.83, subject 200, crop 1600x578
+20:53:14 py: motion 202793 (DSC08581.JPG): motion_blur, straightness 0.87, subject 175, crop 1600x778
+20:53:14 py: motion 202803 (DSC08586.JPG): motion_blur, straightness 0.84, subject 131, crop 1600x679
+20:53:14 py: motion 202791 (DSC08580.JPG): motion_blur, straightness 0.93, subject 126, crop 1600x1348
+20:53:14 py: motion 202811 (DSC08590.JPG): motion_blur, straightness 0.88, subject 86, crop 1600x850
+20:53:14 py: motion 202813 (DSC08591.JPG): motion_blur, straightness 0.92, subject 104, crop 1600x790
+20:53:14 py: motion 202795 (DSC08582.JPG): motion_blur, straightness 0.86, subject 178, crop 1600x739
+20:53:14 py: motion 202807 (DSC08588.JPG): motion_blur, straightness 0.85, subject 178, crop 1600x882
+20:53:14 py: motion 202809 (DSC08589.JPG): motion_blur, straightness 0.83, subject 120, crop 1600x933
+20:53:14 py: motion 202815 (DSC08592.JPG): motion_blur, straightness 0.81, subject 148, crop 1600x981
+20:53:15 py: motion 202819 (DSC08594.JPG): motion_blur, straightness 0.80, subject 157, crop 1600x1156
+20:53:15 py: motion 202817 (DSC08593.JPG): motion_blur, straightness 0.81, subject 146, crop 1600x1092
+20:53:15 py: motion 202821 (DSC08595.JPG): motion_blur, straightness 0.83, subject 162, crop 1600x1126
+20:53:15 py: motion 202829 (DSC08599.JPG): motion_blur, straightness 0.79, subject 125, crop 1600x704
+20:53:15 py: motion 202833 (DSC08601.JPG): motion_blur, straightness 0.75, subject 121, crop 1600x669
+20:53:15 py: motion 202825 (DSC08597.JPG): motion_blur, straightness 0.76, subject 151, crop 1600x922
+20:53:15 py: motion 202823 (DSC08596.JPG): motion_blur, straightness 0.79, subject 182, crop 1600x1027
+20:53:15 py: motion 202831 (DSC08600.JPG): motion_blur, straightness 0.77, subject 164, crop 1600x523
+20:53:15 py: motion 202827 (DSC08598.JPG): motion_blur, straightness 0.79, subject 142, crop 1600x511
+20:53:15 py: motion 202835 (DSC08602.JPG): motion_blur, straightness 0.75, subject 151, crop 1600x609
+20:53:15 py: motion 202837 (DSC08603.JPG): pan, straightness 0.78, subject 157, crop 1600x731
+20:53:15 py: motion 202839 (DSC08604.JPG): pan, straightness 0.72, subject 167, crop 1600x514
+20:53:15 py: motion 202841 (DSC08605.JPG): motion_blur, straightness 0.87, subject 129, crop 1600x839
+20:53:15 py: motion 202843 (DSC08606.JPG): motion_blur, straightness 0.89, subject 107, crop 1600x1066
+20:53:15 py: motion 202845 (DSC08607.JPG): motion_blur, straightness 0.87, subject 89, crop 1600x1120
+20:53:16 py: motion 202847 (DSC08608.JPG): motion_blur, straightness 0.87, subject 104, crop 1600x1069
+20:53:16 py: motion 202857 (DSC08613.JPG): motion_blur, straightness 0.76, subject 283, crop 1600x668
+20:53:16 py: motion 202859 (DSC08614.JPG): motion_blur, straightness 0.75, subject 185, crop 1600x657
+20:53:16 py: motion 202851 (DSC08610.JPG): motion_blur, straightness 0.92, subject 132, crop 1600x883
+20:53:16 py: motion 202861 (DSC08615.JPG): motion_blur, straightness 0.71, subject 188, crop 1600x658
+20:53:16 py: motion 202865 (DSC08617.JPG): motion_blur, straightness 0.79, subject 174, crop 1600x676
+20:53:16 py: motion 202849 (DSC08609.JPG): motion_blur, straightness 0.93, subject 104, crop 1600x888
+20:53:16 py: motion 202863 (DSC08616.JPG): motion_blur, straightness 0.79, subject 208, crop 1600x689
+20:53:16 py: motion 202873 (DSC08621.JPG): motion_blur, straightness 0.75, subject 153, crop 1314x771
+20:53:16 py: motion 202869 (DSC08619.JPG): motion_blur, straightness 0.77, subject 183, crop 1600x644
+20:53:16 py: motion 202867 (DSC08618.JPG): motion_blur, straightness 0.81, subject 186, crop 1600x761
+20:53:16 py: motion 202871 (DSC08620.JPG): motion_blur, straightness 0.76, subject 143, crop 1600x706
+20:53:16 py: motion 202875 (DSC08622.JPG): motion_blur, straightness 0.84, subject 104, crop 1600x933
+20:53:16 py: motion 202877 (DSC08623.JPG): motion_blur, straightness 0.89, subject 130, crop 1600x1028
+20:53:17 py: motion 202879 (DSC08624.JPG): motion_blur, straightness 0.92, subject 84, crop 1600x1079
+20:53:17 py: motion 202883 (DSC08626.JPG): motion_blur, straightness 0.87, subject 139, crop 1600x676
+20:53:17 py: motion 202885 (DSC08627.JPG): motion_blur, straightness 0.87, subject 172, crop 1600x718
+20:53:17 py: motion 202891 (DSC08630.JPG): motion_blur, straightness 0.84, subject 164, crop 1600x722
+20:53:17 py: motion 202893 (DSC08631.JPG): motion_blur, straightness 0.83, subject 122, crop 1600x594
+20:53:17 py: motion 202889 (DSC08629.JPG): motion_blur, straightness 0.85, subject 164, crop 1600x702
+20:53:17 py: motion 202887 (DSC08628.JPG): motion_blur, straightness 0.83, subject 179, crop 1600x945
+20:53:17 py: motion 202895 (DSC08632.JPG): motion_blur, straightness 0.81, subject 191, crop 1600x676
+20:53:17 py: motion 202903 (DSC08636.JPG): motion_blur, straightness 0.63, subject 140, crop 1600x1196
+20:53:17 py: motion 202901 (DSC08635.JPG): motion_blur, straightness 0.64, subject 146, crop 1600x1133
+20:53:17 py: motion 202899 (DSC08634.JPG): ordinary, straightness 0.00, subject 141, crop 1600x1143
+20:53:17 py: motion 202897 (DSC08633.JPG): motion_blur, straightness 0.66, subject 126, crop 1600x1162
+20:53:18 py: motion 202905 (DSC08637.JPG): motion_blur, straightness 0.63, subject 171, crop 1600x1361
+20:53:18 py: motion 202907 (DSC08638.JPG): motion_blur, straightness 0.58, subject 177, crop 1600x1513
+20:53:18 py: motion 202909 (DSC08639.JPG): ordinary, straightness 0.00, subject 165, crop 1600x1386
+20:53:18 py: motion 202917 (DSC08647.JPG): motion_blur, straightness 0.79, subject 186, crop 1600x702
+20:53:18 py: motion 202921 (DSC08649.JPG): motion_blur, straightness 0.83, subject 112, crop 1600x652
+20:53:18 py: motion 202911 (DSC08640.JPG): motion_blur, straightness 0.78, subject 117, crop 1311x1600
+20:53:18 py: motion 202923 (DSC08650.JPG): motion_blur, straightness 0.83, subject 138, crop 1600x642
+20:53:18 py: motion 202919 (DSC08648.JPG): motion_blur, straightness 0.83, subject 177, crop 1600x677
+20:53:18 py: motion 202925 (DSC08651.JPG): motion_blur, straightness 0.86, subject 187, crop 1600x575
+20:53:18 py: motion 202913 (DSC08641.JPG): pan, straightness 0.66, subject 149, crop 1600x1131
+20:53:18 py: motion 202915 (DSC08642.JPG): motion_blur, straightness 0.65, subject 134, crop 1600x1144
+20:53:18 py: motion 202927 (DSC08652.JPG): motion_blur, straightness 0.88, subject 160, crop 1600x572
+20:53:18 py: motion 202931 (DSC08654.JPG): motion_blur, straightness 0.85, subject 201, crop 1600x564
+20:53:18 py: motion 202933 (DSC08655.JPG): motion_blur, straightness 0.79, subject 126, crop 1600x487
+20:53:19 py: motion 202935 (DSC08656.JPG): missed_pan, straightness 0.79, subject 168, crop 1600x555
+20:53:19 py: motion 202929 (DSC08653.JPG): motion_blur, straightness 0.86, subject 165, crop 1600x567
+20:53:19 py: motion 202937 (DSC08657.JPG): missed_pan, straightness 0.79, subject 106, crop 1600x780
+20:53:19 py: motion 202939 (DSC08658.JPG): motion_blur, straightness 0.77, subject 166, crop 1600x654
+20:53:19 py: motion 202945 (DSC08661.JPG): motion_blur, straightness 0.77, subject 176, crop 1600x640
+20:53:19 py: motion 202941 (DSC08659.JPG): motion_blur, straightness 0.79, subject 172, crop 1600x700
+20:53:19 py: motion 202943 (DSC08660.JPG): motion_blur, straightness 0.78, subject 180, crop 1600x1046
+20:53:19 py: motion 202947 (DSC08662.JPG): motion_blur, straightness 0.79, subject 124, crop 1600x767
+20:53:19 py: motion 202955 (DSC08666.JPG): motion_blur, straightness 0.86, subject 93, crop 1600x903
+20:53:19 py: motion 202953 (DSC08665.JPG): motion_blur, straightness 0.80, subject 104, crop 1600x959
+20:53:19 py: motion 202951 (DSC08664.JPG): motion_blur, straightness 0.78, subject 143, crop 1600x1057
+20:53:19 py: motion 202949 (DSC08663.JPG): motion_blur, straightness 0.74, subject 119, crop 1600x1007
+20:53:19 py: motion 202957 (DSC08667.JPG): motion_blur, straightness 0.89, subject 77, crop 1600x751
+20:53:19 py: motion 202959 (DSC08668.JPG): motion_blur, straightness 0.89, subject 193, crop 1600x637
+20:53:19 py: motion 202961 (DSC08669.JPG): motion_blur, straightness 0.88, subject 194, crop 1600x612
+20:53:20 py: motion 202963 (DSC08670.JPG): motion_blur, straightness 0.83, subject 204, crop 1600x600
+20:53:20 py: motion 202965 (DSC08671.JPG): ordinary, straightness 0.00, subject 291, crop 768x514
+20:53:20 py: motion 202975 (DSC08676.JPG): motion_blur, straightness 0.83, subject 163, crop 1600x632
+20:53:20 py: motion 202967 (DSC08672.JPG): ordinary, straightness 0.00, subject 259, crop 753x529
+20:53:20 py: motion 202977 (DSC08677.JPG): motion_blur, straightness 0.83, subject 144, crop 1600x622
+20:53:20 py: motion 202981 (DSC08679.JPG): motion_blur, straightness 0.86, subject 186, crop 1600x581
+20:53:20 py: motion 202969 (DSC08673.JPG): ordinary, straightness 0.00, subject 304, crop 1216x781
+20:53:20 py: motion 202979 (DSC08678.JPG): motion_blur, straightness 0.85, subject 184, crop 1600x694
+20:53:21 py: motion 202973 (DSC08675.JPG): ordinary, straightness 0.00, subject 255, crop 1362x878
+20:53:21 py: motion 202983 (DSC08680.JPG): motion_blur, straightness 0.80, subject 134, crop 1600x923
+20:53:21 py: motion 202985 (DSC08681.JPG): motion_blur, straightness 0.83, subject 175, crop 1600x1118
+20:53:21 py: motion 202971 (DSC08674.JPG): ordinary, straightness 0.00, subject 276, crop 1293x831
+20:53:21 py: motion 202989 (DSC08683.JPG): motion_blur, straightness 0.83, subject 124, crop 1600x1186
+20:53:21 py: motion 202991 (DSC08684.JPG): motion_blur, straightness 0.89, subject 174, crop 1600x939
+20:53:21 py: motion 202987 (DSC08682.JPG): motion_blur, straightness 0.84, subject 138, crop 1600x1240
+20:53:21 py: motion 202993 (DSC08685.JPG): motion_blur, straightness 0.92, subject 156, crop 1600x931
+20:53:21 py: motion 202995 (DSC08686.JPG): motion_blur, straightness 0.96, subject 201, crop 1557x1466
+20:53:21 py: motion 202999 (DSC08688.JPG): motion_blur, straightness 0.91, subject 201, crop 1600x775
+20:53:21 py: motion 202997 (DSC08687.JPG): motion_blur, straightness 0.93, subject 202, crop 1600x1067, centre third (no vehicle at 0.35: strongest vehicle 0.20 (0.98x0.99 of frame))
+20:53:22 py: motion 203001 (DSC08689.JPG): ordinary, straightness 0.00, subject 201, crop 763x419
+20:53:22 py: motion 203007 (DSC08692.JPG): motion_blur, straightness 0.70, subject 140, crop 1600x918
+20:53:22 py: motion 203009 (DSC08693.JPG): pan, straightness 0.71, subject 156, crop 1600x807
+20:53:22 py: motion 203013 (DSC08695.JPG): motion_blur, straightness 0.82, subject 115, crop 1600x686
+20:53:22 py: motion 203011 (DSC08694.JPG): pan, straightness 0.79, subject 179, crop 1600x743
+20:53:22 py: motion 203017 (DSC08697.JPG): pan, straightness 0.91, subject 186, crop 1600x631
+20:53:22 py: motion 203019 (DSC08698.JPG): motion_blur, straightness 0.87, subject 175, crop 1600x600
+20:53:22 py: motion 203021 (DSC08699.JPG): pan, straightness 0.88, subject 187, crop 1600x578
+20:53:22 py: motion 203015 (DSC08696.JPG): motion_blur, straightness 0.87, subject 181, crop 1600x652
+20:53:22 py: motion 203023 (DSC08700.JPG): motion_blur, straightness 0.84, subject 197, crop 1600x572
+20:53:22 py: motion 203003 (DSC08690.JPG): ordinary, straightness 0.00, subject 307, crop 1600x1575
+20:53:22 py: motion 203025 (DSC08701.JPG): ordinary, straightness 0.00, subject 189, crop 888x579
+20:53:22 py: motion 203005 (DSC08691.JPG): ordinary, straightness 0.00, subject 371, crop 1600x1575
+20:53:22 py: motion 203029 (DSC08703.JPG): ordinary, straightness 0.00, subject 267, crop 1021x637
+20:53:22 py: motion 203027 (DSC08702.JPG): ordinary, straightness 0.00, subject 197, crop 959x596
+20:53:23 py: motion 203031 (DSC08704.JPG): ordinary, straightness 0.00, subject 361, crop 1098x660
+20:53:23 py: motion 203033 (DSC08705.JPG): ordinary, straightness 0.00, subject 304, crop 1175x697
+20:53:23 py: motion 203035 (DSC08706.JPG): motion_blur, straightness 0.77, subject 153, crop 1600x961
+20:53:23 py: motion 203037 (DSC08707.JPG): motion_blur, straightness 0.84, subject 77, crop 1600x925
+20:53:23 py: motion 203039 (DSC08708.JPG): motion_blur, straightness 0.87, subject 71, crop 1600x809
+20:53:23 py: motion 203041 (DSC08709.JPG): motion_blur, straightness 0.88, subject 186, crop 1600x1067, centre third (no vehicle at 0.35: strongest vehicle 0.11 (0.56x0.42 of frame))
+20:53:23 py: motion 203051 (DSC08714.JPG): motion_blur, straightness 0.64, subject 154, crop 1600x551
+20:53:23 py: motion 203043 (DSC08710.JPG): ordinary, straightness 0.00, subject 216, crop 1600x656
+20:53:23 py: motion 203053 (DSC08715.JPG): ordinary, straightness 0.00, subject 160, crop 1600x625
+20:53:23 py: motion 203045 (DSC08711.JPG): ordinary, straightness 0.00, subject 178, crop 1600x656
+20:53:23 py: motion 203049 (DSC08713.JPG): ordinary, straightness 0.00, subject 173, crop 1600x745
+20:53:23 py: motion 203055 (DSC08716.JPG): motion_blur, straightness 0.67, subject 143, crop 1600x969
+20:53:23 py: motion 203057 (DSC08717.JPG): pan, straightness 0.69, subject 213, crop 1600x847
+20:53:23 py: motion 203059 (DSC08718.JPG): pan, straightness 0.73, subject 232, crop 1600x775
+20:53:23 py: motion 203047 (DSC08712.JPG): ordinary, straightness 0.00, subject 185, crop 1306x1600
+20:53:24 py: motion 203061 (DSC08719.JPG): motion_blur, straightness 0.76, subject 231, crop 1600x720
+20:53:24 py: motion 203063 (DSC08720.JPG): motion_blur, straightness 0.81, subject 227, crop 1600x679
+20:53:24 py: motion 203065 (DSC08721.JPG): motion_blur, straightness 0.84, subject 170, crop 1600x628
+20:53:24 py: motion 203071 (DSC08724.JPG): motion_blur, straightness 0.78, subject 165, crop 1600x340
+20:53:24 py: motion 203069 (DSC08723.JPG): motion_blur, straightness 0.83, subject 148, crop 1600x627
+20:53:24 py: motion 203067 (DSC08722.JPG): motion_blur, straightness 0.84, subject 191, crop 1600x628
+20:53:24 py: motion 203073 (DSC08725.JPG): motion_blur, straightness 0.75, subject 156, crop 1600x593
+20:53:24 py: motion 203077 (DSC08727.JPG): ordinary, straightness 0.00, subject 281, crop 1600x1067, centre third (no vehicle at 0.35: strongest vehicle 0.28 (0.19x0.12 of frame))
+20:53:24 py: motion 203083 (DSC08730.JPG): ordinary, straightness 0.00, subject 563, crop 481x278
+20:53:24 py: motion 203075 (DSC08726.JPG): ordinary, straightness 0.00, subject 257, crop 1600x1067, centre third (no vehicle at 0.35: strongest vehicle 0.26 (0.18x0.11 of frame))
+20:53:24 py: motion 203087 (DSC08732.JPG): ordinary, straightness 0.00, subject 444, crop 489x280
+20:53:24 py: motion 203079 (DSC08728.JPG): ordinary, straightness 0.00, subject 168, crop 1600x1067, centre third (no vehicle at 0.35: strongest vehicle 0.20 (0.23x0.71 of frame))
+20:53:24 py: motion 203085 (DSC08731.JPG): ordinary, straightness 0.00, subject 445, crop 478x279
+20:53:24 py: motion 203081 (DSC08729.JPG): ordinary, straightness 0.00, subject 142, crop 1600x1067, centre third (no vehicle at 0.35: strongest vehicle 0.33 (0.15x0.14 of frame))
+20:53:24 py: motion 203089 (DSC08733.JPG): ordinary, straightness 0.00, subject 425, crop 490x277
+20:53:25 py: motion 203091 (DSC08734.JPG): ordinary, straightness 0.00, subject 465, crop 475x279
+20:53:25 py: motion 203093 (DSC08735.JPG): ordinary, straightness 0.00, subject 462, crop 475x278
+20:53:25 py: motion 203095 (DSC08736.JPG): ordinary, straightness 0.00, subject 296, crop 1267x730
+20:53:25 py: motion 203099 (DSC08738.JPG): ordinary, straightness 0.00, subject 396, crop 1082x639
+20:53:25 py: motion 203097 (DSC08737.JPG): ordinary, straightness 0.00, subject 286, crop 1279x731
+20:53:25 py: motion 203101 (DSC08739.JPG): ordinary, straightness 0.00, subject 395, crop 1084x640
+20:53:25 py: motion 203103 (DSC08740.JPG): ordinary, straightness 0.00, subject 257, crop 1600x869
+20:53:25 py: motion 203105 (DSC08741.JPG): ordinary, straightness 0.00, subject 248, crop 1600x859
+20:53:25 py: motion 203109 (DSC08743.JPG): ordinary, straightness 0.00, subject 253, crop 1600x860
+20:53:26 py: motion 203113 (DSC08745.JPG): ordinary, straightness 0.00, subject 261, crop 1600x890
+20:53:26 py: motion 203115 (DSC08746.JPG): ordinary, straightness 0.00, subject 244, crop 1600x890
+20:53:26 py: motion 203111 (DSC08744.JPG): ordinary, straightness 0.00, subject 251, crop 1600x866
+20:53:26 py: motion 203119 (DSC08748.JPG): motion_blur, straightness 0.76, subject 285, crop 1600x786
+20:53:26 py: motion 203107 (DSC08742.JPG): ordinary, straightness 0.00, subject 242, crop 1600x861
+20:53:26 py: motion 203117 (DSC08747.JPG): motion_blur, straightness 0.77, subject 127, crop 1600x897
+20:53:26 py: motion 203121 (DSC08749.JPG): pan, straightness 0.80, subject 216, crop 1600x597
+20:53:26 py: motion 203123 (DSC08750.JPG): ordinary, straightness 0.00, subject 277, crop 1356x811
+20:53:26 py: motion 203125 (DSC08751.JPG): ordinary, straightness 0.00, subject 296, crop 1359x811
+20:53:26 py: motion 203129 (DSC08753.JPG): pan, straightness 0.69, subject 154, crop 1600x1003
+20:53:26 py: motion 203131 (DSC08754.JPG): pan, straightness 0.79, subject 200, crop 1600x803
+20:53:27 py: motion 203133 (DSC08755.JPG): pan, straightness 0.86, subject 188, crop 1600x758
+20:53:27 py: motion 203127 (DSC08752.JPG): motion_blur, straightness 0.60, subject 217, crop 1600x1147
+20:53:27 py: motion 203145 (DSC08761.JPG): ordinary, straightness 0.00, subject 262, crop 648x347
+20:53:27 py: motion 203141 (DSC08759.JPG): motion_blur, straightness 0.73, subject 214, crop 990x401
+20:53:27 py: motion 203143 (DSC08760.JPG): motion_blur, straightness 0.70, subject 178, crop 493x366
+20:53:27 py: motion 203149 (DSC08763.JPG): pan, straightness 0.62, subject 136, crop 500x612
+20:53:27 py: motion 203135 (DSC08756.JPG): pan, straightness 0.90, subject 193, crop 1600x731
+20:53:27 py: motion 203147 (DSC08762.JPG): ordinary, straightness 0.00, subject 108, crop 819x620
+20:53:27 py: motion 203137 (DSC08757.JPG): motion_blur, straightness 0.88, subject 210, crop 1600x718
+20:53:27 py: motion 203151 (DSC08764.JPG): motion_blur, straightness 0.82, subject 124, crop 1600x982
+20:53:27 py: motion 203139 (DSC08758.JPG): motion_blur, straightness 0.76, subject 195, crop 1600x1067, centre third (no vehicle at 0.35: strongest vehicle 0.33 (1.00x0.35 of frame))
+20:53:27 py: motion 203153 (DSC08765.JPG): motion_blur, straightness 0.86, subject 110, crop 1600x999
+20:53:27 py: motion 203155 (DSC08766.JPG): motion_blur, straightness 0.86, subject 188, crop 1540x1538
+20:53:27 py: motion 203159 (DSC08768.JPG): motion_blur, straightness 0.88, subject 200, crop 1600x711
+20:53:27 py: motion 203157 (DSC08767.JPG): motion_blur, straightness 0.85, subject 170, crop 1600x764
+20:53:28 py: motion 203163 (DSC08770.JPG): motion_blur, straightness 0.89, subject 217, crop 1600x639
+20:53:28 py: motion 203161 (DSC08769.JPG): motion_blur, straightness 0.89, subject 206, crop 1600x672
+20:53:28 py: motion 203167 (DSC08772.JPG): ordinary, straightness 0.00, subject 299, crop 1090x664
+20:53:28 py: motion 203165 (DSC08771.JPG): ordinary, straightness 0.00, subject 308, crop 1096x684
+20:53:28 py: motion 203171 (DSC08774.JPG): motion_blur, straightness 0.86, subject 116, crop 1600x842
+20:53:28 py: motion 203175 (DSC08776.JPG): motion_blur, straightness 0.92, subject 159, crop 1600x887
+20:53:28 py: motion 203173 (DSC08775.JPG): motion_blur, straightness 0.87, subject 114, crop 1600x876
+20:53:28 py: motion 203177 (DSC08777.JPG): pan, straightness 0.89, subject 164, crop 1600x1067, centre third (no vehicle at 0.35: strongest vehicle 0.30 (0.25x0.26 of frame))
+20:53:28 py: motion 203169 (DSC08773.JPG): motion_blur, straightness 0.82, subject 105, crop 1600x874
+20:53:29 py: detections: 585 cached, 0 detected
+20:53:29 py: car boxes: 55 frames from C:/Users/Louis/AppData/Local/darktable/assisted_tagging/last-run/Rallye.boxes.json; checked 0 frames: 0 boxes removed, 0 frames left with no vehicle
+20:53:29 py: star slope: 197 keepers
+20:53:29 py: burst 1: 6 of 6 frames scored, mode motion_aware, keepers 202003, 201999, 202001
+20:53:29 py: burst 2: 1 of 1 frames scored, mode motion_aware, keepers 202005
+20:53:29 py: burst 3: 4 of 4 frames scored, mode motion_aware, keepers 202011, 202009, 202013, 202007
+20:53:29 py: burst 4: 3 of 3 frames scored, mode motion_aware, keepers 202017, 202019, 202015
+20:53:29 py: burst 5: 8 of 8 frames scored, mode motion_aware, keepers 202023, 202025, 202027
+20:53:29 py: burst 6: 8 of 8 frames scored, mode motion_aware, keepers 202053, 202049
+20:53:29 py: burst 7: 15 of 15 frames scored, mode motion_aware, keepers 202081, 202083, 202061
+20:53:29 py: burst 8: 11 of 11 frames scored, mode motion_aware, keepers 202101, 202093, 202091
+20:53:29 py: burst 9: 3 of 3 frames scored, mode motion_aware, keepers 202111, 202109, 202107
+20:53:29 py: burst 10: 5 of 5 frames scored, mode motion_aware, keepers 202113, 202121
+20:53:29 py: burst 11: 6 of 6 frames scored, mode motion_aware, keepers 202131, 202129, 202125
+20:53:29 py: burst 12: 8 of 8 frames scored, mode motion_aware, keepers 202139, 202143
+20:53:29 py: burst 13: 2 of 2 frames scored, mode motion_aware, keepers 202153
+20:53:29 py: burst 14: 18 of 18 frames scored, mode motion_aware, keepers 202155, 202181, 202187, 202157
+20:53:29 py: burst 15: 8 of 8 frames scored, mode motion_aware, keepers 202191, 202193
+20:53:29 py: burst 16: 3 of 3 frames scored, mode motion_aware, keepers 202211
+20:53:29 py: burst 17: 5 of 5 frames scored, mode motion_aware, keepers 202213, 202217, 202219
+20:53:29 py: burst 18: 8 of 8 frames scored, mode motion_aware, keepers 202231, 202223
+20:53:29 py: burst 19: 5 of 5 frames scored, mode motion_aware, keepers 202247, 202243
+20:53:29 py: burst 20: 2 of 2 frames scored, mode motion_aware, keepers 202249
+20:53:29 py: burst 21: 5 of 5 frames scored, mode motion_aware, keepers 202255, 202259, 202261
+20:53:29 py: burst 22: 5 of 5 frames scored, mode motion_aware, keepers 202267, 202265, 202269
+20:53:29 py: burst 23: 6 of 6 frames scored, mode motion_aware, keepers 202277, 202283, 202279
+20:53:29 py: burst 24: 2 of 2 frames scored, mode motion_aware, keepers 202287
+20:53:29 py: burst 25: 10 of 10 frames scored, mode motion_aware, keepers 202301, 202303, 202299, 202293
+20:53:29 py: burst 26: 8 of 8 frames scored, mode motion_aware, keepers 202317, 202319
+20:53:29 py: burst 27: 8 of 8 frames scored, mode motion_aware, keepers 202325, 202327
+20:53:29 py: burst 28: 5 of 5 frames scored, mode motion_aware, keepers 202349, 202347
+20:53:29 py: burst 30: 6 of 6 frames scored, mode motion_aware, keepers 202371, 202369, 202361
+20:53:29 py: burst 29: 5 of 5 frames scored, mode motion_aware, keepers 202351, 202353
+20:53:29 py: burst 31: 4 of 4 frames scored, mode motion_aware, keepers 202373
+20:53:29 py: burst 32: 9 of 9 frames scored, mode motion_aware, keepers 202389, 202387, 202383, 202397, 202391
+20:53:29 py: burst 33: 4 of 4 frames scored, mode motion_aware, keepers 202403, 202399, 202405
+20:53:29 py: burst 34: 5 of 5 frames scored, mode motion_aware, keepers 202413, 202409, 202415
+20:53:29 py: burst 35: 6 of 6 frames scored, mode motion_aware, keepers 202417, 202419
+20:53:29 py: burst 36: 6 of 6 frames scored, mode motion_aware, keepers 202437, 202431, 202439
+20:53:29 py: burst 37: 8 of 8 frames scored, mode motion_aware, keepers 202449, 202447, 202451
+20:53:29 py: burst 38: 5 of 5 frames scored, mode motion_aware, keepers 202457, 202463
+20:53:29 py: burst 39: 6 of 6 frames scored, mode motion_aware, keepers 202471, 202467, 202469
+20:53:29 py: burst 40: 9 of 9 frames scored, mode motion_aware, keepers 202491, 202493, 202489
+20:53:29 py: burst 41: 6 of 6 frames scored, mode motion_aware, keepers 202497, 202503
+20:53:29 py: burst 42: 5 of 5 frames scored, mode motion_aware, keepers 202517, 202509, 202515
+20:53:29 py: burst 43: 7 of 7 frames scored, mode motion_aware, keepers 202529, 202525, 202519
+20:53:29 py: burst 44: 9 of 9 frames scored, mode motion_aware, keepers 202547, 202549, 202543
+20:53:29 py: burst 45: 4 of 4 frames scored, mode motion_aware, keepers 202557, 202553, 202555
+20:53:29 py: burst 46: 6 of 6 frames scored, mode motion_aware, keepers 202569, 202567, 202561
+20:53:29 py: burst 47: 8 of 8 frames scored, mode motion_aware, keepers 202585, 202583
+20:53:29 py: burst 48: 3 of 3 frames scored, mode motion_aware, keepers 202591
+20:53:29 py: burst 49: 4 of 4 frames scored, mode motion_aware, keepers 202595, 202597, 202599
+20:53:29 py: burst 50: 9 of 9 frames scored, mode motion_aware, keepers 202601
+20:53:29 py: burst 51: 10 of 10 frames scored, mode motion_aware, keepers 202639, 202627, 202637, 202631
+20:53:29 py: burst 52: 5 of 5 frames scored, mode motion_aware, keepers 202655, 202651
+20:53:29 py: burst 53: 4 of 4 frames scored, mode motion_aware, keepers 202657
+20:53:29 py: burst 54: 5 of 5 frames scored, mode motion_aware, keepers 202669, 202665, 202673
+20:53:29 py: burst 55: 11 of 11 frames scored, mode motion_aware, keepers 202695, 202691, 202687
+20:53:29 py: burst 56: 4 of 4 frames scored, mode motion_aware, keepers 202703, 202699
+20:53:29 py: burst 57: 5 of 5 frames scored, mode motion_aware, keepers 202711
+20:53:29 py: burst 58: 2 of 2 frames scored, mode motion_aware, keepers 202715
+20:53:29 py: burst 59: 5 of 5 frames scored, mode motion_aware, keepers 202723, 202719, 202721
+20:53:29 py: burst 61: 3 of 3 frames scored, mode motion_aware, keepers 202733
+20:53:29 py: burst 60: 2 of 2 frames scored, mode motion_aware, keepers 202731
+20:53:29 py: burst 62: 5 of 5 frames scored, mode motion_aware, keepers 202739, 202743, 202745
+20:53:29 py: burst 63: 6 of 6 frames scored, mode motion_aware, keepers 202749, 202753
+20:53:29 py: burst 65: 5 of 5 frames scored, mode motion_aware, keepers 202775, 202777, 202769
+20:53:29 py: burst 66: 2 of 2 frames scored, mode motion_aware, keepers 202779
+20:53:29 py: burst 64: 4 of 4 frames scored, mode motion_aware, keepers 202767, 202761
+20:53:29 py: burst 69: 5 of 5 frames scored, mode motion_aware, keepers 202801, 202799, 202797
+20:53:29 py: burst 67: 5 of 5 frames scored, mode motion_aware, keepers 202785, 202791
+20:53:29 py: burst 68: 2 of 2 frames scored, mode motion_aware, keepers 202795, 202793
+20:53:29 py: burst 70: 4 of 4 frames scored, mode motion_aware, keepers 202807, 202811
+20:53:29 py: burst 71: 6 of 6 frames scored, mode motion_aware, keepers 202823, 202821
+20:53:29 py: burst 72: 7 of 7 frames scored, mode motion_aware, keepers 202831, 202835, 202827
+20:53:29 py: burst 74: 3 of 3 frames scored, mode motion_aware, keepers 202857
+20:53:29 py: burst 73: 6 of 6 frames scored, mode motion_aware, keepers 202851, 202841, 202849
+20:53:29 py: burst 75: 6 of 6 frames scored, mode motion_aware, keepers 202863, 202869, 202867
+20:53:29 py: burst 76: 3 of 3 frames scored, mode motion_aware, keepers 202875
+20:53:29 py: burst 77: 7 of 7 frames scored, mode motion_aware, keepers 202895, 202887, 202883
+20:53:29 py: burst 78: 8 of 8 frames scored, mode motion_aware, keepers 202901, 202903, 202911
+20:53:29 py: burst 80: 4 of 4 frames scored, mode motion_aware, keepers 202917, 202919, 202921
+20:53:29 py: burst 79: 2 of 2 frames scored, mode motion_aware, keepers 202913, 202915
+20:53:29 py: burst 81: 4 of 4 frames scored, mode motion_aware, keepers 202931, 202927
+20:53:29 py: burst 82: 8 of 8 frames scored, mode motion_aware, keepers 202945, 202941, 202937
+20:53:29 py: burst 83: 5 of 5 frames scored, mode motion_aware, keepers 202951, 202949, 202957
+20:53:29 py: burst 84: 3 of 3 frames scored, mode motion_aware, keepers 202963, 202959
+20:53:29 py: burst 86: 4 of 4 frames scored, mode motion_aware, keepers 202981, 202979
+20:53:29 py: burst 85: 5 of 5 frames scored, mode motion_aware, keepers 202969, 202971
+20:53:29 py: burst 87: 9 of 9 frames scored, mode motion_aware, keepers 202999, 202997, 202991
+20:53:29 py: burst 89: 9 of 9 frames scored, mode motion_aware, keepers 203023, 203015, 203021, 203017
+20:53:29 py: burst 88: 3 of 3 frames scored, mode motion_aware, keepers 203001
+20:53:29 py: burst 90: 9 of 9 frames scored, mode motion_aware, keepers 203031, 203033
+20:53:29 py: burst 92: 2 of 2 frames scored, mode motion_aware, keepers 203051, 203053
+20:53:29 py: burst 91: 4 of 4 frames scored, mode motion_aware, keepers 203043
+20:53:29 py: burst 93: 5 of 5 frames scored, mode motion_aware, keepers 203059, 203061, 203063
+20:53:29 py: burst 94: 5 of 5 frames scored, mode motion_aware, keepers 203067, 203065
+20:53:29 py: burst 95: 2 of 2 frames scored, mode motion_aware, keepers 203077
+20:53:29 py: burst 96: 2 of 2 frames scored, mode motion_aware, keepers 203079
+20:53:29 py: burst 97: 4 of 4 frames scored, mode motion_aware, keepers 203083
+20:53:29 py: burst 98: 2 of 2 frames scored, mode motion_aware, keepers 203091, 203093
+20:53:29 py: burst 99: 2 of 2 frames scored, mode motion_aware, keepers 203095, 203097
+20:53:29 py: burst 100: 2 of 2 frames scored, mode motion_aware, keepers 203099, 203101
+20:53:29 py: burst 101: 7 of 7 frames scored, mode motion_aware, keepers 203113, 203103, 203109, 203111
+20:53:29 py: burst 102: 3 of 3 frames scored, mode motion_aware, keepers 203119, 203121
+20:53:29 py: burst 103: 2 of 2 frames scored, mode motion_aware, keepers 203125
+20:53:29 py: burst 104: 6 of 6 frames scored, mode motion_aware, keepers 203131, 203127, 203135
+20:53:29 py: burst 105: 4 of 4 frames scored, mode motion_aware, keepers 203139
+20:53:29 py: burst 106: 5 of 5 frames scored, mode motion_aware, keepers 203151
+20:53:29 py: burst 107: 4 of 4 frames scored, mode motion_aware, keepers 203163, 203161
+20:53:29 py: burst 108: 2 of 2 frames scored, mode motion_aware, keepers 203165, 203167
+20:53:29 py: burst 109: 5 of 5 frames scored, mode motion_aware, keepers 203175
+20:53:29 py: archived report: C:\Users\Louis\AppData\Local\darktable/assisted_culling/reports\20261118-205329.csv
+20:53:31 lua: scoring: scorer exit 0
+20:53:31 lua: Assisted Culling: analysis done, applying ratings to the last 582 images...
+20:53:31 lua: applying: results 4 of 585
+20:53:35 lua: applying: results 23 of 585
+20:53:41 lua: applying: results 45 of 585
+20:53:47 lua: applying: results 60 of 585
+20:53:51 lua: applying: results 82 of 585
+20:53:55 lua: applying: results 107 of 585
+20:53:59 lua: applying: results 129 of 585
+20:54:03 lua: applying: results 149 of 585
+20:54:07 lua: applying: results 172 of 585
+20:54:12 lua: applying: results 190 of 585
+20:54:17 lua: applying: results 208 of 585
+20:54:20 lua: applying: results 228 of 585
+20:54:25 lua: applying: results 250 of 585
+20:54:28 lua: applying: results 271 of 585
+20:54:33 lua: applying: results 289 of 585
+20:54:38 lua: applying: results 309 of 585
+20:54:44 lua: applying: results 327 of 585
+20:54:48 lua: applying: results 348 of 585
+20:54:52 lua: applying: results 368 of 585
+20:54:57 lua: applying: results 388 of 585
+20:55:01 lua: applying: results 407 of 585
+20:55:06 lua: applying: results 424 of 585
+20:55:12 lua: applying: results 444 of 585
+20:55:18 lua: applying: results 462 of 585
+20:55:25 lua: applying: results 481 of 585
+20:55:39 lua: applying: results 501 of 585
+20:55:52 lua: applying: results 521 of 585
+20:55:57 lua: applying: results 542 of 585
+20:56:02 lua: applying: results 559 of 585
+20:56:07 lua: applying: results 580 of 585
+20:56:09 lua: Assisted Culling: done. 249 keepers, 336 not kept, 64 cut off, 6 blocked.
+20:56:09 lua: apply: timing: 6.4s in tag and rating writes, 6.1s paused, 146.4s in progress updates; final drain took 158s
+20:56:10 lua: run finished
