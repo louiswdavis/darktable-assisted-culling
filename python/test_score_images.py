@@ -909,6 +909,11 @@ def run_tests():
             check("common: atomic_write replaces on success", f.read(), "new")
         check("common: atomic_write leaves no temp file", sorted(os.listdir(d)), ["x.txt"])
 
+    # the real script, launched as darktable does: argparse checks every help string at startup (3.14+)
+    import subprocess
+    launched = subprocess.run([sys.executable, S.__file__, "--help"], capture_output=True, text=True)
+    check("scorer: starts and builds its arguments", (launched.returncode, launched.stderr[-200:]), (0, ""))
+
     print("")
     if failures == 0:
         print("all tests passed")

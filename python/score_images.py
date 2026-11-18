@@ -1784,7 +1784,7 @@ if __name__ == "__main__":
                         help="motion_aware: a no-reference quality model .onnx (DBCNN, HyperIQA or TReS from "
                              "86Cao/IQA-ONNX-Models) scoring the car crop of each burst's top frames, at most "
                              f"{JUDGE_FRAMES}; in a close call the dropped frame keeps instead when it scores at least "
-                             f"{JUDGE_MIN_GAP:.0%} higher (empty = off)")
+                             f"{JUDGE_MIN_GAP:.0%}% higher (empty = off)")  # %%: argparse formats help
     parser.add_argument("--no-vehicle-leave", action="store_true",
                         help="A frame where the detector found no car (motion_aware, or sam_subject with a "
                              "detector) is never a keeper and keeps its rating, tagged Why|No vehicle")
