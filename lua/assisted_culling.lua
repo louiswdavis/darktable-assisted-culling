@@ -879,11 +879,12 @@ end
 
 -- Returns 1 if a write was needed (attach/detach), else 0. Creates the tag only
 -- to attach it, so a branch that is turned off never appears in the tag list.
-local function sync_tag(img, have, name, wanted)
+-- tally counts the writes under "+name" (attach) and "-name" (detach).
+local function sync_tag(img, have, name, wanted, tally)
     if wanted and not have[name] then
-        tags.attach(tags.create(name), img); return 1
+        tags.attach(tags.create(name), img); tally["+" .. name] = (tally["+" .. name] or 0) + 1; return 1
     elseif not wanted and have[name] then
-        tags.detach(tags.find(name), img); return 1
+        tags.detach(tags.find(name), img); tally["-" .. name] = (tally["-" .. name] or 0) + 1; return 1
     end
     return 0
 end
@@ -1310,7 +1311,6 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         -- ---- result application (shared by "while scoring" and the final drain) ----
         -- one stamp per run; not in ALL_TAGS, so clearing marks and later runs leave earlier stamps alone
         local run_stamp = settings.run_tag and os.date(TAG_RUN_FORMAT) or nil
-        local run_stamp_tag
 
         -- Reads are cheap; writes reload the lighttable collection / rewrite XMP, so skip no-ops.
         -- Every mark is a tag, never a colour label, so a re-run or "clear" can undo exactly
@@ -1322,10 +1322,11 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         local tag_on = {}
         for _, t in ipairs(M.TAG_TOGGLES) do tag_on[t.key] = tag_enabled(t.key) end
         local diag_off = M.diag_off(tag_on)
-        local diag_tag_objs = {}
-
-        -- left_alone: a frame left alone for no vehicle is neither keeper nor rejected
-        local rating_writes, all_writes = 0, 0
+        -- left_alone: a frame left alone for no vehicle is neither keeper nor rejected.
+        -- The rating and Keeper / Rejected are written here; every other tag change is queued
+        -- in detail_queue and written after the end message.
+        local rating_writes, all_writes, tag_tally = 0, 0, {}
+        local detail_queue, detail_total = {}, 0
         local function apply_to_image(img, want_rating, is_keeper, flags, diag, left_alone)
             local writes = 0
             local have = tags_of(img)
@@ -1339,25 +1340,24 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                 rating_writes = rating_writes + 1
             end
 
-            writes = writes + sync_tag(img, have, TAG_KEEPER, is_keeper and tag_on.keeper)
-            writes = writes + sync_tag(img, have, TAG_REJECT, not is_keeper and not left_alone and tag_on.rejected)
-            for _, f in ipairs(FLAGS) do
-                writes = writes + sync_tag(img, have, f.tag, flags[f.name] == true and tag_on[f.name])
-            end
-            if run_stamp and not have[run_stamp] then
-                run_stamp_tag = run_stamp_tag or tags.create(run_stamp)
-                tags.attach(run_stamp_tag, img); writes = writes + 1
-            end
-            if have[TAG_CULLED] then -- marker from older versions; Keeper/Rejected already say "processed"
-                tags.detach(tags.find(TAG_CULLED), img); writes = writes + 1
-            end
+            writes = writes + sync_tag(img, have, TAG_KEEPER, is_keeper and tag_on.keeper, tag_tally)
+            writes = writes + sync_tag(img, have, TAG_REJECT, not is_keeper and not left_alone and tag_on.rejected, tag_tally)
+
             local attach, detach = M.diag_tag_changes(have, diag)
-            for _, name in ipairs(attach) do
-                diag_tag_objs[name] = diag_tag_objs[name] or tags.create(name)
-                tags.attach(diag_tag_objs[name], img); writes = writes + 1
+            for _, f in ipairs(FLAGS) do
+                local wanted = flags[f.name] == true and tag_on[f.name]
+                if wanted and not have[f.tag] then
+                    attach[#attach + 1] = f.tag
+                elseif not wanted and have[f.tag] then
+                    detach[#detach + 1] = f.tag
+                end
             end
-            for _, name in ipairs(detach) do
-                tags.detach(tags.find(name), img); writes = writes + 1
+            if run_stamp and not have[run_stamp] then attach[#attach + 1] = run_stamp end
+            -- marker from older versions; Keeper/Rejected already say "processed"
+            if have[TAG_CULLED] then detach[#detach + 1] = TAG_CULLED end
+            if #attach + #detach > 0 then
+                detail_queue[#detail_queue + 1] = { img = img, attach = attach, detach = detach }
+                detail_total = detail_total + #attach + #detach
             end
             return writes
         end
@@ -1619,9 +1619,67 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             if #left_out > 0 then msg = msg .. " Left out: " .. table.concat(left_out, "; ") .. " (see log)." end
             local notice = M.no_groups_notice(grouping_on, n_primary, n_groups_before_split)
             if notice then msg = msg .. " " .. notice:gsub("^%l", string.upper) .. "." end
+            if detail_total > 0 then
+                msg = msg .. string.format(" Ratings are ready. Now writing %d detail tags; the job bar's x stops them.", detail_total)
+            end
             say(msg)
-            log(string.format("apply: timing: %.1fs in tag and rating writes, %.1fs paused, %.1fs in progress updates (job bar %.1fs, panel line %.1fs, toast %.1fs); %d rating writes, %d tag writes; final drain took %ds",
+            log(string.format("apply: timing: %.1fs in tag and rating writes, %.1fs paused, %.1fs in progress updates (job bar %.1fs, panel line %.1fs, toast %.1fs); %d rating writes, %d Keeper / Rejected tag writes; final drain took %ds",
                 write_s, pause_s, bar_s + label_s + toast_s, bar_s, label_s, toast_s, rating_writes, all_writes - rating_writes, drain_s))
+            -- Each tag write makes darktable rebuild its tagging lists (about 100ms). The panel
+            -- line waits for darktable to catch up, then the pause leaves it as long again for the user.
+            if detail_total > 0 then
+                local detail_job = dt.gui.create_job(_("Assisted Culling: writing detail tags"), true,
+                    function(cancelled_job) cancelled_job.valid = false end)
+                local detail_started, detail_idx, detail_written, detail_failed = os.time(), 1, 0, 0
+                local detail_wait_s, detail_pause_s = 0, 0
+                local detail_tags = {}
+                while detail_idx <= #detail_queue and detail_job.valid do
+                    local detail = detail_queue[detail_idx]
+                    -- guarded per image: one removed from the library since it was rated raises on a write
+                    local ok_detail = pcall(function()
+                        for _, name in ipairs(detail.attach) do
+                            detail_tags[name] = detail_tags[name] or tags.create(name)
+                            tags.attach(detail_tags[name], detail.img)
+                            tag_tally["+" .. name] = (tag_tally["+" .. name] or 0) + 1
+                            detail_written = detail_written + 1
+                        end
+                        for _, name in ipairs(detail.detach) do
+                            tags.detach(tags.find(name), detail.img)
+                            tag_tally["-" .. name] = (tag_tally["-" .. name] or 0) + 1
+                            detail_written = detail_written + 1
+                        end
+                    end)
+                    if not ok_detail then detail_failed = detail_failed + 1 end
+                    detail_idx = detail_idx + 1
+                    detail_job.percent = (detail_idx - 1) / #detail_queue
+                    local wait_start = os.clock()
+                    show_status(string.format("writing detail tags: image %d / %d%s", detail_idx - 1, #detail_queue,
+                        fmt_eta(os.time() - detail_started, detail_idx - 1, #detail_queue)))
+                    local waited_s = os.clock() - wait_start
+                    local pause_ms = math.max(STAGE2_SLEEP_MIN_MS, math.min(STAGE2_SLEEP_MAX_MS, math.floor(waited_s * 1000)))
+                    dt.control.sleep(pause_ms)
+                    detail_wait_s, detail_pause_s = detail_wait_s + waited_s, detail_pause_s + pause_ms / 1000
+                end
+                local detail_left = #detail_queue - detail_idx + 1
+                if detail_job.valid then detail_job.valid = false end
+                show_status("")
+                log(string.format("apply: detail tags: %d of %d tag writes on %d of %d images in %ds (waited %.1fs for darktable, paused %.1fs)%s%s",
+                    detail_written, detail_total, detail_idx - 1, #detail_queue, os.time() - detail_started, detail_wait_s, detail_pause_s,
+                    detail_failed > 0 and (", " .. detail_failed .. " images couldn't be updated") or "",
+                    detail_left > 0 and ", stopped at the job bar" or ""))
+                if detail_left > 0 then
+                    say(string.format("Assisted Culling: detail tags stopped. %d images still miss theirs; ratings and Keeper / Rejected are complete. Cull the same images again to write the rest.",
+                        detail_left))
+                else
+                    say(string.format("Assisted Culling: detail tags written (%d)%s.", detail_written,
+                        detail_failed > 0 and (", " .. detail_failed .. " images couldn't be updated") or ""))
+                end
+            end
+            local tag_lines = {}
+            for name, count in pairs(tag_tally) do tag_lines[#tag_lines + 1] = { name = name, count = count } end
+            table.sort(tag_lines, function(a, b) return a.count > b.count or (a.count == b.count and a.name < b.name) end)
+            for index, tag_line in ipairs(tag_lines) do tag_lines[index] = tag_line.count .. " " .. tag_line.name end
+            log("apply: tag writes by tag (+ attached, - detached): " .. (#tag_lines > 0 and table.concat(tag_lines, ", ") or "none"))
             if first_error then
                 dt.print_error("Assisted Culling: first apply error: " .. first_error)
                 log("first apply error: " .. first_error)

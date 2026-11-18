@@ -180,6 +180,20 @@ Frames are also tagged with how they were judged, so you can spot-check the scor
 
 `Subject` is grouped by kind (`Vehicle` today), leaving room for other detectors later.
 
+#### When the tags are written
+
+A cull writes in two steps, because each tag change costs about 100 ms in darktable (it rebuilds its tagging lists on every change):
+
+1. **Ratings, `Keeper` and `Rejected`** as the results are applied. The end message (`Assisted Culling: done. …`) follows; when detail tags are due it ends with `Ratings are ready. Now writing N detail tags`. You can start reviewing.
+2. **Detail tags** afterwards: the flags (`Cut Off`, `Blank`, …), `Subject`, `Technique`, `Scored`, `Why` and the run stamp. They go on one image at a time with a pause after each, so darktable stays usable. The panel line shows `writing detail tags: image 40 / 404` with the time left, and a job bar titled *Assisted Culling: writing detail tags* shows the same progress.
+
+- the job bar's **x** stops the detail tags; ratings and `Keeper` / `Rejected` are already complete. Cull the same images again to write the rest (cached scores make that quick)
+- a cull with no detail tag to change skips step 2
+- a cancelled cull writes no detail tags
+- another cull or reset clicked meanwhile queues until the detail tags finish
+
+The log (`assisted_culling.log`) has one line per step: `apply: timing: … N rating writes, N Keeper / Rejected tag writes; final drain took Ns`, then `apply: detail tags: N of N tag writes on N of N images in Ns (waited Ns for darktable, paused Ns)`, then `apply: tag writes by tag (+ attached, - detached): …` with a count per tag.
+
 #### Choosing which tags are written
 
 Every row above has its own switch under **tags written** in the panel (headings *outputs*, *checks*, *how it decided*), saved with the [preset](#presets) as `tag_<row>` keys (including `tag_subject_guessed`, default on) and all on in `template`. Each switch's tooltip names the tags it writes. Turn off the ones you don't use to keep darktable's tag list short:
@@ -582,6 +596,7 @@ Use a selection with at least two bursts of 3+ frames each.
 12. **Checks survive diagnostics off.** Turn off *Subject*, *Technique*, *Scored* and *Why* (leave *Subject guessed* on) and cull a burst where the vehicle detector finds nothing. *Expect:* `Assisted Culling|Subject|Vehicle|Guessed` is still written and no `Detected`, `Technique`, `Scored` or `Why` tags appear.
 13. **Restore previous ratings.** Give three frames ratings by hand and note them, cull them, then change one frame's rating by hand. Select all three and click **Restore previous ratings**. *Expect:* the two untouched frames are back to the ratings you noted; the one you changed keeps your new rating; the plugin's tags are unchanged; the message counts 2 restored and 1 rated since the run. Try it on a few hundred frames and note how long it takes.
 14. **Reset ratings to 0.** Give a few hundred frames 3 stars and reject one. Select them all and click **Reset ratings to 0**. *Expect:* the panel line counts up (`resetting ratings 120 / 300`), a job bar appears, and the thumbnails lose their stars as it goes. Click the job bar's **x** part-way. *Expect:* it stops within a second or two; the message says how many were set and how many were not reached; the frames not reached still have 3 stars. Click the button again. *Expect:* it finishes the rest, counts the first part as "already at 0", the rejected frame is at 0 stars, tags and the selection are unchanged. Note how long the full reset takes next to darktable's own `0` key on the same selection.
+15. **Detail tags after the ratings.** Cull a few hundred frames that were never culled, with *Why* on. *Expect:* the stars and `Keeper` / `Rejected` appear first and the message ends `Ratings are ready. Now writing N detail tags`; a second job bar (*writing detail tags*) counts up and darktable still scrolls and opens images meanwhile; at the end `Assisted Culling: detail tags written (N).`. Cull again and click the detail job bar's **x** partway (clear the marks first): the message says how many images still miss theirs, and one more cull writes the rest. No crash, no `LUA ERROR`.
 
 ## Development
 

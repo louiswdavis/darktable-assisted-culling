@@ -95,6 +95,8 @@ local double_closes = 0 -- times a job that was already closed was closed again
 local on_sleep = nil
 -- how many images were selected at each tag attach
 local selected_at_attach = {}
+-- the name of each tag attached, in order
+local attached_names = {}
 local prefs = { ["assisted_plugins/plugins_root"] = ROOT .. "/plugins" }
 local PREF_EMPTY = { string = "", directory = "", file = "", integer = 0, float = 0, bool = false }
 
@@ -157,6 +159,7 @@ dt = {
         end,
         attach = function(tag, img)
             selected_at_attach[#selected_at_attach + 1] = #dt.gui.action_images
+            attached_names[#attached_names + 1] = tag.name
             for _, have in ipairs(img.tags) do
                 if have == tag then return end
             end
@@ -560,7 +563,10 @@ check("bursts page: a node that matches no frame ends with the grouping notice",
     "Assisted Culling: done. 1 keepers, 4 not kept. No groups found: every frame judged alone (group first for keepers).")
 check("timing line splits the progress updates into job bar, panel line and toast",
     (read_file(ROOT .. "/config/assisted_culling.log") or ""):find(
-        "in progress updates %(job bar [%d.]+s, panel line [%d.]+s, toast [%d.]+s%); %d+ rating writes, %d+ tag writes; final drain took") ~= nil, true)
+        "in progress updates %(job bar [%d.]+s, panel line [%d.]+s, toast [%d.]+s%); %d+ rating writes, %d+ Keeper / Rejected tag writes; final drain took") ~= nil, true)
+check("tag writes are logged by tag",
+    (read_file(ROOT .. "/config/assisted_culling.log") or ""):find(
+        "apply: tag writes by tag %(%+ attached, %- detached%): ") ~= nil, true)
 PYTHON.results = earlier_results
 
 -- the old dropdown preset is upgraded when it is picked, shown on the page and saved back
@@ -672,6 +678,52 @@ click("Restore previous ratings", { jpeg1, removed, jpeg2 })
 check("restore, an image removed from the library: the others are back", jpeg1.rating .. " " .. jpeg2.rating .. "; " .. last_print(),
     "5 4; Assisted Culling: restored the previous rating of 2 of 3 images, 1 couldn't be updated. Tags were not changed.")
 check("restore: no Lua error", lua_errors(), nil)
+
+-- Detail tags --------------------------------------------------------------------------
+-- Ratings and Keeper / Rejected are written first; the Why and flag tags follow under their own job bar.
+local detail1, detail2, detail3 = image(201, "DSC00201.JPG"), image(202, "DSC00202.JPG"), image(203, "DSC00203.JPG")
+PYTHON.results = "201,0.90,cut_off,,1,3,Why|Keeper\n202,0.40,,,0,1,Why|Outranked\n203,0.30,,,0,1,Why|Outranked\n"
+attached_names = {}
+click("Cull selection", { detail1, detail2, detail3 })
+check("detail tags: every Keeper / Rejected tag is attached before the first detail tag", table.concat(attached_names, ", "),
+    "Assisted Culling|Keeper, Assisted Culling|Rejected, Assisted Culling|Rejected, Assisted Culling|Why|Keeper,"
+    .. " Assisted Culling|Cut Off, Assisted Culling|Why|Outranked, Assisted Culling|Why|Outranked")
+check("detail tags: a second job bar, both closed at the end",
+    #jobs .. " " .. tostring(jobs[2] and jobs[2].title) .. " " .. tostring(jobs[1].valid) .. " " .. tostring(jobs[2] and jobs[2].valid),
+    "2 Assisted Culling: writing detail tags false false")
+check("detail tags: the end message says the ratings are ready and how many tags follow",
+    printed("Assisted Culling: done. 1 keepers, 2 not kept, 1 cut off. No groups found: every frame judged alone (group first for keepers). Ratings are ready. Now writing 4 detail tags; the job bar's x stops them."), true)
+check("detail tags: progress goes to the panel line", status_shown("writing detail tags: image 3 / 3"), true)
+check("detail tags: the panel line is cleared at the end", status_label.label, "")
+check("detail tags: the last message counts them", last_print(), "Assisted Culling: detail tags written (4).")
+local detail_log = read_file(ROOT .. "/config/assisted_culling.log") or ""
+check("detail tags: the log has the stage's line",
+    detail_log:find("apply: detail tags: 4 of 4 tag writes on 3 of 3 images in %d+s %(waited [%d.]+s for darktable, paused [%d.]+s%)\n") ~= nil, true)
+check("detail tags: the timing line counts only the Keeper / Rejected tags", detail_log:find("3 Keeper / Rejected tag writes", 1, true) ~= nil, true)
+check("detail tags: the tally has them", detail_log:find("2 +Assisted Culling|Why|Outranked", 1, true) ~= nil, true)
+
+click("Cull selection", { detail1, detail2, detail3 })
+check("detail tags, same images again: nothing to write, no second job bar", #jobs .. " " .. last_print(),
+    "1 Assisted Culling: done. 1 keepers, 2 not kept, 1 cut off. No groups found: every frame judged alone (group first for keepers).")
+
+-- the detail job bar's x after the first image: ratings and Keeper / Rejected are complete, the rest wait for a rerun
+local detail4, detail5, detail6 = image(204, "DSC00204.JPG"), image(205, "DSC00205.JPG"), image(206, "DSC00206.JPG")
+PYTHON.results = "204,0.90,,,1,3,Why|Keeper\n205,0.40,,,0,1,Why|Outranked\n206,0.30,,,0,1,Why|Outranked\n"
+on_sleep = function() if jobs[2] and jobs[2].valid then jobs[2].valid = false end end
+click("Cull selection", { detail4, detail5, detail6 })
+on_sleep = nil
+check("detail tags, stopped: the first image has its tag, the others have rating and Rejected only",
+    tostring(has_tag(detail4, "Assisted Culling|Why|Keeper")) .. " " .. tostring(has_tag(detail5, "Assisted Culling|Why|Outranked"))
+    .. " " .. detail5.rating .. " " .. tostring(has_tag(detail5, "Assisted Culling|Rejected")) .. " " .. tostring(has_tag(detail6, "Assisted Culling|Rejected")),
+    "true false 1 true true")
+check("detail tags, stopped: the message says what is left", last_print(),
+    "Assisted Culling: detail tags stopped. 2 images still miss theirs; ratings and Keeper / Rejected are complete. Cull the same images again to write the rest.")
+check("detail tags, stopped: the panel line is cleared", status_label.label, "")
+click("Cull selection", { detail4, detail5, detail6 })
+check("detail tags, culled again after a stop: the rest are written",
+    tostring(has_tag(detail5, "Assisted Culling|Why|Outranked")) .. " " .. tostring(has_tag(detail6, "Assisted Culling|Why|Outranked")) .. " " .. last_print(),
+    "true true Assisted Culling: detail tags written (2).")
+check("detail tags: no Lua error", lua_errors(), nil)
 
 -- Reset ratings to 0 ------------------------------------------------------------------
 click("Reset ratings to 0", {})
