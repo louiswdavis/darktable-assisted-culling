@@ -900,6 +900,8 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
     local sam_ids = {}
     local main_started = false
     local stage_a_alive = false
+    -- the selection as it was before the final drain emptied it; restored below even after an error
+    local hidden_selection = nil
 
     local success, run_err = pcall(function()
         -- the job and the start message go up before the selection's tags and groups are read
@@ -1547,6 +1549,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             local started = os.time()
             local last_toast_pct = 0
             rating_batch = {}
+            if remaining > 0 then hidden_selection = C.hide_selection(dt, log) end
 
             while pending_idx <= total_lines do
                 if M.cancel_requested or (culling_job and not culling_job.valid) or file_exists(CANCEL_PATH) then
@@ -1637,6 +1640,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         end
     end)
 
+    C.restore_selection(dt, hidden_selection)
     is_running = false
     if action_button then
         action_button.label = _("Cull selection")
@@ -1692,6 +1696,7 @@ function M.clear_marks(images)
 
     local total, cleared, failed = #images, 0, 0
     local i = 1
+    local hidden_selection = C.hide_selection(dt, log)
     local ok, err = pcall(function()
         while i <= total do
             local budget = STAGE2_WRITE_BUDGET
@@ -1724,6 +1729,7 @@ function M.clear_marks(images)
                 math.min(STAGE2_SLEEP_MAX_MS, math.floor((os.clock() - slice_start) * 1000))))
         end
     end)
+    C.restore_selection(dt, hidden_selection)
     show_status("")
     if not ok then notify_error("Assisted Culling: clearing marks failed: " .. tostring(err)); return end
     dt.print(string.format("Assisted Culling: removed culling tags from %d of %d images%s. Star ratings were not changed.",

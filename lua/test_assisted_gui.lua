@@ -84,6 +84,8 @@ end
 -- darktable -----------------------------------------------------------------------
 local prints, jobs, images_by_id, tags_by_name, tag_list, panel = {}, {}, {}, {}, {}, nil
 local hinter_calls, rating_actions = 0, 0
+-- how many images were selected at each tag attach
+local selected_at_attach = {}
 local prefs = { ["assisted_plugins/plugins_root"] = ROOT .. "/plugins" }
 local PREF_EMPTY = { string = "", directory = "", file = "", integer = 0, float = 0, bool = false }
 
@@ -145,6 +147,7 @@ dt = {
             return tags_by_name[name]
         end,
         attach = function(tag, img)
+            selected_at_attach[#selected_at_attach + 1] = #dt.gui.action_images
             for _, have in ipairs(img.tags) do
                 if have == tag then return end
             end
@@ -290,7 +293,11 @@ check("cull, nothing selected: asks for a selection", last_print(), "Assisted Cu
 check("cull, nothing selected: no job bar", #jobs, 0)
 check("cull, nothing selected: the scorer is not started", #PYTHON.runs, 0)
 
+selected_at_attach = {}
 click("Cull selection", all)
+check("cull: tags were attached", #selected_at_attach > 0, true)
+check("cull: nothing is selected while tags are attached", math.max(table.unpack(selected_at_attach)), 0)
+check("cull: the selection is back at the end", dt.gui.action_images, all)
 check("cull: says it started as soon as it is clicked", prints[1], "Assisted Culling: started on 3 images…")
 check("cull: one job bar", #jobs, 1)
 check("cull: the job bar is titled", jobs[1] and jobs[1].title, "Assisted Culling")
