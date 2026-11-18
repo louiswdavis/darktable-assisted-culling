@@ -1427,7 +1427,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
 
         -- os.clock is wall time on Windows: seconds in tag and rating writes, pauses and the
         -- final drain's progress updates (job bar, status label, toast), which wait for darktable's GUI
-        local write_s, pause_s, progress_s, drain_s = 0, 0, 0, 0
+        local write_s, pause_s, bar_s, label_s, toast_s, drain_s = 0, 0, 0, 0, 0, 0
 
         -- One paced slice: stop after the write budget, then yield to the GUI in
         -- proportion to how long the slice took. Returns false if nothing was pending.
@@ -1540,22 +1540,26 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                 trace(string.format("applying: results %d of %d", pending_idx, total_lines))
                 apply_slice()
 
-                local progress_start = os.clock()
+                local bar_start = os.clock()
                 local done = pending_idx - start_idx
                 local pct = done / remaining
                 if culling_job then
                     culling_job.percent = PROGRESS_ANALYSIS
                         + (1 - PROGRESS_ANALYSIS) * math.min(1.0, (pending_idx - 1) / total_lines)
                 end
+                local label_start = os.clock()
+                bar_s = bar_s + label_start - bar_start
                 show_status(string.format(
                     "applying ratings %d / %d (%d%%)%s", pending_idx - 1, total_lines,
                     math.floor(((pending_idx - 1) / total_lines) * 100), fmt_eta(os.time() - started, done, remaining)))
+                local toast_start = os.clock()
+                label_s = label_s + toast_start - label_start
                 local milestone = math.floor(((pending_idx - 1) / total_lines) * 4) * 25
                 if milestone > last_toast_pct and milestone < 100 then
                     last_toast_pct = milestone
                     dt.print(string.format("Assisted Culling: ratings %d%% applied", milestone))
                 end
-                progress_s = progress_s + os.clock() - progress_start
+                toast_s = toast_s + os.clock() - toast_start
             end
             drain_s = os.time() - started
         end
@@ -1610,8 +1614,8 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             local notice = M.no_groups_notice(grouping_on, n_primary, n_groups_before_split)
             if notice then msg = msg .. " " .. notice:gsub("^%l", string.upper) .. "." end
             say(msg)
-            log(string.format("apply: timing: %.1fs in tag and rating writes, %.1fs paused, %.1fs in progress updates; final drain took %ds",
-                write_s, pause_s, progress_s, drain_s))
+            log(string.format("apply: timing: %.1fs in tag and rating writes, %.1fs paused, %.1fs in progress updates (job bar %.1fs, panel line %.1fs, toast %.1fs); final drain took %ds",
+                write_s, pause_s, bar_s + label_s + toast_s, bar_s, label_s, toast_s, drain_s))
             if first_error then
                 dt.print_error("Assisted Culling: first apply error: " .. first_error)
                 log("first apply error: " .. first_error)
