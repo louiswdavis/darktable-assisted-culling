@@ -331,6 +331,14 @@ check("no_groups_notice: none mode and single frame are silent",
 check("preset schema: keeper margin defaults off", cd.keep_margin, "off")
 check("preset schema: spread keepers defaults off", cd.spread_keepers, false)
 check("preset schema: number reads defaults off", cd.number_reads, false)
+check("preset schema: other angle, motion look and star slope default on",
+    tostring(cd.keep_angles) .. "|" .. tostring(cd.motion_look) .. "|" .. tostring(cd.star_slope), "true|true|true")
+for _, t in ipairs(C.TAG_TOGGLES) do
+    if t.key == "why" then
+        check("TAG_TOGGLES: Why writes thirteen reasons, ending with the two new keepers",
+            #t.writes .. "|" .. t.writes[12] .. "|" .. t.writes[13], "13|Why|Other angle|Why|Motion look")
+    end
+end
 check("preset schema: sharpness judge defaults off", cd.sharp_judge, false)
 check("preset schema: graded non-keepers can be picked",
     C.preset_merge(C.PRESET_SCHEMA, { non_keeper = "graded" }).non_keeper, "graded")

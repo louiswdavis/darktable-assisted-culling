@@ -321,6 +321,9 @@ M.PRESET_SCHEMA = {
     { key = "penalise_blocked", kind = "bool", default = true },
     { key = "blank_share", kind = "choice", choices = blank_share_opts, default = "95" },
     { key = "spread_keepers", kind = "bool", default = false },
+    { key = "keep_angles", kind = "bool", default = true },
+    { key = "motion_look", kind = "bool", default = true },
+    { key = "star_slope", kind = "bool", default = true },
     { key = "number_reads", kind = "bool", default = false },
     { key = "sharp_judge", kind = "bool", default = false },
     { key = "no_vehicle_leave", kind = "bool", default = false },
@@ -348,7 +351,8 @@ for _, f in ipairs(M.PRESET_SCHEMA) do
 end
 M.PANEL_PAGES = {
     { number = 1, title = "scoring", keys = { "genre", "rank_mode", "sharp_mode", "exp_mode", "keep_mode",
-        "keep_margin", "spread_keepers", "number_reads", "sharp_judge", "non_keeper", "star_scale" } },
+        "keep_margin", "spread_keepers", "keep_angles", "motion_look", "number_reads", "sharp_judge", "non_keeper",
+        "star_scale", "star_slope" } },
     { number = 2, title = "bursts", keys = { "group_support", "group_node", "car_tag_node" } },
     { number = 3, title = "penalties & speed", keys = { "apply_while_scoring", "fast_jpeg_decode",
         "penalise_overexposed", "penalise_underexposed", "penalise_eyes_closed", "penalise_cut_off",
@@ -391,8 +395,9 @@ M.TAG_TOGGLES = {
       when = "subject tracking (SAM) only. Masked: the burst was ranked on SAM masks. Subject bias: a shortlisted frame got no mask, so the burst fell back." },
     { key = "why", label = "Why", kind = "diag",
       writes = { "Why|Keeper", "Why|Keeper by margin", "Why|Outranked", "Why|Graded", "Why|Not shortlisted",
-          "Why|No vehicle", "Why|Close call", "Why|Blank", "Why|Spread", "Why|Number clearer", "Why|Subject clearer" },
-      when = "every scored frame, saying how it was decided. Keeper: kept by rank. Keeper by margin: kept by the keeper margin. Outranked: lost to a sharper frame (left or rejected). Graded: lost and rated by burst. Not shortlisted: subject tracking (SAM) left it out of the shortlist. No vehicle: the detector found no car, so the frame kept its rating (only with \"Leave frames with no vehicle\" on). Blank: the frame is one flat colour, so it was rejected. Close call: the last keeper and the best frame that lost scored within 5% of each other; the keeper is still kept, but check both. Spread: kept as its stretch of the burst's best frame over a sharper frame elsewhere (only with \"Spread keepers over the burst\" on). Number clearer: kept over the sharper frame of a close call because tagging read the car's number clearer in it (only with \"Break close calls on the number read\" on). Subject clearer: kept over the sharper frame of a close call because the sharpness judge scored its car clearer (only with \"Break close calls with the sharpness judge\" on). Filter on one to step through, say, every frame that lost to the margin." },
+          "Why|No vehicle", "Why|Close call", "Why|Blank", "Why|Spread", "Why|Number clearer", "Why|Subject clearer",
+          "Why|Other angle", "Why|Motion look" },
+      when = "every scored frame, saying how it was decided. Keeper: kept by rank. Keeper by margin: kept by the keeper margin. Outranked: lost to a sharper frame (left or rejected). Graded: lost and rated by burst. Not shortlisted: subject tracking (SAM) left it out of the shortlist. No vehicle: the detector found no car, so the frame kept its rating (only with \"Leave frames with no vehicle\" on). Blank: the frame is one flat colour, so it was rejected. Close call: the last keeper and the best frame that lost scored within 5% of each other; the keeper is still kept, but check both. Spread: kept as its stretch of the burst's best frame over a sharper frame elsewhere (only with \"Spread keepers over the burst\" on). Number clearer: kept over the sharper frame of a close call because tagging read the car's number clearer in it (only with \"Break close calls on the number read\" on). Subject clearer: kept over the sharper frame of a close call because the sharpness judge scored its car clearer (only with \"Break close calls with the sharpness judge\" on). Other angle: the best frame of a view of the car the sharpest keeper does not show, kept one star below it (only with \"Keep the other angles\" on). Motion look: the burst's straightest motion blur with the car in view, kept as well as the sharp keepers (only with \"Keep a motion-blur frame\" on). Filter on one to step through, say, every frame that lost to the margin." },
 }
 
 -- Headings of the tags-written page, in order; each TAG_TOGGLES row's `kind` is one of these.
@@ -1205,6 +1210,9 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         if fast_jpeg then argv[#argv + 1] = "--fast-jpeg" end
         if settings.no_vehicle_leave then argv[#argv + 1] = "--no-vehicle-leave" end
         if settings.spread_keepers then argv[#argv + 1] = "--spread-keepers" end
+        if settings.keep_angles then argv[#argv + 1] = "--keep-angles" end
+        if settings.motion_look then argv[#argv + 1] = "--motion-look" end
+        if settings.star_slope then argv[#argv + 1] = "--star-slope" end
         if settings.number_reads then
             table.move({ "--number-reads", (M.car_boxes_path(dt.configuration.config_dir,
                 dt.preferences.read("assisted_tagging", "last_collection", "string"))) }, 1, 2, #argv + 1, argv)
@@ -2086,13 +2094,19 @@ local function install_panel()
           keep_combo, keep_margin_combo,
           check("spread_keepers", _("Spread keepers over the burst"),
               _("Cuts each burst into as many equal stretches of capture order as keepers allowed and keeps the sharpest frame of each, so a car through a corner keeps its entry and exit, not three near-copies of one moment. A stretch whose best frame scores under 95% of the burst's best keeps nothing; the next-sharpest frame overall is kept instead. A keeper picked this way over a sharper frame gets Why|Spread. Needs more than one keeper allowed.\nDefault: off. Unproven: compare a run with it on and off against your picks (eval_culling.py) before relying on it.")),
+          check("keep_angles", _("Keep the other angles"),
+              _("When a burst shows the car from more than one side (the detector's box changes shape by 1.3 times or more), also keeps the best frame of each other view that scores at least 70% of the burst's best, one star below the sharpest keeper. A frame with the car cut off by the frame edge never keeps while the burst has a frame showing the whole car. The frame kept this way gets Why|Other angle. Needs the detector (motorsport sharpness).\nDefault: on.")),
+          check("motion_look", _("Keep a motion-blur frame"),
+              _("Also keeps the one frame per burst whose blur runs most nearly in a single straight line (straightness 0.75 or more) with the car in view and not cut off, on top of the sharp keepers and never in place of one. Blurred objects in front of the car do not rule it out. Rated by how straight the blur is: 3 stars from 0.75, 4 from 0.80, 5 from 0.85. The frame kept this way gets Why|Motion look. Needs the detector (motorsport sharpness).\nDefault: on.")),
           new_widget("section_label") { label = _("close calls (last keeper within 5% of the next frame)") },
           check("number_reads", _("Break close calls on the number read"),
               _("In a close call (the last keeper and the best frame that lost score within 5%), keeps the frame where tagging read the car's number clearly: both frames must read the same number and the dropped one read it at least 0.10 more confidently. Reads come from tagging's last run on this collection (its boxes.json); frames changed since, or missing from it, keep the sharpness ranking. The frame kept this way gets Why|Number clearer.\nDefault: off. Unproven: compare a run with it on and off against your picks (eval_culling.py) before relying on it.")),
           check("sharp_judge", _("Break close calls with the sharpness judge"),
               _("In a close call that the number read left alone, scores the car crop of the burst's top frames (up to 3 within 5% of the best) with a learned image-quality model (HyperIQA) and keeps the frame it scores at least 5% clearer. Motion-aware sharpness only. Needs hyperiqa_model.onnx and hyperiqa_model.onnx.data in the plugin's models folder (see the README); each judged frame is decoded again, so a run takes longer. The frame kept this way gets Why|Subject clearer.\nDefault: off. Unproven: compare a run with it on and off against your picks (eval_culling.py) before relying on it.")),
           new_widget("section_label") { label = _("ratings") },
-          non_keeper_combo, star_scale_combo },
+          non_keeper_combo, star_scale_combo,
+          check("star_slope", _("Spread keeper stars evenly"),
+              _("Rates the run's keepers against each other instead of against fixed score steps: ranked by sharpness and cut into five equal groups, the sharpest group 5 stars, the next 4, down to 1. Other angle keepers stay one star below their burst's best, Motion look keepers keep their own rating, and a flag still costs its stars. Runs with fewer than 10 keepers, and the relative and binary ranking, use the fixed steps.\nDefault: on.")) },
         {
             group_support_combo,
             new_widget("label") { label = _("grouping tag node"), halign = "start" },

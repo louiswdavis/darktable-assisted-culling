@@ -356,11 +356,12 @@ check("cull, detector installed: the argument after the cache path is an option"
     (table.concat(detector_run.argv, " "):match("detections%.sqlite (%S+)")), "--car-boxes")
 local option_args = {}
 for i, arg in ipairs(detector_run.argv) do
-    if arg == "--no-vehicle-leave" or arg == "--spread-keepers" then option_args[#option_args + 1] = arg end
+    if arg == "--no-vehicle-leave" or arg == "--spread-keepers" or arg == "--keep-angles" or arg == "--motion-look"
+        or arg == "--star-slope" then option_args[#option_args + 1] = arg end
     if arg == "--number-reads" or arg == "--sharp-judge" then option_args[#option_args + 1] = arg .. " " .. tostring(detector_run.argv[i + 1]) end
 end
 check("cull, every argument option on: each one reaches the scorer", table.concat(option_args, "; "),
-    "--no-vehicle-leave; --spread-keepers; --number-reads " .. ROOT .. "/config/assisted_tagging/last-run/.boxes.json; --sharp-judge "
+    "--no-vehicle-leave; --spread-keepers; --keep-angles; --motion-look; --star-slope; --number-reads " .. ROOT .. "/config/assisted_tagging/last-run/.boxes.json; --sharp-judge "
     .. PLUGIN .. "/models/hyperiqa_model.onnx")
 check("cull, detector installed: the keeper is rated", jpeg1.rating, 3)
 check("cull, detector installed: no Lua error", lua_errors(), nil)
