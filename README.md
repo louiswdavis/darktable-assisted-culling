@@ -239,6 +239,8 @@ The **preset** picker at the top of the panel saves every panel setting (everyth
 
 Below the [preset](#presets) picker are the page buttons **1 scoring ▸** (genre to non-keepers, below), **2 bursts ▸**, **3 penalties & speed ▸**, **4 tags written ▸**, **5 run ▸** and **6 tools ▸**: clicking one opens its contents below it (its label ends in **▾**) and folds the others; clicking the open one folds it. The open page is remembered across restarts. darktable's reset button (↺ in the panel header) puts every setting back to the template defaults; nothing is saved until you update a preset.
 
+Page 1 has four headings: **how frames are scored** (genre, ranking mode, sharpness, exposure), **keepers per burst** (keepers, keeper margin, spread keepers), **close calls** (the number-read and sharpness-judge tie-breaks) and **ratings** (non-keepers, star strictness).
+
 ### Genre
 
 *landscape*, *portrait*, *sport* and *macro* set four of the options below in one click. *custom* is selected automatically the moment you change any of them by hand. Genres never change *non-keepers*. A [preset](#presets) saves the genre along with everything else.
@@ -366,6 +368,8 @@ Flags still cost a star each. **Star strictness** scales these steps too: strict
 
 ### 3 penalties & speed
 
+Three headings: **speed**, **penalties**, **blank frames and vehicles**.
+
 - **Apply ratings while scoring** (default off). Applies results as they arrive instead of all at the end. Faster on big batches, but darktable's UI shares the CPU with the scorer; turn off if it lags.
 - **Fast JPEG decoding** (default on). Decodes JPEGs and raw previews at reduced size. Several times faster; scores shift slightly, which matters little since keepers are ranked within each burst. It speeds up the whole-frame checks only: with *motorsport* sharpness, each frame is still decoded once more at full size to cut the car, so that mode gains less.
 - **blank frames** (off, 99%, 97%, 95%, 90% one colour; default 95%). A frame at least this share one flat colour is tagged `Blank` and rejected. Off rates blank frames like any other.
@@ -384,10 +388,14 @@ A check is written whatever the diagnostics say; only its own switch stops it. O
 
 ### 5 run
 
+One heading, **cull (models; writes ratings and tags)**.
+
 - **Tag each run** (default off). Stamps every frame a run writes with `Assisted Culling|Run|YYYY-MM-DD HH:MM`.
 - **Cull selection.** Scores the selected images and rates/tags them. Click again to cancel.
 
 ### 6 tools
+
+Two headings: **explain the last run** (the first two buttons, which change nothing) and **undo**.
 
 - **Why these ratings?** Explains the selected images from the last run's report. Changes nothing.
 - **Open last report.** Opens `last-run.csv` in your spreadsheet app.

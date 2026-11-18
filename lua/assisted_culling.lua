@@ -1907,11 +1907,13 @@ local function install_panel()
         _("Add a timestamp tag (Assisted Culling|Run|YYYY-MM-DD HH:MM) to every image a run writes, so the latest run's photos can be filtered apart from earlier ones. Stamps accumulate; remove old ones in darktable's tag manager. Clear culling marks leaves them.\nDefault: off. Turn on when re-running a shoot and you want to review only what changed."))
 
     local option_checks = {
+        new_widget("section_label") { label = _("speed") },
         check("apply_while_scoring", _("Apply ratings while scoring"),
             _("Faster overall on big batches, but darktable's UI shares the CPU with the scorer; turn off if the UI lags.\nDefault: off. Turn on for batches of several hundred frames.")),
         check("fast_jpeg_decode", _("Fast JPEG decoding"),
             _("Decodes JPEGs and RAW previews at reduced size, several times faster. Sharpness scores shift slightly, but keepers are ranked within each burst, so picks rarely change.\nDefault: on. Turn off when frames are close in sharpness and you want full-size scores.")),
     }
+    option_checks[#option_checks + 1] = new_widget("section_label") { label = _("penalties (each lowers stars by one)") }
     for _i, f in ipairs(FLAGS) do
         if not f.rejects then
             local label = f.tag:match("|(.+)$")
@@ -1919,6 +1921,7 @@ local function install_panel()
                 string.format(_("On: %s images get one star less. Off: they're still tagged %s (if it's on under tags written) but keep their rating.\nDefault: on. Turn off for styles where it's the point (low-key, high-key)."), label, label))
         end
     end
+    option_checks[#option_checks + 1] = new_widget("section_label") { label = _("blank frames and vehicles") }
     option_checks[#option_checks + 1] = choice_combo("blank_share", _("blank frames"),
         _("Rejects a frame when at least this share of it is one flat colour (lens cap, black barrier, blown sky, fog), and tags it Blank and Why|Blank. It is never a keeper, even when the whole burst is blank. A dark frame with lit headlights is not blank.\nDefault: 95%. Pick off to rate blank frames like any other."),
         { _("off"), _("99% one colour"), _("97% one colour"), _("95% one colour"), _("90% one colour") })
@@ -2063,13 +2066,18 @@ local function install_panel()
     })
 
     local page_widgets = {
-        { genre_combo, rank_combo, sharp_combo, exp_combo, keep_combo, keep_margin_combo,
+        { new_widget("section_label") { label = _("how frames are scored") },
+          genre_combo, rank_combo, sharp_combo, exp_combo,
+          new_widget("section_label") { label = _("keepers per burst") },
+          keep_combo, keep_margin_combo,
           check("spread_keepers", _("Spread keepers over the burst"),
               _("Cuts each burst into as many equal stretches of capture order as keepers allowed and keeps the sharpest frame of each, so a car through a corner keeps its entry and exit, not three near-copies of one moment. A stretch whose best frame scores under 95% of the burst's best keeps nothing; the next-sharpest frame overall is kept instead. A keeper picked this way over a sharper frame gets Why|Spread. Needs more than one keeper allowed.\nDefault: off. Unproven: compare a run with it on and off against your picks (eval_culling.py) before relying on it.")),
+          new_widget("section_label") { label = _("close calls (last keeper within 5% of the next frame)") },
           check("number_reads", _("Break close calls on the number read"),
               _("In a close call (the last keeper and the best frame that lost score within 5%), keeps the frame where tagging read the car's number clearly: both frames must read the same number and the dropped one read it at least 0.10 more confidently. Reads come from tagging's last run on this collection (its boxes.json); frames changed since, or missing from it, keep the sharpness ranking. The frame kept this way gets Why|Number clearer.\nDefault: off. Unproven: compare a run with it on and off against your picks (eval_culling.py) before relying on it.")),
           check("sharp_judge", _("Break close calls with the sharpness judge"),
               _("In a close call that the number read left alone, scores the car crop of the burst's top frames (up to 3 within 5% of the best) with a learned image-quality model (HyperIQA) and keeps the frame it scores at least 5% clearer. Motion-aware sharpness only. Needs hyperiqa_model.onnx and hyperiqa_model.onnx.data in the plugin's models folder (see the README); each judged frame is decoded again, so a run takes longer. The frame kept this way gets Why|Subject clearer.\nDefault: off. Unproven: compare a run with it on and off against your picks (eval_culling.py) before relying on it.")),
+          new_widget("section_label") { label = _("ratings") },
           non_keeper_combo, star_scale_combo },
         {
             group_support_combo,
@@ -2080,8 +2088,12 @@ local function install_panel()
         },
         option_checks,
         tag_checks,
-        { run_tag_check, action_button },
-        { why_button, report_button, clear_button },
+        { new_widget("section_label") { label = _("cull (models; writes ratings and tags)") },
+          run_tag_check, action_button },
+        { new_widget("section_label") { label = _("explain the last run (changes nothing)") },
+          why_button, report_button,
+          new_widget("section_label") { label = _("undo") },
+          clear_button },
     }
     local pages = {}
     for i, page in ipairs(M.PANEL_PAGES) do
