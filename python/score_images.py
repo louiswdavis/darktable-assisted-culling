@@ -34,7 +34,7 @@ from common import RAW_EXTENSIONS, atomic_write  # noqa: E402  (stdlib-only modu
 # Decoding and vehicle detection are shared byte for byte with the tagging plugin.
 import vehicle_detect  # noqa: E402
 from vehicle_detect import (  # noqa: E402
-    DetectionCache, boxes_in, decode_rgb, detect, detection_key, file_key, load_detector,
+    DetectionCache, Detector, boxes_in, decode_rgb, detect, detection_key, file_key, load_detector,
 )
 # Star tables, keeper rules and the per-burst rating live in rating.py (stdlib only), so
 # eval_culling.py can replay them on a finished run without cv2.
@@ -280,13 +280,13 @@ def car_key(cars) -> tuple:
     return () if cars is None else (["cars", CAR_BOX_MIN_IOU, [[round(v, 4) for v in c] for c in cars]],)
 
 
-def log_car_check(rows, detections, detector: str, cars_of: dict, note: str):
+def log_car_check(rows, detections, det_ref, cars_of: dict, note: str):
     """Logs where the boxes came from and, over the frames in tagging's file, how many boxes at
     DETECTOR_MIN_SCORE or more the car check removed and how many frames it left with none."""
     frames = removed = emptied = 0
     for row in rows:
         cars = cars_of.get(path_key(row[1]))
-        entry = detections.get(detection_key(row[1], detector_for(detector))) if cars is not None else None
+        entry = detections.get(detection_key(row[1], det_ref)) if cars is not None else None
         if not entry:
             continue
         before = sum(b[4] >= DETECTOR_MIN_SCORE for b in entry["boxes"])
@@ -759,7 +759,7 @@ CACHE_NEUTRAL = (
     "RAW_EXTENSIONS", "STAR_THRESHOLDS", "RELATIVE_REFERENCE_PERCENTILE", "RELATIVE_MIN_FRAMES", "GRADED_STEPS",
     "TIER_THRESHOLDS", "PEAK_TIER_THRESHOLDS", "UNIFORMITY_TIER_THRESHOLDS", "TIER_THRESHOLDS_BY_MODE",
     "FLAG_PENALTIES", "SHORTLIST_MIN", "PANNING_SHUTTER", "SHALLOW_DOF_APERTURE",
-    "SCORE_CACHE_MAX_AGE_DAYS", "SCORE_CACHE_COMMIT_EVERY", "CACHE_INPUTS", "CACHE_NEUTRAL",
+    "SCORE_CACHE_MAX_AGE_DAYS", "SCORE_CACHE_COMMIT_EVERY", "CACHE_INPUTS", "CACHE_NEUTRAL", "JUDGE_THREADS",
     "MOTION_TIER_THRESHOLDS", "MOTION_TAGS", "PRESCORE_FAILED", "REPORT_HEADER", "REPORT_ARCHIVE_KEEP", "WHY_REASONS",
     # framing is judged across the burst and never cached; NO_VEHICLE_SUBJECT matches a cached subject
     "DIRECTION_MIN_SHIFT", "EDGE_TOUCH", "CUT_TRAILING_SHARE", "TIGHT_CROP_SHARE", "BLOCKED_SHARE", "NO_VEHICLE_SUBJECT",
@@ -872,12 +872,18 @@ class ScoreCache:
         self.db = None
 
 
-def detector_key(detector: str):
-    """The detector model's identity (family, file name, size, sha1) for cache keys;
-    "" when there's none."""
-    if not detector:
-        return ""
-    return detector_for(detector).id
+def detector_ref(model_path: str, cache):
+    """The detector model's identity (family, file name, size, sha1) as a Detector with no
+    network, for cache keys; None when there's none. The id is kept in the score cache against
+    the file's path, mtime and size, so the model is read and hashed here only when it is new or
+    changed. vehicle_detect.InputError as detector_for."""
+    if not model_path:
+        return None
+    hit = cache.get("detector", file_key(model_path))
+    if hit is None:
+        hit = {"id": detector_for(model_path).id}
+        cache.put(hit, "detector", file_key(model_path))
+    return Detector(hit["id"], "", None, frozenset())
 
 
 def masked_key(filepath: str, args, prompt, edited: str):
@@ -1108,6 +1114,7 @@ JUDGE_SIZE = 224
 JUDGE_GRID = 3  # JUDGE_GRID × JUDGE_GRID tiles spread over the car crop; their scores are averaged
 JUDGE_MEAN = (0.485, 0.456, 0.406)
 JUDGE_STD = (0.229, 0.224, 0.225)
+JUDGE_THREADS = 2  # the judge runs in the parent while the worker pool has the other cores
 
 
 class SharpJudge:
@@ -1117,15 +1124,17 @@ class SharpJudge:
     def __init__(self, path: str):
         import onnxruntime  # lazy: only a run with the judge on needs it
         onnxruntime.set_default_logger_severity(3)  # errors only: the model-load warnings flood the run log
-        self.session = onnxruntime.InferenceSession(path, providers=["CPUExecutionProvider"])
+        opts = onnxruntime.SessionOptions()
+        opts.intra_op_num_threads = JUDGE_THREADS
+        self.session = onnxruntime.InferenceSession(path, opts, providers=["CPUExecutionProvider"])
         self.input = self.session.get_inputs()[0].name
         self.id = [file_key(p) for p in (path, path + ".data") if os.path.exists(p)]
 
-    def score(self, crop: np.ndarray) -> float:
-        """Mean score over the crop's judge_tiles."""
+    def score(self, tiles: list) -> float:
+        """Mean score over a crop's judge_tiles."""
         mean, std = np.array(JUDGE_MEAN, np.float32), np.array(JUDGE_STD, np.float32)
         scores = []
-        for tile in judge_tiles(crop):
+        for tile in tiles:
             x = ((tile.astype(np.float32) / 255.0 - mean) / std).transpose(2, 0, 1)[np.newaxis]
             scores.append(float(np.asarray(self.session.run(None, {self.input: np.ascontiguousarray(x)})[0]).reshape(-1)[0]))
         return float(np.mean(scores))
@@ -1145,6 +1154,13 @@ def judge_tiles(crop: np.ndarray) -> list:
     return [crop[y:y + JUDGE_SIZE, x:x + JUDGE_SIZE] for y in ys for x in xs]
 
 
+def car_tiles(full: np.ndarray, entry) -> list:
+    """judge_tiles of the frame's car crop; the centre third when there is no detector or no
+    car, as in motion_aware_score."""
+    box = vehicle_box(full, entry)[0] if entry is not None else None
+    return judge_tiles(subject_crop(full, box or CENTRE_BOX))
+
+
 def frame_entry(rgb: np.ndarray, detector: str, detections):
     """(the frame's detection entry or None without a detector, the entry when it was
     detected here or None when `detections` was the stored one): the parent writes
@@ -1160,12 +1176,14 @@ def frame_entry(rgb: np.ndarray, detector: str, detections):
 def process_single_image(filepath: str, sharp_mode: str, exp_mode: str, cancel_path: str = "",
                          fast_jpeg: bool = False, mask_path: str = "", detector: str = "",
                          exposure: float = 0.0, focal: float = 0.0, detections=None,
-                         blank_share: float = BLANK_SHARE, cars=None):
-    """(filepath, score, flags, error, fresh detection entry or None). The detector sees
-    the frame as decoded; scoring sees it downscaled to MAX_DIM. `cars` are the frame's car
-    boxes from tagging (car_filtered), None when it isn't in tagging's file."""
+                         blank_share: float = BLANK_SHARE, cars=None, judged: bool = False):
+    """(filepath, score, flags, error, fresh detection entry or None, car_tiles or None). The
+    detector sees the frame as decoded; scoring sees it downscaled to MAX_DIM. `cars` are the
+    frame's car boxes from tagging (car_filtered), None when it isn't in tagging's file. With
+    `judged`, a motion_aware frame hands back its car_tiles, so the parent's sharpness judge
+    needs no decode of its own."""
     if cancel_path and os.path.exists(cancel_path):
-        return filepath, None, None, "cancelled", None
+        return filepath, None, None, "cancelled", None, None
     try:
         full = decode_rgb(filepath, fast_jpeg)
         entry, fresh = frame_entry(full, detector if sharp_mode == "motion_aware" else "", detections)
@@ -1185,9 +1203,10 @@ def process_single_image(filepath: str, sharp_mode: str, exp_mode: str, cancel_p
         else:
             sharp = sharpness_score(rgb, sharp_mode, mask_path)
         flags = frame_flags(exposure_status(rgb, exp_mode), eyes_closed, is_blank(rgb, blank_share))
-        return filepath, sharp, flags, None, fresh
+        tiles = car_tiles(full, entry) if judged and sharp_mode == "motion_aware" else None
+        return filepath, sharp, flags, None, fresh, tiles
     except Exception as e:
-        return filepath, None, None, str(e), None
+        return filepath, None, None, str(e), None, None
 
 
 def process_single_saliency(filepath: str, fast_jpeg: bool = False, exp_mode: str = "whole_frame",
@@ -1247,7 +1266,8 @@ def emit_saliency_points(manifest, args, cache, detections):
     exp_mode = getattr(args, "exp_mode", "whole_frame")
     blank_share = getattr(args, "blank_share", BLANK_SHARE)
     detector = getattr(args, "detector", "")
-    det_key = detector_key(detector)  # loads the model: a missing or unreadable one fails the run, not each frame
+    det_ref = detector_ref(detector, cache)  # a missing or unreadable model fails the run here, not each frame
+    det_key = det_ref.id if det_ref else ""
     cars_of, cars_note = read_car_boxes(getattr(args, "car_boxes", "")) if detector else ({}, "")
     with open(args.results, "w", newline="", encoding="utf-8"):
         pass
@@ -1308,7 +1328,7 @@ def emit_saliency_points(manifest, args, cache, detections):
     workers = max(1, (os.cpu_count() or 2) - 1)
     stored, detected = {}, 0  # filepath → detection entry already in the shared cache; frames detected here
     if detector:
-        stored = {row[1]: hit for row in to_decode for hit in [detections.get(detection_key(row[1], detector_for(detector)))]
+        stored = {row[1]: hit for row in to_decode for hit in [detections.get(detection_key(row[1], det_ref))]
                   if hit is not None}
     with concurrent.futures.ProcessPoolExecutor(max_workers=workers, initializer=_init_worker,
                                                 initargs=(detector,)) as executor:
@@ -1327,7 +1347,7 @@ def emit_saliency_points(manifest, args, cache, detections):
             image_id = future_to_id[future]
             filepath, prompt, heuristic, flags, err, subject, note, fresh = future.result()
             if fresh is not None:
-                detections.put(fresh, detection_key(filepath, detector_for(detector)))
+                detections.put(fresh, detection_key(filepath, det_ref))
                 detected += 1
             if err:
                 log(f"skip saliency {image_id} ({filepath}): {err}")
@@ -1342,7 +1362,7 @@ def emit_saliency_points(manifest, args, cache, detections):
         pre_file.close()
     if detector:
         log(f"detections: {len(stored)} cached, {detected} detected")
-        log_car_check(manifest, detections, detector, cars_of, cars_note)
+        log_car_check(manifest, detections, det_ref, cars_of, cars_note)
 
 
 # The one "Why|<reason>" tag every scored frame gets in results column 7, saying how
@@ -1601,7 +1621,7 @@ def score_manifest(manifest, args, cache, detections):
         if detector:
             # framing is judged across the burst, so it's added here and never cached per frame
             ids = [item[0] for item in burst_groups[burst_id] if item[0] in raw]
-            boxes_of = [frame_boxes(car_filtered(detections.get(detection_key(path_of[i], detector_for(detector))),
+            boxes_of = [frame_boxes(car_filtered(detections.get(detection_key(path_of[i], det_ref)),
                                                  cars_of.get(path_key(path_of[i])))) for i in ids]
             direction, framing = framing_flags(boxes_of)
             targets = burst_targets(boxes_of)
@@ -1631,7 +1651,9 @@ def score_manifest(manifest, args, cache, detections):
             # only frames that can be a close call: the judge is the slow part of a run
             short = judge_shortlist(scores, eligible)
             for i in short:
-                judged_of[i] = judge_frame(path_of[i])
+                judged_of[i] = judge_frame(path_of[i], tiles_of.get(i))
+            for i in path_of:
+                tiles_of.pop(i, None)
             note += f", judged {', '.join(f'{i} {judged_of[i]:.3g}' for i in short) or 'none'}"
         if mode_of[burst_id] != args.sharp_mode:
             burst_tags.append(technique_tag(mode_of[burst_id]))
@@ -1681,7 +1703,8 @@ def score_manifest(manifest, args, cache, detections):
     motion = args.sharp_mode == "motion_aware"
     blank_share = getattr(args, "blank_share", BLANK_SHARE)
     detector = getattr(args, "detector", "") if motion else ""
-    det_key = detector_key(detector)  # loads the model: a missing or corrupt one fails the run here, not the centre third on every frame
+    det_ref = detector_ref(detector, cache)  # a missing or unreadable model fails the run here, not the centre third on every frame
+    det_key = det_ref.id if det_ref else ""
     cars_of, cars_note = read_car_boxes(getattr(args, "car_boxes", "")) if detector else ({}, "")
     reads_of, reads_note = read_number_reads(getattr(args, "number_reads", ""), manifest)
     if reads_note:
@@ -1700,6 +1723,7 @@ def score_manifest(manifest, args, cache, detections):
     look_of = set()  # ids that can keep for their motion look (finish_burst), with a detector only, for the report
     parts_of = {}  # id → (subject sharpness, class, straightness, crop[, own-size subject]), motion_aware only, for the report
     ladder_of = {}  # id → scale_ladder until its burst is finished, motion_aware only
+    tiles_of = {}  # id → car_tiles from the frame's worker until its burst is finished, with the judge only
     det_hits = det_fresh = 0
 
     def score_key(filepath, burst_id, image_id):
@@ -1728,20 +1752,21 @@ def score_manifest(manifest, args, cache, detections):
             masked = None if sharp[0] is None else float(sharp[0])
             cache.put({"masked": masked}, *masked_key(filepath, args, prescored[image_id][2], edited))
 
-    def judge_frame(filepath):
-        """The judge's score for the frame's car crop, cached; the centre third when there is no
-        detector or no car, as in motion_aware_score."""
+    def judge_frame(filepath, tiles):
+        """The judge's score for the frame's car_tiles, cached. `tiles` are the ones its worker
+        cut; None (the frame's score came from the cache, or its burst is not motion_aware)
+        decodes the frame here."""
         cars = cars_of.get(path_key(filepath))
         key = ("judge", file_key(filepath), args.fast_jpeg, judge.id, det_key, *car_key(cars),
                JUDGE_SIZE, JUDGE_GRID, JUDGE_MEAN, JUDGE_STD)
         hit = cache.get(*key)
         if hit is not None:
             return hit["judge"]
-        full = decode_rgb(filepath, args.fast_jpeg)
-        stored = detections.get(detection_key(filepath, detector_for(detector))) if detector else None
-        entry = car_filtered(frame_entry(full, detector, stored)[0], cars)
-        box = vehicle_box(full, entry)[0] if entry is not None else None
-        score = judge.score(subject_crop(full, box or CENTRE_BOX))
+        if tiles is None:
+            full = decode_rgb(filepath, args.fast_jpeg)
+            stored = detections.get(detection_key(filepath, det_ref)) if detector else None
+            tiles = car_tiles(full, car_filtered(frame_entry(full, detector, stored)[0], cars))
+        score = judge.score(tiles)
         cache.put({"judge": score}, *key)
         return score
 
@@ -1773,12 +1798,12 @@ def score_manifest(manifest, args, cache, detections):
                     processed_count += 1
                     burst_completion[burst_id] += 1
                     continue
-                stored = detections.get(detection_key(filepath, detector_for(detector))) if detector else None
+                stored = detections.get(detection_key(filepath, det_ref)) if detector else None
                 det_hits += stored is not None
                 fut = executor.submit(process_single_image, filepath, mode_of[burst_id], args.exp_mode,
                                       cancel_path, args.fast_jpeg, mask_path, detector, *shot_of[image_id],
                                       detections=stored, blank_share=blank_share,
-                                      cars=cars_of.get(path_key(filepath)))
+                                      cars=cars_of.get(path_key(filepath)), judged=judge is not None)
                 future_to_item[fut] = (burst_id, image_id, filepath, mask_path, edited)
         log(f"scoring: {total_images} frames in {total_bursts} bursts, {processed_count} from cache or stage A, "
             f"{len(future_to_item)} to decode, sharpness {args.sharp_mode}")
@@ -1792,13 +1817,16 @@ def score_manifest(manifest, args, cache, detections):
                 executor.shutdown(wait=False, cancel_futures=True)
                 sys.exit(130)
 
-            burst_id, image_id, filepath, mask_path, edited = future_to_item[future]
+            # popped so a finished future, and the tiles in its result, can be freed
+            burst_id, image_id, filepath, mask_path, edited = future_to_item.pop(future)
             try:
-                _, sharp, flags, err, fresh = future.result()
+                _, sharp, flags, err, fresh, tiles = future.result()
             except concurrent.futures.CancelledError:
                 continue
+            if tiles is not None:
+                tiles_of[image_id] = tiles
             if fresh is not None:
-                detections.put(fresh, detection_key(filepath, detector_for(detector)))
+                detections.put(fresh, detection_key(filepath, det_ref))
                 det_fresh += 1
             if err == "cancelled":
                 executor.shutdown(wait=False, cancel_futures=True)
@@ -1829,7 +1857,7 @@ def score_manifest(manifest, args, cache, detections):
 
     if detector:
         log(f"detections: {det_hits} cached, {det_fresh} detected")
-        log_car_check(manifest, detections, detector, cars_of, cars_note)
+        log_car_check(manifest, detections, det_ref, cars_of, cars_note)
     references = relative_references(relative_scores)
     for (mode, masked), values in relative_scores.items():
         label = f"{mode}{' masked' if masked else ''} ({len(values)} frames)"

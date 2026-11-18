@@ -25,6 +25,40 @@ def check(name, got, want):
         print(f"ok   {name}")
 
 
+def tiny_onnx(inputs, nodes, outputs) -> bytes:
+    """A small ONNX model written by hand (no onnx package here): float inputs and outputs as
+    (name, shape), nodes as (op, input names, output name, constant float array or None)."""
+    def varint(n):
+        out = b""
+        while True:
+            out += bytes([(n & 0x7F) | (0x80 if n > 0x7F else 0)])
+            n >>= 7
+            if not n:
+                return out
+
+    def field(num, value):
+        if isinstance(value, int):
+            return varint(num << 3) + varint(value)
+        value = value.encode() if isinstance(value, str) else value
+        return varint(num << 3 | 2) + varint(len(value)) + value
+
+    def value_info(name, shape):
+        dims = b"".join(field(1, field(1, d)) for d in shape)
+        return field(1, name) + field(2, field(1, field(1, 1) + field(2, dims)))
+
+    def node(op, ins, out, const):
+        body = b"".join(field(1, i) for i in ins) + field(2, out) + field(4, op)
+        if const is not None:
+            tensor = b"".join(field(1, d) for d in const.shape) + field(2, 1) + field(9, const.astype("<f4").tobytes())
+            body += field(5, field(1, "value") + field(5, tensor) + field(20, 4))
+        return body
+
+    graph = (b"".join(field(1, node(*n)) for n in nodes) + field(2, "tiny")
+             + b"".join(field(11, value_info(*i)) for i in inputs)
+             + b"".join(field(12, value_info(*o)) for o in outputs))
+    return field(1, 7) + field(8, field(1, "") + field(2, 13)) + field(7, graph)
+
+
 # Worker processes re-import this file on spawn; only the parent runs the tests.
 def run_tests():
     global failures
@@ -649,6 +683,73 @@ def run_tests():
     check("report: a real run writes the header and one cell per column, view and motion look blank without a detector",
           (written[0], written[0][-2:], [(len(r), r[-2:]) for r in written[1:]]),
           (S.REPORT_HEADER, ["view", "motion_look"], [(len(S.REPORT_HEADER), ["", ""])] * 2))
+
+    # ticket 77: the judge reads the tiles its worker cut; the parent decodes only for a cached score
+    judge_p, judge_cache, judge_rep = (os.path.join(tmp, n) for n in ("judge.onnx", "judge.sqlite", "judge_report.csv"))
+    with open(judge_p, "wb") as f:
+        f.write(tiny_onnx([("x", (1, 3, S.JUDGE_SIZE, S.JUDGE_SIZE))], [("ReduceMean", ["x"], "y", None)],
+                          [("y", (1, 1, 1, 1))]))
+    decoded = []
+    real_decode = S.decode_rgb
+
+    def counted_decode(filepath, fast_jpeg=False):
+        decoded.append(filepath)
+        return real_decode(filepath, fast_jpeg)
+
+    def judged_run(**kw):
+        del decoded[:]
+        plain_run(**{"sharp_mode": "motion_aware", "sharp_judge": judge_p, "cache": judge_cache,
+                     "report": judge_rep, **kw})
+        return [r[-3] for r in _csv.reader(open(judge_rep))][1:], sorted(decoded)
+
+    def forget_judged(cache_path):
+        db = _sq.connect(cache_path)
+        db.execute("DELETE FROM scores WHERE key LIKE '[\"judge\"%'")
+        db.commit()
+        db.close()
+
+    S.decode_rgb = counted_decode  # counts the parent's decodes only: the workers import their own module
+    try:
+        judged_first = judged_run()
+        check("judge: every frame judged from its worker's tiles, with no decode in the parent",
+              (all(float(v) for v in judged_first[0]), len(set(judged_first[0])), judged_first[1]), (True, 2, []))
+        forget_judged(judge_cache)
+        check("judge: a frame whose score is cached is decoded in the parent, to the same score",
+              judged_run(), (judged_first[0], sorted(frames[:2])))
+        check("judge: a cached judge score needs no decode", judged_run(), (judged_first[0], []))
+
+        # the detector's id is kept against the model file, so only the first run reads it in the parent
+        det_p, det_store = os.path.join(tmp, "dfine_tiny.onnx"), os.path.join(tmp, "detections.sqlite")
+        car_logits = np.full((1, 1, 80), -9.0, np.float32)
+        car_logits[0, 0, 2] = 9.0
+        with open(det_p, "wb") as f:
+            f.write(tiny_onnx([("images", (1, 3, VD.DETECTOR_INPUT, VD.DETECTOR_INPUT))],
+                              [("Constant", [], "logits", car_logits),
+                               ("Constant", [], "pred_boxes", np.array([[[0.5, 0.5, 0.5, 0.5]]], np.float32))],
+                              [("logits", (1, 1, 80)), ("pred_boxes", (1, 1, 4))]))
+        det_cache = os.path.join(tmp, "det.sqlite")
+        S._DETECTORS.clear()
+        detected = judged_run(detector=det_p, detections=det_store, cache=det_cache)
+        check("detector id: a first run reads the model in the parent", det_p in S._DETECTORS, True)
+        store = VD.DetectionCache(det_store)
+        stored_boxes = [store.get(VD.detection_key(p, VD.load_detector(det_p)))["boxes"] for p in frames[:2]]
+        store.close()
+        check("detector id: the workers' detections are stored under the real detector's key",
+              [[round(v) for v in boxes[0][:4]] + [boxes[0][5]] for boxes in stored_boxes], [[30, 30, 90, 90, 2]] * 2)
+        check("judge: the car crop gives another score than the centre third, still with no parent decode",
+              (detected[0] != judged_first[0], detected[1]), (True, []))
+        S._DETECTORS.clear()
+        forget_judged(det_cache)
+        check("detector id: a rerun judges from the stored boxes to the same scores",
+              judged_run(detector=det_p, detections=det_store, cache=det_cache), (detected[0], sorted(frames[:2])))
+        check("detector id: the rerun never loads the model in the parent", S._DETECTORS, {})
+        st = os.stat(det_p)
+        os.utime(det_p, ns=(st.st_atime_ns, st.st_mtime_ns + 10**9))
+        check("detector id: a touched model file is read again and keeps its id, so the scores stay cached",
+              (judged_run(detector=det_p, detections=det_store, cache=det_cache), det_p in S._DETECTORS),
+              ((detected[0], []), True))
+    finally:
+        S.decode_rgb = real_decode
 
     # ticket 84: the star slope through the real scorer
     def plain_rows(**kw):
