@@ -100,6 +100,7 @@ ok   restore, another library's file: left alone
 ok   restore, comma and line break in the file name: the frame is back
 ok   restore, an image removed from the library: the others are back
 ok   restore: no Lua error
+ok   detail tags: a tag attached to two images is looked up once in the run
 ok   detail tags: every Keeper / Rejected tag is attached before the first detail tag
 ok   detail tags: a second job bar, both closed at the end
 ok   detail tags: the end message says the ratings are ready and how many tags follow

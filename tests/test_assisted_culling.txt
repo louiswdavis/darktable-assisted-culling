@@ -10,6 +10,21 @@ ok   temp_base: <dir>/<prefix><epoch>_<seq>_
 ok   sweep_temp: removes only this prefix's stale files
 ok   sweep_temp: newer file kept
 ok   sweep_temp: other prefix kept
+ok   image_label: id and filename
+ok   image_label: an image that raises on a read
+ok   logged_call: a failure returns false and the error
+ok   logged_call: the failure is logged once with a traceback
+ok   logged_call: a call that works logs nothing
+ok   run_log: a line is in the file as soon as it is logged
+ok   run_log: a held line waits
+ok   run_log: flush writes the waiting lines
+ok   run_log: flush does not end the hold
+ok   run_log: release writes the rest, helper lines go in as they are
+ok   run_log: rotate keeps the current log and 5 older ones
+ok   run_log: the current log holds the newest run
+ok   run_log: .prev.log holds the run before
+ok   run_log: .prev5.log holds the oldest kept run
+ok   paced_writer: only the failed write is logged
 ok   latest_group_keys keeps each photo's own run
 ok   latest_group_keys counts runs
 ok   group_tags_hint fires when native found nothing but tags exist

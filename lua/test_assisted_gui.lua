@@ -97,6 +97,8 @@ local on_sleep = nil
 local selected_at_attach = {}
 -- the name of each tag attached, in order
 local attached_names = {}
+-- tag name → times dt.tags.create was asked for it
+local creates_by_name = {}
 local prefs = { ["assisted_plugins/plugins_root"] = ROOT .. "/plugins" }
 local PREF_EMPTY = { string = "", directory = "", file = "", integer = 0, float = 0, bool = false }
 
@@ -151,6 +153,7 @@ dt = {
         get_tags = function(img) return img.tags end,
         find = function(name) return tags_by_name[name] end,
         create = function(name)
+            creates_by_name[name] = (creates_by_name[name] or 0) + 1
             if not tags_by_name[name] then
                 tags_by_name[name] = { name = name }
                 tag_list[#tag_list + 1] = tags_by_name[name]
@@ -683,8 +686,10 @@ check("restore: no Lua error", lua_errors(), nil)
 -- Ratings and Keeper / Rejected are written first; the Why and flag tags follow under their own job bar.
 local detail1, detail2, detail3 = image(201, "DSC00201.JPG"), image(202, "DSC00202.JPG"), image(203, "DSC00203.JPG")
 PYTHON.results = "201,0.90,cut_off,,1,3,Why|Keeper\n202,0.40,,,0,1,Why|Outranked\n203,0.30,,,0,1,Why|Outranked\n"
-attached_names = {}
+attached_names, creates_by_name = {}, {}
 click("Cull selection", { detail1, detail2, detail3 })
+check("detail tags: a tag attached to two images is looked up once in the run",
+    creates_by_name["Assisted Culling|Rejected"] .. " " .. creates_by_name["Assisted Culling|Why|Outranked"], "1 1")
 check("detail tags: every Keeper / Rejected tag is attached before the first detail tag", table.concat(attached_names, ", "),
     "Assisted Culling|Keeper, Assisted Culling|Rejected, Assisted Culling|Rejected, Assisted Culling|Why|Keeper,"
     .. " Assisted Culling|Cut Off, Assisted Culling|Why|Outranked, Assisted Culling|Why|Outranked")

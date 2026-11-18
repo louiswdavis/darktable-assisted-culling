@@ -505,9 +505,9 @@ local TMP_DIR = dt.configuration.tmp_dir
 -- Leftovers of a darktable that crashed or was killed mid-run; a day old is surely not live.
 C.sweep_temp(TMP_DIR, "dt_assisted_culling_", 86400)
 -- The run log: this plugin's lines plus the scorer's stderr. Kept in the
--- config dir, which outlives tmp_dir; the run before it is kept as .prev.log.
+-- config dir, which outlives tmp_dir; the 5 runs before it are kept as .prev.log, .prev2.log to .prev5.log.
 local LOG_PATH = dt.configuration.config_dir .. "/assisted_culling.log"
-local PREV_LOG_PATH = dt.configuration.config_dir .. "/assisted_culling.prev.log"
+local LOGS_KEPT = 5
 -- Lua errors (panel build, callbacks, events) go to their own log, which runs never rotate.
 local LUA_LOG_PATH = dt.configuration.config_dir .. "/assisted_culling.lua.log"
 local guard = C.error_guard(dt, LUA_LOG_PATH, "Assisted Culling")
@@ -830,23 +830,13 @@ local function fmt_eta(elapsed, done, total)
     return string.format(" | ~%dm %02ds left", remaining // 60, remaining % 60)
 end
 
--- Lines wait here while a scorer process appends its stderr to the same file:
--- two processes appending at once can overwrite each other's lines on Windows.
-local log_buffer = {}
-
-function log(msg)
-    log_buffer[#log_buffer + 1] = os.date("%H:%M:%S ") .. "lua: " .. msg
-end
+-- Lines reach disk at once, except while a scorer process appends its stderr to
+-- the same file (run_log.hold to run_log.release).
+local run_log = C.run_log(LOG_PATH)
+log = run_log.log
 
 -- Only call while no scorer process is running.
-local function flush_log()
-    if #log_buffer == 0 then return end
-    local f = io.open(LOG_PATH, "a")
-    if not f then return end
-    f:write(table.concat(log_buffer, "\n"), "\n")
-    f:close()
-    log_buffer = {}
-end
+local flush_log = run_log.flush
 
 local function say(msg)
     dt.print(msg)
@@ -879,12 +869,13 @@ end
 
 -- Returns 1 if a write was needed (attach/detach), else 0. Creates the tag only
 -- to attach it, so a branch that is turned off never appears in the tag list.
--- tally counts the writes under "+name" (attach) and "-name" (detach).
-local function sync_tag(img, have, name, wanted, tally)
+-- tally counts the writes under "+name" (attach) and "-name" (detach). tag_named
+-- returns the run's tag object for a name.
+local function sync_tag(img, have, name, wanted, tally, tag_named)
     if wanted and not have[name] then
-        tags.attach(tags.create(name), img); tally["+" .. name] = (tally["+" .. name] or 0) + 1; return 1
+        tags.attach(tag_named(name), img); tally["+" .. name] = (tally["+" .. name] or 0) + 1; return 1
     elseif not wanted and have[name] then
-        tags.detach(tags.find(name), img); tally["-" .. name] = (tally["-" .. name] or 0) + 1; return 1
+        tags.detach(tag_named(name), img); tally["-" .. name] = (tally["-" .. name] or 0) + 1; return 1
     end
     return 0
 end
@@ -903,10 +894,11 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
     local sam_ids = {}
     local main_started = false
     local stage_a_alive = false
+    local run_began = os.time()
     -- image id → { path, previous, written }: the rating each image had when the run first met it
     local previous_ratings = {}
 
-    local success, run_err = pcall(function()
+    local success, run_err = C.logged_call(log, "cull", function()
         local lock_tag = images and tags.find(TAG_LOCKED)
         if lock_tag and #lock_tag > 0 then
             local locked = {}
@@ -927,8 +919,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         run_started = true
         new_run_paths()
         flush_log() -- anything logged since the last run (e.g. a failed clear) belongs to its log
-        pcall(os.remove, PREV_LOG_PATH)
-        pcall(os.rename, LOG_PATH, PREV_LOG_PATH)
+        run_log.rotate(LOGS_KEPT)
         log(string.format("run started: darktable %s, %d images (%d locked left out)",
             tostring(dt.configuration.version), #images, n_locked))
         log(string.format("settings: rank %s, sharpness %s, exposure %s, keepers %s, non-keepers %s",
@@ -1136,7 +1127,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             }, 1, 12, #points_argv + 1, points_argv)
             if fast_jpeg then points_argv[#points_argv + 1] = "--fast-jpeg" end
             log("finding subjects: " .. command_line(py_bin, points_argv))
-            flush_log()
+            run_log.hold()
             local launched, why = run_async_python(py_bin, points_argv, LOG_PATH, true, POINTS_DONE_PATH)
             if not launched then error("couldn't start the scorer: " .. why, 0) end
             while not file_exists(POINTS_DONE_PATH) and not cancelled() do
@@ -1159,7 +1150,9 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                     dt.control.sleep(100)
                 end
                 stage_a_alive = not file_exists(POINTS_DONE_PATH)
+                if not stage_a_alive then run_log.release() end
             else
+                run_log.release()
                 local dfh = io.open(POINTS_DONE_PATH, "r")
                 local code = dfh and tonumber((dfh:read("*a") or ""):match("%d+")) or nil
                 if dfh then dfh:close() end
@@ -1289,19 +1282,13 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             log("cancelled before scoring")
         else
             log("scoring: " .. command_line(py_bin, argv))
-            flush_log()
+            run_log.hold()
             local launched, why = run_async_python(py_bin, argv, LOG_PATH, true, DONE_PATH)
             if not launched then error("couldn't start the scorer: " .. why, 0) end
             main_started = true
         end
 
-        local done_code, scorer_exited = nil, false
-        -- Once the scorer has exited its stderr can't interleave, so lines hit disk
-        -- right away and survive a darktable crash mid-apply.
-        local function trace(msg)
-            log(msg)
-            if scorer_exited then flush_log() end
-        end
+        local done_code = nil
         local stage1_start = os.time()
 
         local applied_total, failed_total, first_error, n_skipped = 0, 0, nil, 0
@@ -1327,6 +1314,12 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         -- in detail_queue and written after the end message.
         local rating_writes, all_writes, tag_tally = 0, 0, {}
         local detail_queue, detail_total = {}, 0
+        -- one lookup per tag name per run
+        local tag_objs = {}
+        local function tag_named(name)
+            tag_objs[name] = tag_objs[name] or tags.create(name)
+            return tag_objs[name]
+        end
         local function apply_to_image(img, want_rating, is_keeper, flags, diag, left_alone)
             local writes = 0
             local have = tags_of(img)
@@ -1340,8 +1333,8 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                 rating_writes = rating_writes + 1
             end
 
-            writes = writes + sync_tag(img, have, TAG_KEEPER, is_keeper and tag_on.keeper, tag_tally)
-            writes = writes + sync_tag(img, have, TAG_REJECT, not is_keeper and not left_alone and tag_on.rejected, tag_tally)
+            writes = writes + sync_tag(img, have, TAG_KEEPER, is_keeper and tag_on.keeper, tag_tally, tag_named)
+            writes = writes + sync_tag(img, have, TAG_REJECT, not is_keeper and not left_alone and tag_on.rejected, tag_tally, tag_named)
 
             local attach, detach = M.diag_tag_changes(have, diag)
             for _, f in ipairs(FLAGS) do
@@ -1396,6 +1389,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                 else
                     failed_total = failed_total + 1
                     first_error = first_error or tostring(res)
+                    log(C.image_label(img) .. ": rating and Keeper / Rejected tags failed: " .. tostring(res))
                 end
             end
             return writes
@@ -1498,8 +1492,8 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                     df_done:close()
                     done_code = tonumber(raw_content:match("%d+"))
                 end
-                scorer_exited = true
-                trace("scoring: scorer exit " .. tostring(done_code))
+                run_log.release()
+                log("scoring: scorer exit " .. tostring(done_code))
                 break
             end
 
@@ -1517,6 +1511,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                 if file_exists(DONE_PATH) then break end
                 dt.control.sleep(100)
             end
+            if file_exists(DONE_PATH) then run_log.release() end
         end
 
         -- Final drain: apply whatever is left, paced, with progress
@@ -1557,7 +1552,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                     math.floor(((pending_idx - 1) / total_lines) * 100), fmt_eta(os.time() - started, done, remaining)))
                 local toast_start = os.clock()
                 label_s = label_s + toast_start - label_start
-                trace(string.format("applying: results %d to %d of %d: %d rating writes, %d tag writes, panel line waited %.1fs",
+                log(string.format("applying: results %d to %d of %d: %d rating writes, %d tag writes, panel line waited %.1fs",
                     slice_from, pending_idx - 1, total_lines, rating_writes - ratings_before,
                     all_writes - writes_before - (rating_writes - ratings_before), toast_start - label_start))
                 local milestone = math.floor(((pending_idx - 1) / total_lines) * 4) * 25
@@ -1632,24 +1627,26 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                     function(cancelled_job) cancelled_job.valid = false end)
                 local detail_started, detail_idx, detail_written, detail_failed = os.time(), 1, 0, 0
                 local detail_wait_s, detail_pause_s = 0, 0
-                local detail_tags = {}
+                log(string.format("detail tags: started, %d tag writes on %d images", detail_total, #detail_queue))
                 while detail_idx <= #detail_queue and detail_job.valid do
                     local detail = detail_queue[detail_idx]
                     -- guarded per image: one removed from the library since it was rated raises on a write
-                    local ok_detail = pcall(function()
+                    local ok_detail, detail_err = pcall(function()
                         for _, name in ipairs(detail.attach) do
-                            detail_tags[name] = detail_tags[name] or tags.create(name)
-                            tags.attach(detail_tags[name], detail.img)
+                            tags.attach(tag_named(name), detail.img)
                             tag_tally["+" .. name] = (tag_tally["+" .. name] or 0) + 1
                             detail_written = detail_written + 1
                         end
                         for _, name in ipairs(detail.detach) do
-                            tags.detach(tags.find(name), detail.img)
+                            tags.detach(tag_named(name), detail.img)
                             tag_tally["-" .. name] = (tag_tally["-" .. name] or 0) + 1
                             detail_written = detail_written + 1
                         end
                     end)
-                    if not ok_detail then detail_failed = detail_failed + 1 end
+                    if not ok_detail then
+                        detail_failed = detail_failed + 1
+                        log(C.image_label(detail.img) .. ": detail tags failed: " .. tostring(detail_err))
+                    end
                     detail_idx = detail_idx + 1
                     detail_job.percent = (detail_idx - 1) / #detail_queue
                     local wait_start = os.clock()
@@ -1738,8 +1735,8 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             pcall(os.remove, done .. ".job")
         end
     end
-    log("run finished")
-    flush_log()
+    log(string.format("run finished, %ds in total", os.time() - run_began))
+    if scorer_alive then flush_log() else run_log.release() end
     run_next()
 end
 
@@ -1764,6 +1761,7 @@ function M.clear_marks(images)
     end
 
     local total, cleared, failed = #images, 0, 0
+    local diag_tags = {}
     local i = 1
     local ok, err = pcall(function()
         while i <= total do
@@ -1779,7 +1777,8 @@ function M.clear_marks(images)
                     end
                     local _, detach = M.diag_tag_changes(have, "")
                     for _, name in ipairs(detach) do
-                        tags.detach(tags.find(name), img); writes = writes + 1
+                        diag_tags[name] = diag_tags[name] or tags.find(name)
+                        tags.detach(diag_tags[name], img); writes = writes + 1
                     end
                     return writes
                 end)
@@ -1789,6 +1788,7 @@ function M.clear_marks(images)
                 else
                     failed = failed + 1
                     budget = budget - 1
+                    log(C.image_label(img) .. ": clearing marks failed: " .. tostring(res))
                 end
                 i = i + 1
             end
@@ -1885,6 +1885,7 @@ function M.reset_ratings(images)
                 end)
                 if not ok_one then
                     failed = failed + 1
+                    log(C.image_label(img) .. ": resetting the rating failed: " .. tostring(wrote))
                 elseif wrote then
                     reset = reset + 1
                     budget = budget - 1

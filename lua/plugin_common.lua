@@ -238,6 +238,77 @@ function C.write_file_atomic(path, text)
     return true
 end
 
+-- Run log --------------------------------------------------------------------------
+-- The plugin's run log at `path` (`<name>.log`). `w.log(msg)` writes "HH:MM:SS lua: msg"
+-- to disk at once, so a darktable crash leaves the last line written. Between `w.hold()`
+-- and `w.release()` lines wait in memory: a helper process appends its stderr to the
+-- same file then, and two processes appending at once can overwrite each other's
+-- lines on Windows. `w.hold()` writes what is waiting first. `w.rotate(keep)` starts
+-- a new log: the current one becomes `<name>.prev.log`, older ones `<name>.prev2.log`
+-- up to `<name>.prev<keep>.log`.
+function C.run_log(path)
+    local w = { held = false }
+    local waiting = {}
+
+    local function write_waiting()
+        if #waiting == 0 then return end
+        local f = io.open(path, "a")
+        if not f then return end
+        f:write(table.concat(waiting, "\n"), "\n")
+        f:close()
+        waiting = {}
+    end
+
+    function w.log(msg)
+        waiting[#waiting + 1] = os.date("%H:%M:%S ") .. "lua: " .. msg
+        if not w.held then write_waiting() end
+    end
+
+    function w.hold()
+        write_waiting()
+        w.held = true
+    end
+
+    function w.release()
+        w.held = false
+        write_waiting()
+    end
+
+    -- Writes what is waiting without ending the hold: for points where the caller
+    -- knows the helper is not writing.
+    w.flush = write_waiting
+
+    -- Helper output read back by the plugin: written as it is, in order with the lua lines.
+    function w.append_lines(text)
+        for line in (text or ""):gmatch("[^\r\n]+") do waiting[#waiting + 1] = line end
+        if not w.held then write_waiting() end
+    end
+
+    function w.rotate(keep)
+        local base = path:gsub("%.log$", "")
+        local function prev(n) return base .. (n == 1 and ".prev.log" or ".prev" .. n .. ".log") end
+        os.remove(prev(keep))
+        for n = keep - 1, 1, -1 do os.rename(prev(n), prev(n + 1)) end
+        os.rename(path, prev(1))
+    end
+
+    return w
+end
+
+-- "image 12 (IMG_0012.CR3)" for a log line. An image removed from the library raises on any read.
+function C.image_label(img)
+    local ok, label = pcall(function() return string.format("image %d (%s)", img.id, img.filename) end)
+    return ok and label or "image no longer in the library"
+end
+
+-- pcall that also logs a failure with its traceback as "<what> failed: ...". Returns what pcall returns.
+function C.logged_call(log, what, fn)
+    return xpcall(fn, function(err)
+        log(what .. " failed: " .. debug.traceback(tostring(err), 2))
+        return err
+    end)
+end
+
 -- Lua error log ------------------------------------------------------------------
 -- One file per plugin, <config dir>/<plugin>.lua.log, separate from the run log (which
 -- each run rotates). Holds only Lua errors: timestamp, label and traceback. Past
@@ -498,16 +569,18 @@ end
 -- after `budget` writes the GUI gets `sleep_ms`. w.write(fn, weight) runs fn under pcall and
 -- counts it as `weight` writes (default 1); w.failed and w.first_error say what went wrong.
 -- w.call_s is the seconds spent inside the write calls (os.clock: wall time on Windows) and
--- w.sleeps the number of pauses, for the timing line in the log.
-function C.paced_writer(dt, budget, sleep_ms)
+-- w.sleeps the number of pauses, for the timing line in the log. With `log`, a failed
+-- write logs "<what> failed: <error>" at once; `what` names the image and the operation.
+function C.paced_writer(dt, budget, sleep_ms, log)
     local w = { writes = 0, failed = 0, first_error = nil, call_s = 0, sleeps = 0 }
-    function w.write(fn, weight)
+    function w.write(fn, weight, what)
         local call_start = os.clock()
         local okw, werr = pcall(fn)
         w.call_s = w.call_s + os.clock() - call_start
         if not okw then
             w.failed = w.failed + 1
             w.first_error = w.first_error or tostring(werr)
+            if log then log((what or "write") .. " failed: " .. tostring(werr)) end
         end
         w.writes = w.writes + (weight or 1)
         if w.writes >= budget then

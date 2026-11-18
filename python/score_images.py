@@ -615,6 +615,32 @@ def log(msg: str):
     print(time.strftime("%H:%M:%S ") + "py: " + msg, file=sys.stderr, flush=True)
 
 
+def peak_memory_mb() -> float:
+    """The most memory this process has held at once so far, in MB (worker processes not included)."""
+    if sys.platform == "win32":
+        import ctypes
+        from ctypes import wintypes
+
+        class Counters(ctypes.Structure):
+            _fields_ = [("cb", wintypes.DWORD), ("PageFaultCount", wintypes.DWORD),
+                        ("PeakWorkingSetSize", ctypes.c_size_t), ("WorkingSetSize", ctypes.c_size_t),
+                        ("QuotaPeakPagedPoolUsage", ctypes.c_size_t), ("QuotaPagedPoolUsage", ctypes.c_size_t),
+                        ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t), ("QuotaNonPagedPoolUsage", ctypes.c_size_t),
+                        ("PagefileUsage", ctypes.c_size_t), ("PeakPagefileUsage", ctypes.c_size_t)]
+
+        counters = Counters()
+        counters.cb = ctypes.sizeof(Counters)
+        kernel32, psapi = ctypes.WinDLL("kernel32"), ctypes.WinDLL("psapi")
+        kernel32.GetCurrentProcess.restype = wintypes.HANDLE
+        psapi.GetProcessMemoryInfo.argtypes = [wintypes.HANDLE, ctypes.POINTER(Counters), wintypes.DWORD]
+        if not psapi.GetProcessMemoryInfo(kernel32.GetCurrentProcess(), ctypes.byref(counters), counters.cb):
+            raise ctypes.WinError()
+        return counters.PeakWorkingSetSize / 2 ** 20
+    import resource
+    peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss  # bytes on macOS, KB on Linux
+    return peak / 2 ** 20 if sys.platform == "darwin" else peak / 1024
+
+
 def write_progress(progress_path: str, cur: int, tot: int, b_cur: int, b_tot: int):
     if not progress_path:
         return
@@ -1090,6 +1116,7 @@ class SharpJudge:
 
     def __init__(self, path: str):
         import onnxruntime  # lazy: only a run with the judge on needs it
+        onnxruntime.set_default_logger_severity(3)  # errors only: the model-load warnings flood the run log
         self.session = onnxruntime.InferenceSession(path, providers=["CPUExecutionProvider"])
         self.input = self.session.get_inputs()[0].name
         self.id = [file_key(p) for p in (path, path + ".data") if os.path.exists(p)]
@@ -1316,7 +1343,6 @@ def emit_saliency_points(manifest, args, cache, detections):
     if detector:
         log(f"detections: {len(stored)} cached, {detected} detected")
         log_car_check(manifest, detections, detector, cars_of, cars_note)
-    log("finding subjects: done")
 
 
 # The one "Why|<reason>" tag every scored frame gets in results column 7, saying how
@@ -1917,9 +1943,13 @@ if __name__ == "__main__":
     if unknown:
         parser.error(f"unknown --tag-only-flags: {', '.join(sorted(unknown))}")
 
+    stage = "finding subjects" if args.emit_saliency_points else "scoring"
+    started = time.time()
+    log(f"{stage}: started")
     try:
         main(args)
     except Exception:
         import traceback
-        traceback.print_exc()
+        log(f"{stage}: failed after {time.time() - started:.0f}s, peak memory {peak_memory_mb():.0f} MB\n" + traceback.format_exc())
         sys.exit(1)
+    log(f"{stage}: done, {time.time() - started:.0f}s, peak memory {peak_memory_mb():.0f} MB")

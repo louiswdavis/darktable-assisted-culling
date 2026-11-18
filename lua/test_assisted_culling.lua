@@ -17,7 +17,7 @@ end
 -- plugin_common.lua ---------------------------------------------------------------
 -- The same file in all three plugin repos; COMMON_HASH pins it. After changing it, copy it to the
 -- other two repos and put the hash this prints into their tests too.
-local COMMON_HASH = "a1814a00"
+local COMMON_HASH = "9c0c49b6"
 local script_dir = (arg and arg[0] or ""):match("^(.*)[/\\]") or "."
 local PC = dofile(script_dir .. "/plugin_common.lua")
 local function fnv1a(text)
@@ -52,6 +52,59 @@ do -- temp_base / sweep_temp: leftovers older than max_age go, newer ones and ot
     check("sweep_temp: other prefix kept", PC.file_exists(dir .. "/dt_assisted_y_1000_1_other.csv"), true)
     for _, n in ipairs(PC.list_dir(dir)) do os.remove(dir .. "/" .. n) end
     os.remove(dir)
+end
+do -- failure lines: the image is named, a failed call leaves its traceback
+    check("image_label: id and filename", PC.image_label({ id = 12, filename = "IMG_0012.CR3" }), "image 12 (IMG_0012.CR3)")
+    local gone = setmetatable({}, { __index = function() error("image removed") end })
+    check("image_label: an image that raises on a read", PC.image_label(gone), "image no longer in the library")
+    local logged = {}
+    local function log_line(line) logged[#logged + 1] = line end
+    local ok, err = PC.logged_call(log_line, "cull", function() error("boom") end)
+    check("logged_call: a failure returns false and the error", ok == false and tostring(err):find("boom", 1, true) ~= nil, true)
+    check("logged_call: the failure is logged once with a traceback",
+        #logged == 1 and logged[1]:find("^cull failed: .*boom") ~= nil and logged[1]:find("stack traceback:", 1, true) ~= nil, true)
+    local ok_fine, value = PC.logged_call(log_line, "cull", function() return 7 end)
+    check("logged_call: a call that works logs nothing", ok_fine == true and value == 7 and #logged == 1, true)
+end
+
+do -- run_log: a line reaches the file as it is logged, waits only between hold and release
+    local dir = os.tmpname()
+    os.remove(dir)
+    os.execute(PC.IS_WINDOWS and ('mkdir "' .. dir .. '"') or ("mkdir -p '" .. dir .. "'"))
+    local path = dir .. "/plugin.log"
+    local function lines() return ((PC.read_file(path) or ""):gsub("%d%d:%d%d:%d%d ", "")) end
+    local run_log = PC.run_log(path)
+    run_log.log("first")
+    check("run_log: a line is in the file as soon as it is logged", lines(), "lua: first\n")
+    run_log.hold()
+    run_log.log("while the helper runs")
+    check("run_log: a held line waits", lines(), "lua: first\n")
+    run_log.flush()
+    check("run_log: flush writes the waiting lines", lines(), "lua: first\nlua: while the helper runs\n")
+    run_log.log("still held")
+    check("run_log: flush does not end the hold", lines(), "lua: first\nlua: while the helper runs\n")
+    run_log.release()
+    run_log.append_lines("py: one\r\npy: two\n")
+    check("run_log: release writes the rest, helper lines go in as they are",
+        lines(), "lua: first\nlua: while the helper runs\nlua: still held\npy: one\npy: two\n")
+    for run = 1, 7 do
+        run_log.rotate(5)
+        run_log.log("run " .. run)
+    end
+    check("run_log: rotate keeps the current log and 5 older ones", table.concat(PC.list_dir(dir), ","),
+        "plugin.log,plugin.prev.log,plugin.prev2.log,plugin.prev3.log,plugin.prev4.log,plugin.prev5.log")
+    check("run_log: the current log holds the newest run", lines(), "lua: run 7\n")
+    check("run_log: .prev.log holds the run before", (PC.read_file(dir .. "/plugin.prev.log"):gsub("%d%d:%d%d:%d%d ", "")), "lua: run 6\n")
+    check("run_log: .prev5.log holds the oldest kept run", (PC.read_file(dir .. "/plugin.prev5.log"):gsub("%d%d:%d%d:%d%d ", "")), "lua: run 2\n")
+    for _, n in ipairs(PC.list_dir(dir)) do os.remove(dir .. "/" .. n) end
+    os.remove(dir)
+end
+do -- paced_writer: a failed write is logged at once with the image and the operation
+    local logged = {}
+    local w = PC.paced_writer({ control = { sleep = function() end } }, 10, 0, function(msg) logged[#logged + 1] = msg end)
+    w.write(function() end, 1, "image 7 (a.nef): attach tag")
+    w.write(function() error("database is locked", 0) end, 1, "image 8 (b.nef): attach tag")
+    check("paced_writer: only the failed write is logged", table.concat(logged, "|"), "image 8 (b.nef): attach tag failed: database is locked")
 end
 
 -- group keys ----------------------------------------------------------------
