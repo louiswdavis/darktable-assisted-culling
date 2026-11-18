@@ -889,6 +889,12 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
     local stage_a_alive = false
 
     local success, run_err = pcall(function()
+        -- the job and the start message go up before the selection's tags and groups are read
+        if dt.gui then
+            culling_job = dt.gui.create_job(_("Assisted Culling"), true, stop_job)
+            culling_job.percent = 0.0
+        end
+        say(string.format("Assisted Culling: started on %s…", #images == 1 and "1 image" or #images .. " images"))
         local sam_model
         if sharp_mode == "sam_subject" then
             local why
@@ -1011,11 +1017,6 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
 
         if not write_manifest(primaries, burst_of, nil, nil, sam_model ~= nil, car_of) then
             error("couldn't write the image list to darktable's tmp folder (disk full or no write access?)", 0)
-        end
-
-        if dt.gui then
-            culling_job = dt.gui.create_job(_("Assisted Culling"), true, stop_job)
-            culling_job.percent = 0.0
         end
 
         log(string.format("fast JPEG %s, apply while scoring %s, SAM model %s",
@@ -1642,6 +1643,7 @@ function M.clear_marks(images)
         dt.print(_("Assisted Culling: select some images first"))
         return
     end
+    dt.print(string.format("Assisted Culling: clearing marks on %s…", #images == 1 and "1 image" or #images .. " images"))
     local found, saw_tag = {}, false
     for _, name in ipairs(ALL_TAGS) do
         local t = tags.find(name)

@@ -9,9 +9,10 @@ ok   temp_base: <dir>/<prefix><epoch>_<seq>_
 ok   sweep_temp: removes only this prefix's stale files
 ok   sweep_temp: newer file kept
 ok   sweep_temp: other prefix kept
-ok   newest_group_node picks the greatest stamp
-ok   newest_group_node ignores other tags
-ok   newest_group_node with empty input
+ok   latest_group_keys keeps each photo's own run
+ok   latest_group_keys counts runs
+ok   group_tags_hint fires when native found nothing but tags exist
+ok   group_tags_hint silent when native groups exist
 ok   tag_group_keys reads immediate children only
 ok   tag_group_keys takes the first child by name
 ok   tag_group_keys reports the photo
@@ -134,7 +135,7 @@ ok   preset order empty
 ok   preset schema: mode defaults
 ok   preset schema: switch defaults
 ok   preset schema: every tag switch defaults on
-ok   preset schema: 34 keys
+ok   preset schema: no key twice
 ok   PANEL_PAGES: every preset key is on one page or listed off-stack
 ok   PANEL_PAGES: titles match the README sections
 ok   split_by_car: cars split a group, untagged frames share the group pool
@@ -145,6 +146,9 @@ ok   no_groups_notice: all singletons in native mode
 ok   no_groups_notice: grouped selection is silent
 ok   no_groups_notice: none mode and single frame are silent
 ok   preset schema: keeper margin defaults off
+ok   preset schema: spread keepers defaults off
+ok   preset schema: number reads defaults off
+ok   preset schema: sharpness judge defaults off
 ok   preset schema: graded non-keepers can be picked
 ok   preset schema: star strictness defaults to standard
 ok   preset schema: blank frames default to 95%
@@ -157,5 +161,11 @@ ok   genre modes: landscape defaults match
 ok   genre modes: a changed mode no longer matches
 ok   genre modes: custom never matches
 ok   preset schema: a label for a choice falls back
+ok   preset schema: car boxes from tagging default on
+ok   car_boxes_path: tagging's last-run boxes.json, backslashes folded
+ok   pick_detector: YOLOX alone is picked, better files listed
+ok   pick_detector: D-FINE beats YOLOX
+ok   pick_detector: the best has no 'not installed' note
+ok   pick_detector: none installed is nil
 
 all tests passed
