@@ -32,6 +32,12 @@ ok   evaluate: modes
 ok   evaluate: pick threshold 4 narrows the picks
 ok   render: same input, same text
 ok   render: overall line
+ok   burst_ranking: A judged, B skipped
+ok   burst_ranking: top-1 is a pick, first frame by file when ids are missing
+ok   burst_ranking: Spearman of score vs stars
+ok   render: ranking summary
+ok   render: worst bursts name their first frame
+ok   evaluate: no ranking without scores
 ok   read_truth_csv: bare name keys on the stem
 ok   read_truth_csv: reject column
 ok   read_truth_csv: -1 rating is a reject
@@ -63,5 +69,37 @@ ok   cli: --suggest needs --sharp-mode
 ok   cli: --suggest with a second --shoot
 ok   cli: --write-preset writes the first suggestion
 ok   cli: --shoot alone works and an existing preset file is refused
+ok   frame_of: score parts
+ok   frame_of: no parts in an older report
+ok   lift_blur: a motion-blur frame rises to the burst's median
+ok   lift_blur: raised frames keep their order
+ok   lift_blur: an all-blur burst keeps its scores
+ok   rescore: today's constants rebuild the live scores
+ok   rescore: PAN_BONUS 1.0 drops the pan below p2; no parts keeps its score
+ok   rescore: SAME_SCALE 0 uses the own-size subject where there is one
+ok   rescore: SAME_SCALE 1 keeps the shared-size subject
+ok   frame_of: own-size subject
+ok   parts_agreement: bursts with parts only
+ok   frame_of: number reads
+ok   frame_of: no reads column
+ok   replay: number reads on lets the clearer read keep
+ok   number_read_lines: hit rate off and on, close calls settled
+ok   frame_of: judge score
+ok   frame_of: no judge column
+ok   replay: judge on lets the subject the judge scores clearer keep
+ok   judge_lines: hit rate off and on, close calls settled
+ok   parts_agreement: a score out of step disagrees
+ok   keeper_agreement: same keepers
+ok   keeper_agreement: one burst differs
+ok   parse_sets: numbers by name
+ok   parse_sets: NOT_A_CONSTANT=400 exits
+ok   parse_sets: PAN_BONUS=high exits
+ok   parse_sets: PAN_BONUS exits
+ok   cli: parts note without --set
+ok   cli: per burst ranking printed
+ok   cli: --set replays with the live keepers first
+ok   cli: --set PAN_BONUS lifts p2 to top-1
+ok   cli: --set of a part needs a report with parts
+ok   cli: --set needs --sharp-mode
 
 all ok

@@ -202,8 +202,10 @@ with tempfile.TemporaryDirectory() as tmp:
     check("frame_of: no parts in an older report", (bare["id"], bare["subject"], bare["cls"], bare["straight"]), (None, None, "", 0.0))
 
     check("lift_blur: a motion-blur frame rises to the burst's median", E.lift_blur({"a": 10.0, "b": 30.0, "c": 5.0},
-          {"a": ("ordinary", 0.0), "b": ("pan", 0.0), "c": ("motion_blur", 0.0)}, 500.0), {"a": 10.0, "b": 30.0, "c": 20.0})
-    check("lift_blur: an all-blur burst scores by straightness", E.lift_blur({"a": 1.0}, {"a": ("motion_blur", 0.1)}, 500.0), {"a": 50.0})
+          {"a": ("ordinary", 0.0), "b": ("pan", 0.0), "c": ("motion_blur", 0.0)}), {"a": 10.0, "b": 30.0, "c": 20.0})
+    check("lift_blur: raised frames keep their order", E.lift_blur({"a": 30.0, "b": 10.0, "c": 14.0},
+          {"b": ("motion_blur", 0.0), "c": ("motion_blur", 0.0)}), {"a": 30.0, "b": 28.0, "c": 32.0})
+    check("lift_blur: an all-blur burst keeps its scores", E.lift_blur({"a": 1.0}, {"a": ("motion_blur", 0.1)}), {"a": 1.0})
 
     def part(name, rank, subject, cls, score, burst="P"):
         return {"path": name, "burst": burst, "rank": rank, "subject": subject, "cls": cls, "straight": 0.0, "score": score}
@@ -260,7 +262,7 @@ with tempfile.TemporaryDirectory() as tmp:
     check("keeper_agreement: one burst differs", E.keeper_agreement(kept, [{**f, "keeper": f["path"] in ("p2", "q1")} for f in live]), (1, 2))
 
     check("parse_sets: numbers by name", E.parse_sets(["PAN_BONUS=1.1", "CLOSE_CALL_SHARE=0.5"]), {"PAN_BONUS": 1.1, "CLOSE_CALL_SHARE": 0.5})
-    for bad in ("BLUR_STRAIGHT_SCALE=400", "PAN_BONUS=high", "PAN_BONUS"):
+    for bad in ("NOT_A_CONSTANT=400","PAN_BONUS=high", "PAN_BONUS"):
         try:
             E.parse_sets([bad])
             check(f"parse_sets: {bad} exits", "no exit", "exit")

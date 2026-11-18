@@ -41,7 +41,8 @@ from vehicle_detect import (  # noqa: E402
 from rating import (  # noqa: E402,F401
     STAR_THRESHOLDS, RELATIVE_REFERENCE_PERCENTILE, RELATIVE_MIN_FRAMES, GRADED_STEPS, TIER_THRESHOLDS,
     PEAK_TIER_THRESHOLDS, UNIFORMITY_TIER_THRESHOLDS, MOTION_TIER_THRESHOLDS, TIER_THRESHOLDS_BY_MODE,
-    FLAG_PENALTIES, NUMBER_READ_MIN_GAP, JUDGE_FRAMES, JUDGE_MIN_GAP, tier_table, keepers_allowed, penalised_flags,
+    FLAG_PENALTIES, NUMBER_READ_MIN_GAP, ANGLE_KEEP_SHARE, MOTION_LOOK_STRAIGHT, MOTION_LOOK_TIERS,
+    SLOPE_STARS, SLOPE_MIN_KEEPERS, slope_stars, JUDGE_FRAMES, JUDGE_MIN_GAP, tier_table, keepers_allowed, penalised_flags,
     blank_frames, relative_references, rate_burst, judge_shortlist,
 )
 
@@ -301,6 +302,9 @@ def log_car_check(rows, detections, detector: str, cars_of: dict, note: str):
 # detections. Boxes are frame fractions, not clipped, so a box past an edge shows how far.
 DIRECTION_MIN_SHIFT = 0.05  # the target's centre must move this share of the frame width across the burst
 EDGE_TOUCH = 0.005  # a box ending this close to a frame edge touches it
+# share of the burst's median target area a frame's car box needs for a Motion look pick
+MOTION_LOOK_MIN_BOX = 0.5
+VIEW_ASPECT_STEP = 1.3  # a target box this many times wider or narrower than its view's median starts a new view
 CUT_TRAILING_SHARE = 0.10  # trailing, top and bottom edges: share of the box past the edge that counts
 TIGHT_CROP_SHARE = 0.6  # a target covering this share of the frame is framed tight on purpose: never cut_off
 BLOCKED_SHARE = 0.25  # share of the target a larger (nearer) vehicle box must cover
@@ -332,6 +336,35 @@ def burst_targets(boxes_of: list) -> list:
         return [None] * len(boxes_of)
     return [min(bs, key=lambda b: abs(np.log(max(box_area(b), 1e-9) / typical))) if bs else None
             for bs in boxes_of]
+
+
+def burst_views(targets: list) -> list:
+    """Per frame (time order) the index of the view of the car it shows, None without a
+    target. A view is a run of frames whose target shape (width / height) stays within
+    VIEW_ASPECT_STEP of the run's median; a frame past that starts the next view. One frame
+    whose shape disagrees with both neighbours, which agree with each other, is a wrong box
+    and joins them."""
+    shapes = [None if t is None or t[3] <= t[1] or t[2] <= t[0] else (t[2] - t[0]) / (t[3] - t[1])
+              for t in targets]
+
+    def differ(a, b):
+        return max(a, b) / min(a, b) >= VIEW_ASPECT_STEP
+
+    views, run, view = [], [], 0
+    for at, shape in enumerate(shapes):
+        if shape is None:
+            views.append(None)
+            continue
+        before = shapes[at - 1] if at > 0 else None
+        after = shapes[at + 1] if at + 1 < len(shapes) else None
+        odd = (before is not None and after is not None and differ(shape, before)
+               and differ(shape, after) and not differ(before, after))
+        if not odd:
+            if run and differ(shape, float(np.median(run))):
+                view, run = view + 1, []
+            run.append(shape)
+        views.append(view)
+    return views
 
 
 def travel_direction(targets: list) -> str:
@@ -692,7 +725,7 @@ CACHE_INPUTS = (
     "BLINK_MIN_FACE_PX", "EYE_SEARCH_TOP", "MASK_ASPECT_TOLERANCE", "UNIFORMITY_MIN_CONTRAST", "EXIF_SLACK",
     "SUBJECT_PAD", "SUBJECT_CROP_MAX", "SUBJECT_SCALES", "NORM_MIN_CONTRAST", "MOTION_GRID", "STREAK_COHERENCE", "STREAK_ANGLE_TOL",
     "SUBJECT_STREAK_MAX", "STREAK_SHARE", "STREAK_SHARE_SLOW", "STREAK_SHARE_FAST", "PAN_REACH", "FAST_SHUTTER",
-    "PAN_BONUS", "MISSED_PAN_FACTOR", "BLUR_STRAIGHT_SCALE", "CENTRE_BOX",
+    "PAN_BONUS", "MISSED_PAN_FACTOR", "CENTRE_BOX",
 )
 # Constants that only use cached numbers (ranking, stars, keepers, shortlist, report) or
 # pick a mode that is already in the key. Changing one re-applies without re-scoring.
@@ -704,10 +737,18 @@ CACHE_NEUTRAL = (
     "MOTION_TIER_THRESHOLDS", "MOTION_TAGS", "PRESCORE_FAILED", "REPORT_HEADER", "REPORT_ARCHIVE_KEEP", "WHY_REASONS",
     # framing is judged across the burst and never cached; NO_VEHICLE_SUBJECT matches a cached subject
     "DIRECTION_MIN_SHIFT", "EDGE_TOUCH", "CUT_TRAILING_SHARE", "TIGHT_CROP_SHARE", "BLOCKED_SHARE", "NO_VEHICLE_SUBJECT",
+    "VIEW_ASPECT_STEP",
     # keyed per frame by car_key, so a change misses only the frames in tagging's file
     "CAR_BOX_MIN_IOU",
     # number reads come from tagging's file each run and only settle close calls
     "NUMBER_READ_MIN_GAP",
+    # another view's keeper is picked from cached scores and the burst's boxes
+    "ANGLE_KEEP_SHARE",
+    "MOTION_LOOK_MIN_BOX",
+    "MOTION_LOOK_STRAIGHT",
+    "MOTION_LOOK_TIERS",
+    "SLOPE_MIN_KEEPERS",
+    "SLOPE_STARS",
     # the judge's score is cached under its own key (judge_key), which holds the JUDGE_ inputs;
     # JUDGE_FRAMES and JUDGE_MIN_GAP only pick frames and settle close calls
     "JUDGE_SIZE", "JUDGE_GRID", "JUDGE_MEAN", "JUDGE_STD", "JUDGE_FRAMES", "JUDGE_MIN_GAP",
@@ -838,7 +879,6 @@ PAN_REACH = 0.8              # shutter (s) × focal length (mm): 1/125 at 100 mm
 FAST_SHUTTER = 1 / 1000
 PAN_BONUS = 1.15
 MISSED_PAN_FACTOR = 0.7
-BLUR_STRAIGHT_SCALE = 500.0  # an all-motion-blur burst scores straightness × this
 CENTRE_BOX = (1 / 3, 1 / 3, 2 / 3, 2 / 3)
 MOTION_TAGS = {"pan": "Technique|Panning", "motion_blur": "Technique|Motion Blur",
                "missed_pan": "Technique|Missed Pan"}
@@ -1020,18 +1060,17 @@ def class_factor(cls: str) -> float:
 
 
 def lift_motion_blur(scores: dict, motion: dict) -> dict:
-    """Motion-blur frames scored like their burst: raised to the median of the
-    burst's other frames, so a deliberate blur is kept or left with its
-    neighbours, never rejected for being soft. An all-blur burst is ranked by
-    straightness. motion maps an id to (class, straightness)."""
+    """Motion-blur frames scored like their burst: raised together until their
+    median meets the median of the burst's other frames, so a deliberate blur is
+    kept or left with its neighbours, never rejected for being soft, and the
+    raised frames keep their order by car sharpness. An all-blur burst keeps its
+    scores. motion maps an id to (class, straightness)."""
     blur = [i for i in scores if motion.get(i, ("", 0.0))[0] == "motion_blur"]
-    if not blur:
-        return scores
     rest = [v for i, v in scores.items() if i not in blur]
-    out = dict(scores)
-    for i in blur:
-        out[i] = max(out[i], float(np.median(rest))) if rest else motion[i][1] * BLUR_STRAIGHT_SCALE
-    return out
+    if not blur or not rest:
+        return scores
+    shift = max(0.0, float(np.median(rest)) - float(np.median([scores[i] for i in blur])))
+    return {i: v + shift if i in blur else v for i, v in scores.items()}
 
 
 # --sharp-judge: a no-reference image quality model (ONNX, CPU) scores the car crop of the frames
@@ -1283,14 +1322,15 @@ def emit_saliency_points(manifest, args, cache, detections):
 # The one "Why|<reason>" tag every scored frame gets in results column 7, saying how
 # it was decided. Kept to a handful: a tag per score bucket floods darktable's tag list.
 WHY_REASONS = ("Keeper", "Keeper by margin", "Outranked", "Graded", "Not shortlisted",
-               "No vehicle", "Close call", "Blank", "Spread", "Number clearer", "Subject clearer")
+               "No vehicle", "Close call", "Blank", "Spread", "Number clearer", "Subject clearer",
+               "Other angle", "Motion look")
 # the subject tag of a sam_subject frame whose detector found no car
 NO_VEHICLE_SUBJECT = "Subject|Vehicle|Guessed"
 
 
 def process_burst_logic(burst_id, burst_sharpness, burst_flags, burst_size, args, results_path,
                         eligible=None, diag_tags=None, reference=None, mode=None,
-                        no_vehicle=frozenset(), reads=None, judged=None) -> list:
+                        no_vehicle=frozenset(), reads=None, judged=None, views=None, motion_look=None, slope=None) -> list:
     """Appends the burst's result rows and returns its keepers, best first.
     diag_tags maps an id to its diagnostic tags (under "Assisted Culling|"),
     written ";"-joined in the 7th column after the frame's Why|<reason> tag
@@ -1300,10 +1340,14 @@ def process_burst_logic(burst_id, burst_sharpness, burst_flags, burst_size, args
     sharp mode (args.sharp_mode when not given) and picks its tier table. no_vehicle
     frames are left alone with Why|No vehicle (rate_burst). reads ({id: {number: confidence}})
     lets a clearer number read settle a close call, and judged ({id: judge score}) a clearer
-    subject (rate_burst)."""
+    subject (rate_burst). views ({id: view index}, burst_views) lets another view of the car
+    keep with --keep-angles, and motion_look ({id: blur straightness}) a straight blur with
+    --motion-look, and slope ({id: stars}) puts the run's keepers on the star slope
+    (rate_burst)."""
     sorted_members, burst_keepers, stars_of, reason_of = rate_burst(
         burst_sharpness, burst_flags, burst_size, args, eligible, reference, mode, no_vehicle,
-        sorted(burst_sharpness, key=int) if getattr(args, "spread_keepers", False) else None, reads, judged)
+        sorted(burst_sharpness, key=int) if getattr(args, "spread_keepers", False) else None, reads, judged, views,
+        motion_look, slope)
     keepers = set(burst_keepers)
     burst_rows = [[
         img_id,
@@ -1516,12 +1560,20 @@ def score_manifest(manifest, args, cache, detections):
         if burst_motion:
             scores = lift_motion_blur(scores, burst_motion)
         path_of = {item[0]: item[1] for item in burst_groups[burst_id]}
+        views, straightness_of = None, None
         if detector:
             # framing is judged across the burst, so it's added here and never cached per frame
             ids = [item[0] for item in burst_groups[burst_id] if item[0] in raw]
-            direction, framing = framing_flags(
-                [frame_boxes(car_filtered(detections.get(detection_key(path_of[i], detector_for(detector))),
-                                          cars_of.get(path_key(path_of[i])))) for i in ids])
+            boxes_of = [frame_boxes(car_filtered(detections.get(detection_key(path_of[i], detector_for(detector))),
+                                                 cars_of.get(path_key(path_of[i])))) for i in ids]
+            direction, framing = framing_flags(boxes_of)
+            targets = burst_targets(boxes_of)
+            views = dict(zip(ids, burst_views(targets)))
+            # a blurred foreground does not rule a frame out: only a missing, small or cut-off car does
+            typical = float(np.median([box_area(t) for t in targets if t is not None] or [0.0]))
+            straightness_of = {i: burst_motion[i][1] for i, target, extra in zip(ids, targets, framing)
+                               if target is not None and i in burst_motion and "cut_off" not in extra
+                               and box_area(target) >= MOTION_LOOK_MIN_BOX * typical}
             direction_of[burst_id] = direction
             for i, extra in zip(ids, framing):
                 if extra:
@@ -1556,15 +1608,18 @@ def score_manifest(manifest, args, cache, detections):
         diag = {i: ([prescored[i][3]] if i in prescored and prescored[i][3] else []) + burst_tags
                 + ([MOTION_TAGS[burst_motion[i][0]]] if burst_motion.get(i, ("",))[0] in MOTION_TAGS else [])
                 for i in raw}
+        # masked and fallback scores, and each sharpness mode, run on their own scales
+        group = (mode_of[burst_id], sam and used_masks)
         if args.rank_mode == "relative":
-            # masked and fallback scores, and each sharpness mode, run on their own scales
-            group = (mode_of[burst_id], sam and used_masks)
             relative_scores.setdefault(group, []).extend(scores[i] for i in eligible if i in scores)
-            deferred.append((burst_id, scores, burst_flags[burst_id], eligible, diag, note, group, no_vehicle))
+        if args.rank_mode == "relative" or sloped:
+            deferred.append((burst_id, scores, burst_flags[burst_id], eligible, diag, note, group, no_vehicle, views,
+                             straightness_of))
         else:
             keepers = process_burst_logic(burst_id, scores, burst_flags[burst_id], len(burst_groups[burst_id]),
                                           args, args.results, eligible, diag, mode=mode_of[burst_id],
-                                          no_vehicle=no_vehicle, reads=reads_of, judged=judged_of)
+                                          no_vehicle=no_vehicle, reads=reads_of, judged=judged_of, views=views,
+                                          motion_look=straightness_of)
             log(f"{note}, keepers {', '.join(keepers) or 'none'}"
                 + (f", {len(no_vehicle)} left alone (no vehicle)" if no_vehicle else ""))
         del burst_sharpness[burst_id]
@@ -1578,6 +1633,8 @@ def score_manifest(manifest, args, cache, detections):
     sam = args.sharp_mode == "sam_subject"
     # relative mode rates against the whole selection, so its bursts wait for the last one
     deferred, relative_scores = [], {}
+    # the star slope rates the run's keepers together, so its bursts wait like relative ones
+    sloped = getattr(args, "star_slope", False) and args.rank_mode == "universal"
     prescored, stage_a_failed = read_prescores(getattr(args, "prescores", "")) if sam else ({}, set())
 
     # keyed on the burst's effective mode, so the EXIF rules and their
@@ -1743,10 +1800,25 @@ def score_manifest(manifest, args, cache, detections):
             log(f"relative: every frame scores 0 for {label}, so 0 stars")
         else:
             log(f"relative: {ref:.1f} sharpness is 100 points for {label}")
-    for burst_id, scores, flags, eligible, diag, note, group, no_vehicle in deferred:
+    slope = {}
+    if sloped:
+        # the slope runs over the keepers of the whole run, so every burst is rated once to find them
+        keeper_sharpness = {}
+        for _burst_id, scores, flags, eligible, _diag, _note, group, no_vehicle, views, straightness_of in deferred:
+            _members, burst_keepers, _stars, reason_of = rate_burst(
+                scores, flags, len(scores), args, eligible, None, group[0], no_vehicle,
+                sorted(scores, key=int) if getattr(args, "spread_keepers", False) else None, reads_of, judged_of,
+                views, straightness_of)
+            keeper_sharpness.update({i: scores[i] for i in burst_keepers
+                                     if reason_of[i] not in ("Other angle", "Motion look")})
+        slope = slope_stars(keeper_sharpness)
+        log(f"star slope: {len(keeper_sharpness)} keepers"
+            + ("" if slope else f", under {SLOPE_MIN_KEEPERS}, so the tier tables rate them"))
+    for burst_id, scores, flags, eligible, diag, note, group, no_vehicle, views, straightness_of in deferred:
         keepers = process_burst_logic(burst_id, scores, flags, len(burst_groups[burst_id]),
                                       args, args.results, eligible, diag, references.get(group), mode=group[0],
-                                      no_vehicle=no_vehicle, reads=reads_of, judged=judged_of)
+                                      no_vehicle=no_vehicle, reads=reads_of, judged=judged_of, views=views,
+                                      motion_look=straightness_of, slope=slope)
         log(f"{note}, keepers {', '.join(keepers) or 'none'}"
             + (f", {len(no_vehicle)} left alone (no vehicle)" if no_vehicle else ""))
     return direction_of, parts_of, judged_of
@@ -1776,6 +1848,18 @@ if __name__ == "__main__":
     parser.add_argument("--spread-keepers", action="store_true",
                         help="Keep one frame per equal time slice of each burst instead of the top frames by "
                              "score, where the slice's best scores at least CLOSE_CALL_SHARE of the burst's best")
+    parser.add_argument("--keep-angles", action="store_true",
+                        help="Also keep the best frame of each other view of the car in a burst (the target "
+                             "box changes shape by VIEW_ASPECT_STEP) when it scores ANGLE_KEEP_SHARE of the "
+                             "burst's best, one star under the best keeper; needs --detector")
+    parser.add_argument("--motion-look", action="store_true",
+                        help="Also keep each burst's straightest motion blur (straightness at least "
+                             "MOTION_LOOK_STRAIGHT) when its car box is whole and at least MOTION_LOOK_MIN_BOX of "
+                             "the burst's median, rated by MOTION_LOOK_TIERS; needs --detector")
+    parser.add_argument("--star-slope", action="store_true",
+                        help="Rate the run's keepers on an even slope (equal-count bands of SLOPE_STARS by score) "
+                             "instead of the tier tables, when there are at least SLOPE_MIN_KEEPERS; universal "
+                             "ranking only, and --star-scale is not used for them")
     parser.add_argument("--number-reads", default="",
                         help="tagging's last boxes.json: in a close call, the dropped frame keeps instead when it "
                              "reads a car number both frames read at least NUMBER_READ_MIN_GAP more confidently "

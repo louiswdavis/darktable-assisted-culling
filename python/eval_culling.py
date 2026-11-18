@@ -82,7 +82,7 @@ MOTION_CLASS = {"Technique|Panning": "pan", "Technique|Motion Blur": "motion_blu
 MODE_SWITCH = {("subject_focus", "Technique|Panning"): "subject_peak",
                ("tiles_uniformity", "Technique|Shallow DoF"): "subject_focus"}
 # Mirrors score_images.py's constants of the same names (checked by test_score_images.py).
-PART_DEFAULTS = {"PAN_BONUS": 1.15, "MISSED_PAN_FACTOR": 0.7, "BLUR_STRAIGHT_SCALE": 500.0}
+PART_DEFAULTS = {"PAN_BONUS": 1.15, "MISSED_PAN_FACTOR": 0.7}
 # SAME_SCALE=0 rebuilds from each car crop's own-size sharpness (subject_own), as before same_scale
 PART_DEFAULTS["SAME_SCALE"] = 1.0
 SET_NAMES = ("PAN_BONUS", "MISSED_PAN_FACTOR", "CLOSE_CALL_SHARE", "SAME_SCALE")  # what --set may change
@@ -298,19 +298,18 @@ def rescore(frames: list, knobs: dict) -> list:
     for burst_frames in by_burst(frames).values():
         parted = [f for f in burst_frames if f["subject"] is not None]
         rebuilt.update(lift_blur({f["path"]: subject(f) * factor.get(f["cls"], 1.0) for f in parted},
-                                 {f["path"]: (f["cls"], f["straight"]) for f in parted},
-                                 knobs["BLUR_STRAIGHT_SCALE"]))
+                                 {f["path"]: (f["cls"], f["straight"]) for f in parted}))
     return [{**f, "score": rebuilt[f["path"]]} if f["path"] in rebuilt else f for f in frames]
 
 
-def lift_blur(scores: dict, motion: dict, straight_scale: float) -> dict:
+def lift_blur(scores: dict, motion: dict) -> dict:
     """score_images.lift_motion_blur without numpy (test_score_images.py checks they agree)."""
     blur = [i for i in scores if motion.get(i, ("", 0.0))[0] == "motion_blur"]
     rest = [v for i, v in scores.items() if i not in blur]
-    out = dict(scores)
-    for i in blur:
-        out[i] = max(out[i], statistics.median(rest)) if rest else motion[i][1] * straight_scale
-    return out
+    if not blur or not rest:
+        return scores
+    shift = max(0.0, statistics.median(rest) - statistics.median(scores[i] for i in blur))
+    return {i: v + shift if i in blur else v for i, v in scores.items()}
 
 
 def parts_agreement(frames: list) -> tuple:

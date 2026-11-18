@@ -14,6 +14,14 @@ GRADED_STEPS = [(0.90, 1), (0.75, 2), (0.60, 3), (0.45, 4)]
 # the last frame kept by rank and the best frame that wasn't kept are a close call
 # when the dropped one scores at least this share of the kept one
 CLOSE_CALL_SHARE = 0.95
+# share of the burst's best score another view's best frame needs to keep (Other angle)
+ANGLE_KEEP_SHARE = 0.7
+# blur straightness (0-1) a frame needs to keep for its look (Motion look), and the stars it earns
+MOTION_LOOK_STRAIGHT = 0.75
+MOTION_LOOK_TIERS = [(0.85, 5), (0.80, 4), (0.75, 3)]
+# the star slope: keepers across the run split into equal-count bands, worst band first
+SLOPE_STARS = (1, 2, 3, 4, 5)
+SLOPE_MIN_KEEPERS = 10  # fewer keepers than this take the tier tables
 # with number reads on, the dropped frame of a close call reads a number both frames read
 # at least this much more confidently (tagging's OCR, 0-1) than the kept one, so it keeps instead
 NUMBER_READ_MIN_GAP = 0.10
@@ -120,6 +128,17 @@ def star_tier(value: float, table: list, scale: float = 1.0) -> int:
     return 0
 
 
+def slope_stars(sharpness_of: dict) -> dict:
+    """id → stars for a run's keepers: ranked by sharpness and split into len(SLOPE_STARS)
+    equal-count bands, the best band the most stars. Equal scores share the higher band.
+    {} under SLOPE_MIN_KEEPERS keepers."""
+    if len(sharpness_of) < SLOPE_MIN_KEEPERS:
+        return {}
+    ranked = sorted(sharpness_of.values(), reverse=True)
+    return {i: SLOPE_STARS[-1 - ranked.index(value) * len(SLOPE_STARS) // len(ranked)]
+            for i, value in sharpness_of.items()}
+
+
 def close_call(burst_sharpness: dict, ranked_keepers: list, losers: list) -> set:
     """The last frame kept by rank and the best eligible frame not kept, when the second
     scores at least CLOSE_CALL_SHARE of the first; else empty. Both lists best first."""
@@ -180,7 +199,7 @@ def spread_keepers(burst_sharpness: dict, in_order: list, by_score: list, allowe
 
 def rate_burst(burst_sharpness: dict, burst_flags: dict, burst_size: int, settings,
                eligible=None, reference=None, mode=None, no_vehicle=frozenset(), order=None,
-               reads=None, judged=None) -> tuple:
+               reads=None, judged=None, views=None, motion_look=None, slope=None) -> tuple:
     """(members best first, keepers best first, id → stars, id → Why reason) for one
     burst. settings carries keep_mode, rank_mode and nk_mode, plus optional
     keep_margin (share of the burst's best a frame needs to keep as well, 0 = off),
@@ -192,6 +211,8 @@ def rate_burst(burst_sharpness: dict, burst_flags: dict, burst_size: int, settin
     when not given) and picks its tier table. no_vehicle frames (the detector found no
     car) are never keepers and keep their rating ("leave"), whatever the other settings.
     Blank frames (blank_frames) are never keepers and are rejected (-1), before no_vehicle.
+    A frame flagged cut_off (the car is cut by the frame edge) is never a keeper while
+    another eligible frame shows the whole car, tag-only or not; its Why is Outranked.
     The keeper count comes from the eligible frames; burst_size is no longer read.
     A keeper in the close call keeps the stars its own score earns (no top-40% drop).
     settings.spread_keepers (default off) picks keepers per time slice (spread_keepers);
@@ -201,7 +222,18 @@ def rate_burst(burst_sharpness: dict, burst_flags: dict, burst_size: int, settin
     frame keeps instead (Why|Number clearer) and the kept one drops unless the keeper
     margin holds it. judged ({id: judge score}, judge_shortlist's frames) settles a close call
     the reads didn't: when judge_clearer, the same swap with Why|Subject clearer. None or {}
-    changes nothing."""
+    changes nothing. views ({id: view index}, score_images.burst_views) with
+    settings.keep_angles: in each view other than the best keeper's, the best eligible frame
+    keeps when it scores ANGLE_KEEP_SHARE of the burst's best, beyond the allowed count, one
+    star under the best keeper (floor 1) with Why|Other angle, and that view's other keepers
+    rate no higher. A frame with no view takes no part. motion_look ({id: blur straightness}
+    of the frames showing enough of the car, score_images.finish_burst) with
+    settings.motion_look: the straightest frame keeps as well when it reaches
+    MOTION_LOOK_STRAIGHT and is not a keeper already, beyond the allowed count, with
+    Why|Motion look and the stars of MOTION_LOOK_TIERS less its flag penalties. slope
+    ({id: stars}, slope_stars over the run's keepers) replaces the tier stars of the keepers
+    it names, less their flag penalties and without the top-40% drop; relative and binary
+    ranking ignore it."""
     if not burst_sharpness:
         return [], [], {}, {}
 
@@ -210,6 +242,9 @@ def rate_burst(burst_sharpness: dict, burst_flags: dict, burst_size: int, settin
     if eligible is None:
         eligible = set(burst_sharpness)
     eligible = set(eligible) - set(no_vehicle) - blank
+    cut_off = {i for i in eligible if "cut_off" in burst_flags.get(i, ())}
+    cut_off = cut_off if cut_off != eligible else set()  # an all-cut-off burst still keeps
+    eligible -= cut_off
     # counted on the frames that can keep, not burst_size: 3 frames of the car in a
     # 7-frame burst keep like a 3-frame burst
     allowed = keepers_allowed(settings.keep_mode, len(eligible))
@@ -247,6 +282,21 @@ def rate_burst(burst_sharpness: dict, burst_flags: dict, burst_size: int, settin
     num_keepers = len(burst_keepers)
     top_40_count = max(1, int(round(num_keepers * 0.4)))
     top_40_keepers = set(burst_keepers[:top_40_count])
+    angle = set()
+    if getattr(settings, "keep_angles", False) and views and burst_keepers and best > 0:
+        top_view = views.get(burst_keepers[0])
+        for view in sorted({v for i, v in views.items() if i in eligible and v is not None} - {top_view}):
+            view_best = next(i for i in sorted_members if i in eligible and views.get(i) == view)
+            if top_view is not None and burst_sharpness[view_best] >= ANGLE_KEEP_SHARE * best:
+                angle.add(view_best)
+        keepers |= angle
+        burst_keepers = [i for i in sorted_members if i in keepers]
+    look = None
+    if getattr(settings, "motion_look", False) and motion_look:
+        straightest = max((i for i in motion_look if i in burst_sharpness and i not in blank | set(no_vehicle)),
+                          key=lambda i: motion_look[i], default=None)
+        if straightest is not None and straightest not in keepers and motion_look[straightest] >= MOTION_LOOK_STRAIGHT:
+            look = straightest
     penalised = penalised_flags(burst_flags, tag_only)
     star_scale = getattr(settings, "star_scale", 1.0)
     tiers = tier_table(mode or getattr(settings, "sharp_mode", ""))
@@ -264,6 +314,9 @@ def rate_burst(burst_sharpness: dict, burst_flags: dict, burst_size: int, settin
             score = 100.0 if is_keeper else 0.0
             score -= sum(FLAG_PENALTIES[f][0] for f in penalised[img_id])
             stars = star_tier(max(0, score), STAR_THRESHOLDS)
+        elif is_keeper and slope and img_id in slope:
+            rated[img_id] = max(0, slope[img_id] - star_cost)
+            continue
         else:
             stars = max(0, star_tier(raw_score, tiers, star_scale) - star_cost)
 
@@ -271,8 +324,20 @@ def rate_burst(burst_sharpness: dict, burst_flags: dict, burst_size: int, settin
                 and img_id not in top_40_keepers and img_id not in close):
             stars = max(0, stars - 1)
         rated[img_id] = stars
+    if angle:
+        under_best = max(1, rated[burst_keepers[0]] - 1)
+        for img_id in angle:
+            rated[img_id] = max(0, under_best - sum(FLAG_PENALTIES[f][1] for f in penalised[img_id]))
+        for img_id in keepers - angle:  # the view's other keepers never outrate its Other angle frame
+            if any(views.get(img_id) == views[a] for a in angle):
+                rated[img_id] = min(rated[img_id], under_best)
 
     lowest_keeper = min((rated[i] for i in keepers), default=5)
+    if look is not None:
+        keepers.add(look)
+        burst_keepers = [i for i in sorted_members if i in keepers]
+        rated[look] = max(0, star_tier(motion_look[look], MOTION_LOOK_TIERS)
+                          - sum(FLAG_PENALTIES[f][1] for f in penalised[look]))
     stars_of, reason_of = {}, {}
     for img_id in sorted_members:
         is_keeper = img_id in keepers
@@ -300,11 +365,13 @@ def rate_burst(burst_sharpness: dict, burst_flags: dict, burst_size: int, settin
                 except ValueError:
                     stars = 0
         stars_of[img_id] = stars
-        reason_of[img_id] = ("Number clearer" if img_id in clearer
+        reason_of[img_id] = ("Motion look" if img_id == look
+                             else "Other angle" if img_id in angle
+                             else "Number clearer" if img_id in clearer
                              else "Subject clearer" if img_id in subject_clearer
                              else "Spread" if img_id in spread
                              else "Close call" if img_id in close
                              else ("Keeper" if img_id in ranked else "Keeper by margin") if is_keeper
-                             else "Not shortlisted" if img_id not in eligible
+                             else "Not shortlisted" if img_id not in eligible | cut_off
                              else "Graded" if settings.nk_mode == "graded" else "Outranked")
     return sorted_members, burst_keepers, stars_of, reason_of

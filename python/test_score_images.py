@@ -310,8 +310,81 @@ def run_tests():
           R.rate_burst(best_three, {k: () for k in best_three}, 12,
                        Namespace(**{**vars(spread_on), "keep_mode": "single_best"}))[1], [5])
 
-    # ticket 38: a clearer number read settles a close call
+    # ticket 84: a car cut by the frame edge keeps nothing while a whole car exists
     single = Namespace(keep_mode="single_best", rank_mode="universal", nk_mode="leave")
+    trio = {"a": 300.0, "b": 200.0, "c": 100.0}
+    _m, kept, _s, why = R.rate_burst(trio, {"a": ("cut_off",), "b": (), "c": ()}, 3, single)
+    check("cut off: loses to a whole car", (kept, why["a"]), (["b"], "Outranked"))
+    check("cut off: kept when every frame is cut off",
+          R.rate_burst(trio, {k: ("cut_off",) for k in trio}, 3, single)[1], ["a"])
+    check("cut off: tag-only setting does not change eligibility",
+          R.rate_burst(trio, {"a": ("cut_off",), "b": (), "c": ()}, 3,
+                       Namespace(**{**vars(single), "tag_only_flags": frozenset({"cut_off"})}))[1], ["b"])
+
+    # ticket 84: the best frame of another view of the car keeps one star lower
+    angled = Namespace(**{**vars(single), "keep_angles": True, "sharp_mode": "motion_aware"})
+    turn = {"a": 450.0, "b": 440.0, "c": 330.0, "d": 320.0}
+    no_flags = {k: () for k in turn}
+    two_views = {"a": 0, "b": 0, "c": 1, "d": 1}
+    _m, kept, stars, why = R.rate_burst(turn, no_flags, 4, angled, views=two_views)
+    check("other angle: kept one star lower",
+          (kept, stars["a"], stars["c"], why["c"], stars["d"]), (["a", "c"], 4, 3, "Other angle", "leave"))
+    check("other angle: under the share is not kept",
+          R.rate_burst({**turn, "c": 300.0, "d": 290.0}, no_flags, 4, angled, views=two_views)[1], ["a"])
+    check("other angle: off without the flag", R.rate_burst(turn, no_flags, 4, single, views=two_views)[1], ["a"])
+    check("other angle: no views, result equals today's",
+          R.rate_burst(turn, no_flags, 4, angled),
+          R.rate_burst(turn, no_flags, 4, Namespace(**{**vars(angled), "keep_angles": False})))
+    check("other angle: a frame without a box makes no view",
+          R.rate_burst(turn, no_flags, 4, angled, views={"a": 0, "b": 0, "c": None, "d": None})[1], ["a"])
+    check("other angle: a cut-off frame is not the view's pick",
+          R.rate_burst(turn, {**no_flags, "c": ("cut_off",)}, 4, angled, views=two_views)[1], ["a", "d"])
+    pair = Namespace(**{**vars(angled), "keep_mode": "keep_all"})
+    _m, kept, stars, why = R.rate_burst(turn, no_flags, 4, pair, views=two_views)
+    check("other angle: a ranked keeper that leads another view is relabelled, one star lower",
+          (why["a"], why["c"], stars["c"], why["d"]), ("Keeper", "Other angle", 3, "Keeper"))
+    nine = {"a": 450.0, "b": 445.0, "c": 440.0, "d": 435.0, **{k: 100.0 for k in "efghi"}}
+    _m, kept, stars, why = R.rate_burst(nine, {k: () for k in nine}, 9,
+                                        Namespace(**{**vars(angled), "keep_mode": "dynamic_burst"}),
+                                        views={k: int(k != "a") for k in nine})
+    check("other angle: no keeper of that view outrates its Other angle frame",
+          (kept, stars["a"], why["b"], stars["b"], why["c"], stars["c"]), (["a", "b", "c"], 4, "Other angle", 3, "Close call", 3))
+
+    # ticket 84: a straight, consistent blur with the car showing keeps for its look
+    looked = Namespace(**{**vars(single), "motion_look": True, "sharp_mode": "motion_aware"})
+    _m, kept, stars, why = R.rate_burst(trio, {k: () for k in trio}, 3, looked, motion_look={"b": 0.5, "c": 0.86})
+    check("motion look: straight blur kept and rated by straightness",
+          (kept, stars["c"], why["c"], why["a"]), (["a", "c"], 5, "Motion look", "Keeper"))
+    check("motion look: never replaces a sharp keeper",
+          len(kept) - len(R.rate_burst(trio, {k: () for k in trio}, 3, looked)[1]), 1)
+    check("motion look: below the threshold adds nothing",
+          R.rate_burst(trio, {k: () for k in trio}, 3, looked, motion_look={"b": 0.5, "c": 0.74})[1], ["a"])
+    _m, kept, stars, why = R.rate_burst(trio, {k: () for k in trio}, 3, looked, motion_look={"a": 0.9, "c": 0.86})
+    check("motion look: best frame already a keeper adds nothing", (kept, why["a"], stars["a"]), (["a"], "Keeper", 3))
+    check("motion look: off without the flag",
+          R.rate_burst(trio, {k: () for k in trio}, 3, single, motion_look={"c": 0.86})[1], ["a"])
+    check("motion look: a flag still costs its stars",
+          R.rate_burst(trio, {"a": (), "b": (), "c": ("blocked",)}, 3, looked, motion_look={"c": 0.86})[2]["c"],
+          5 - R.FLAG_PENALTIES["blocked"][1])
+
+    # ticket 84: keeper stars on an even slope across the shoot
+    ten = {str(i): float(i) for i in range(1, 11)}
+    check("slope: ten keepers fill five even bands",
+          [R.slope_stars(ten)[str(i)] for i in range(1, 11)], [1, 1, 2, 2, 3, 3, 4, 4, 5, 5])
+    check("slope: under the minimum returns nothing", R.slope_stars({str(i): float(i) for i in range(1, 10)}), {})
+    tied = R.slope_stars({**ten, "9": 10.0, "7": 8.0})
+    check("slope: ties share a band", (tied["9"], tied["10"], tied["7"], tied["8"]), (5, 5, 4, 4))
+    _m, kept, stars, why = R.rate_burst(turn, no_flags, 4, angled, views=two_views, slope={"a": 5, "c": 5})
+    check("slope: other angle stays one below its burst's best", (stars["a"], stars["c"], why["c"]), (5, 4, "Other angle"))
+    check("slope: a flag still costs its stars",
+          R.rate_burst(trio, {"a": ("overexposed",), "b": (), "c": ()}, 3, looked, slope={"a": 4})[2]["a"], 3)
+    check("slope: relative stars are untouched",
+          R.rate_burst(trio, {k: () for k in trio}, 3, Namespace(**{**vars(looked), "rank_mode": "relative"}),
+                       reference=max(trio.values()), slope={"a": 1})[2]["a"],
+          R.rate_burst(trio, {k: () for k in trio}, 3, Namespace(**{**vars(looked), "rank_mode": "relative"}),
+                       reference=max(trio.values()))[2]["a"])
+
+    # ticket 38: a clearer number read settles a close call
     close_pair = {"a": 100.0, "b": 97.0}
     def settle(reads, burst=close_pair, settings=single):
         _m, kept, _s, why = R.rate_burst(burst, {k: () for k in burst}, len(burst), settings, reads=reads)
@@ -571,6 +644,23 @@ def run_tests():
     check("motion_aware: every frame scored without a detector", sorted(motion_fresh), ["0", "1"])
     check("motion_aware: a rerun reads its cache entries", plain_run(sharp_mode="motion_aware"), motion_fresh)
 
+    # ticket 84: the star slope through the real scorer
+    def plain_rows(**kw):
+        plain_run(**kw)
+        return sorted(_csv.reader(open(os.path.join(tmp, "plain_res.csv"))))
+
+    check("slope: under the minimum the run equals one without the flag",
+          plain_rows(star_slope=True), plain_rows())
+    man_s = os.path.join(tmp, "slope.csv")
+    with open(man_s, "w", newline="") as f:
+        _csv.writer(f).writerows([[str(i), frames[i % len(frames)], str(i)] for i in range(10)])
+    sloped = sorted(((float(r[1]), r[5]) for r in plain_rows(manifest=man_s, star_slope=True)))
+    check("slope: ten single-frame bursts rate 1 to 5 in score order",
+          ([st for _s, st in sloped] == sorted(st for _s, st in sloped), sloped[0][1], sloped[-1][1]),
+          (True, "1", "5"))
+    check("slope: off, the same run takes the tier table",
+          {r[5] for r in plain_rows(manifest=man_s)} != {st for _s, st in sloped}, True)
+
     def exif_manifest(name, exposure):
         path = os.path.join(tmp, name)
         with open(path, "w", newline="") as f:
@@ -729,10 +819,13 @@ def run_tests():
     check("motion blur: lifted to the burst's median",
           S.lift_motion_blur({"a": 100.0, "b": 300.0, "c": 50.0}, {"c": ("motion_blur", 0.8)}),
           {"a": 100.0, "b": 300.0, "c": 200.0})
-    check("motion blur: an all-blur burst ranks by straightness",
+    blur3 = {2: ("motion_blur", 0.8), 3: ("motion_blur", 0.6), 4: ("motion_blur", 0.7)}
+    check("lift: raised frames keep their order",
+          S.lift_motion_blur({1: 300.0, 2: 200.0, 3: 220.0, 4: 260.0}, blur3), {1: 300.0, 2: 280.0, 3: 300.0, 4: 340.0})
+    check("lift: all-blur burst keeps car sharpness",
           S.lift_motion_blur({"a": 10.0, "b": 20.0}, {"a": ("motion_blur", 0.8), "b": ("motion_blur", 0.6)}),
-          {"a": 0.8 * S.BLUR_STRAIGHT_SCALE, "b": 0.6 * S.BLUR_STRAIGHT_SCALE})
-    check("motion blur: a sharp frame keeps a higher score",
+          {"a": 10.0, "b": 20.0})
+    check("lift: blur already above the rest is not lowered",
           S.lift_motion_blur({"a": 100.0, "b": 900.0}, {"b": ("motion_blur", 0.5)}), {"a": 100.0, "b": 900.0})
 
     def motion_stars(score, star_scale):
@@ -821,6 +914,13 @@ def run_tests():
     blocked = crossing[:1] + [S.frame_boxes(det((300, 200, 500, 300), (380, 150, 700, 400)))] + crossing[2:3]
     check("framing: a larger box over the target is blocked", S.framing_flags(blocked)[1], [(), ("blocked",), ()])
     check("framing: no detections, no flags", S.framing_flags([[], []]), ("unknown", [(), ()]))
+
+    def shaped(aspects):
+        return [None if a is None else (0.1, 0.1, 0.1 + 0.1 * a, 0.2, 0.9) for a in aspects]
+    check("views: head-on then side-on is two views", S.burst_views(shaped([1.2, 1.3, 1.25, 2.2, 2.3])), [0, 0, 0, 1, 1])
+    check("views: one odd box joins its neighbours", S.burst_views(shaped([1.2, 4.5, 1.3])), [0, 0, 0])
+    check("views: no target is None", S.burst_views(shaped([1.2, None, 1.3, None])), [0, None, 0, None])
+    check("views: no targets at all", S.burst_views([None, None]), [None, None])
     check("framing: a shared cut_off costs nothing",
           S.penalised_flags({"a": ("cut_off",), "b": ("cut_off",)}), {"a": (), "b": ()})
     # frame 5 couldn't be read, so it has no result row; the allowance still counts it
@@ -881,13 +981,13 @@ def run_tests():
     import eval_culling
     check("eval_culling: MOTION_CLASS mirrors MOTION_TAGS", eval_culling.MOTION_CLASS, {v: k for k, v in S.MOTION_TAGS.items()})
     check("eval_culling: score-part constants mirror score_images",
-          {n: eval_culling.PART_DEFAULTS[n] for n in ("PAN_BONUS", "MISSED_PAN_FACTOR", "BLUR_STRAIGHT_SCALE")},
-          {"PAN_BONUS": S.PAN_BONUS, "MISSED_PAN_FACTOR": S.MISSED_PAN_FACTOR, "BLUR_STRAIGHT_SCALE": S.BLUR_STRAIGHT_SCALE})
+          {n: eval_culling.PART_DEFAULTS[n] for n in ("PAN_BONUS", "MISSED_PAN_FACTOR")},
+          {"PAN_BONUS": S.PAN_BONUS, "MISSED_PAN_FACTOR": S.MISSED_PAN_FACTOR})
     check("eval_culling: lift mirrors lift_motion_blur",
-          eval_culling.lift_blur({"a": 100.0, "b": 300.0, "c": 50.0}, {"c": ("motion_blur", 0.8)}, 500.0),
-          S.lift_motion_blur({"a": 100.0, "b": 300.0, "c": 50.0}, {"c": ("motion_blur", 0.8)}))
-    check("eval_culling: an all-blur burst ranks by straightness like lift_motion_blur",
-          eval_culling.lift_blur({"a": 10.0, "b": 20.0}, {"a": ("motion_blur", 0.8), "b": ("motion_blur", 0.6)}, 500.0),
+          eval_culling.lift_blur({1: 300.0, 2: 200.0, 3: 220.0, 4: 260.0}, blur3),
+          S.lift_motion_blur({1: 300.0, 2: 200.0, 3: 220.0, 4: 260.0}, blur3))
+    check("eval_culling: an all-blur burst keeps car sharpness like lift_motion_blur",
+          eval_culling.lift_blur({"a": 10.0, "b": 20.0}, {"a": ("motion_blur", 0.8), "b": ("motion_blur", 0.6)}),
           S.lift_motion_blur({"a": 10.0, "b": 20.0}, {"a": ("motion_blur", 0.8), "b": ("motion_blur", 0.6)}))
     check("eval_culling: mode switches name technique_tag's tags",
           sorted(t for _m, t in eval_culling.MODE_SWITCH), sorted({S.technique_tag("subject_peak"), S.technique_tag("subject_focus")}))

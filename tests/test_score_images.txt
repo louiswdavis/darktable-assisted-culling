@@ -5,6 +5,21 @@ ok   vehicle_box: the stored box is rescaled to the frame scored, as fractions
 ok   vehicle_box: under DETECTOR_MIN_SCORE → none, the log names the strongest vehicle
 ok   vehicle_box: an entry with no boxes → none
 ok   MAX_DIM is the shared module's fast-JPEG draft size
+ok   car boxes: the shed box tagging dropped goes, the car stays
+ok   car boxes: not in tagging's file → the entry as it was
+ok   car boxes: in the file with no kept box → no vehicle, the log says what went
+ok   car boxes: the shed is no longer the prominent box
+ok   car boxes: IoU under CAR_BOX_MIN_IOU doesn't match
+ok   car boxes: cache key unchanged off the file
+ok   car boxes: read as frame fractions, keyed by path
+ok   car boxes: the log counts frames left out
+ok   car boxes: a frame changed after tagging ran is left out
+ok   car boxes: a people run gives none
+ok   car boxes: a missing file gives none
+ok   car boxes: no path gives none
+ok   number reads: best confidence per number, blanks dropped, frames with none left out
+ok   number reads: the log counts frames
+ok   number reads: no path is off
 ok   pick vehicle: prominence beats raw confidence
 ok   pick vehicle: box clipped to the frame
 ok   pick vehicle: none found
@@ -55,6 +70,49 @@ ok   why: an all-no-vehicle burst is left alone
 ok   why: two near-identical frames are a close call, one still keeps
 ok   why: the Why tag follows the other diagnostic tags
 ok   why: every reason the scorer writes is listed
+ok   keepers: 7 frames, 3 eligible, dynamic_burst keeps 1
+ok   star drop: a clear runner-up keeper loses the top-40% star
+ok   star drop: a keeper in a close call keeps its own stars
+ok   spread: 12 frames, 3 keepers, the best three adjacent keep one per third
+ok   spread: a slice's pick over a sharper frame says Spread, the frame it beat is a close call
+ok   spread: mostly blur with one sharp moment keeps the sharp frames
+ok   spread: frames are sliced in the order given, not by id
+ok   spread: off rates exactly as before
+ok   spread: one keeper allowed keeps the best frame
+ok   cut off: loses to a whole car
+ok   cut off: kept when every frame is cut off
+ok   cut off: tag-only setting does not change eligibility
+ok   other angle: kept one star lower
+ok   other angle: under the share is not kept
+ok   other angle: off without the flag
+ok   other angle: no views, result equals today's
+ok   other angle: a frame without a box makes no view
+ok   other angle: a cut-off frame is not the view's pick
+ok   other angle: a ranked keeper that leads another view is relabelled, one star lower
+ok   other angle: no keeper of that view outrates its Other angle frame
+ok   number: the dropped frame of a close call reads clearer, so it keeps
+ok   number: a gap under NUMBER_READ_MIN_GAP keeps the sharper frame
+ok   number: only one frame reading keeps today's ranking
+ok   number: different numbers keep today's ranking
+ok   number: the number both read best decides
+ok   number: no reads rate exactly as before
+ok   number: not a close call keeps the sharper frame
+ok   number: the keeper margin still holds the sharper frame
+ok   number: number_clearer needs a shared number
+ok   judge: the dropped frame scored clearer keeps
+ok   judge: a gap under JUDGE_MIN_GAP keeps the sharper frame
+ok   judge: one frame unjudged keeps today's ranking
+ok   judge: no scores rate exactly as before
+ok   judge: not a close call keeps the sharper frame
+ok   judge: a number read settles it first
+ok   judge: reads that settle nothing leave it to the judge
+ok   judge_shortlist: frames within the close-call share, best first, capped
+ok   judge_shortlist: ineligible frames stay out
+ok   judge_shortlist: nothing to judge
+ok   judge_clearer: an unscored or zero keeper never swaps
+ok   judge_tiles: a 3x3 grid of JUDGE_SIZE squares
+ok   judge_tiles: a small crop grows to JUDGE_SIZE first
+ok   judge_tiles: an exact-size crop is one tile
 ok   frame_flags: exposure ok and eyes open is no flags
 ok   frame_flags: both problems
 ok   frame_flags: blank comes last
@@ -126,13 +184,23 @@ ok   normalised sharpness: half the contrast scores within 10%
 ok   normalised sharpness: a streaked frame scores lower
 ok   subject crop: padded box cut from the full frame
 ok   subject crop: shrunk to SUBJECT_CROP_MAX
+ok   shrunk_to: long side exact, aspect kept
+ok   shrunk_to: never grows
+ok   scale ladder: steps under the long side, then its own size
+ok   same_scale: the largest size both crops have
+ok   same_scale: the same scene at 600 and 1800 px scores within 5%
+ok   same_scale: a crop under the smallest step leaves each frame at its smallest size
+ok   same_scale: a lone frame keeps its own size
+ok   same_scale: no frames
+ok   class factor: pan, missed pan, ordinary
 ok   EXIF prior: unknown shutter uses the default
 ok   EXIF prior: 1/2000 needs more streak
 ok   EXIF prior: 1/60 at 100 mm needs less
 ok   EXIF prior: 1/250 at 50 mm keeps the default
 ok   motion blur: lifted to the burst's median
-ok   motion blur: an all-blur burst ranks by straightness
-ok   motion blur: a sharp frame keeps a higher score
+ok   lift: raised frames keep their order
+ok   lift: all-blur burst keeps car sharpness
+ok   lift: blur already above the rest is not lowered
 ok   stars: motion_aware uses its own tiers
 ok   stars: a star scale under 1 is more generous
 ok   stars: a star scale over 1 is stricter
@@ -147,8 +215,15 @@ ok   report: the folder is the eleventh column
 ok   report: the reason column is the Why tag
 ok   report: the car column is twelfth
 ok   report: one column per header
-ok   report: direction is last, blank without a detector
+ok   report: direction is fourteenth, blank without a detector
 ok   report: direction per burst
+ok   report: the id column is darktable's id
+ok   report: score parts blank outside motion_aware
+ok   report: score parts per frame, rounded
+ok   report: parts without an own-size subject leave it blank
+ok   report: parts columns, then reads, then judge, are last
+ok   report: the judge score per judged frame, blank for the rest
+ok   report: a judge keeper says why
 ok   framing: direction follows the box
 ok   framing: touching the leading edge is cut off
 ok   framing: touching the trailing edge is fine
@@ -157,6 +232,10 @@ ok   framing: under 3 boxes is unknown
 ok   framing: a frame-filling car is never cut off
 ok   framing: a larger box over the target is blocked
 ok   framing: no detections, no flags
+ok   views: head-on then side-on is two views
+ok   views: one odd box joins its neighbours
+ok   views: no target is None
+ok   views: no targets at all
 ok   framing: a shared cut_off costs nothing
 ok   report: the allowance counts unreadable frames
 ok   report archive: keeps the newest 3 and leaves other files alone
@@ -173,61 +252,65 @@ ok   common.py matches the shared copy
 ok   vehicle_detect.py matches the shared copy
 ok   common: RAW_EXTENSIONS is the one score_images uses
 ok   eval_culling: MOTION_CLASS mirrors MOTION_TAGS
+ok   eval_culling: score-part constants mirror score_images
+ok   eval_culling: lift mirrors lift_motion_blur
+ok   eval_culling: an all-blur burst keeps car sharpness like lift_motion_blur
 ok   eval_culling: mode switches name technique_tag's tags
 ok   common: atomic_write keeps the old file on failure
 ok   common: atomic_write replaces on success
 ok   common: atomic_write leaves no temp file
+ok   scorer: starts and builds its arguments
 
 all tests passed
 
 --- stderr ---
-20:52:08 py: finding subjects: 5 frames in 1 bursts, 0 from cache, detector off
-20:52:08 py: burst 9: shortlist of 5 frames: 0 point, 1 point, 2 point
-20:52:08 py: finding subjects: done
-20:52:08 py: finding subjects: 2 frames in 1 bursts, 0 from cache, detector off
-20:52:08 py: skip saliency 7 (C:\Users\Louis\AppData\Local\Temp\tmp90sftb44\gone.jpg): [Errno 2] No such file or directory: 'C:\\Users\\Louis\\AppData\\Local\\Temp\\tmp90sftb44\\gone.jpg'
-20:52:09 py: burst 9: shortlist of 1 frames: 0 point
-20:52:09 py: finding subjects: done
-20:52:09 py: scoring: 5 frames in 1 bursts, 5 from cache or stage A, 0 to decode, sharpness sam_subject
-20:52:09 py: burst 9: 5 of 5 frames scored, mode sam_subject, masked 0 of 3 shortlisted, so subject bias, keepers 0
-20:52:09 py: scoring: 2 frames in 2 bursts, 0 from cache or stage A, 2 to decode, sharpness subject_focus
-20:52:09 py: burst 0: 1 of 1 frames scored, mode subject_focus, keepers 0
-20:52:09 py: burst 1: 1 of 1 frames scored, mode subject_focus, keepers 1
-20:52:09 py: scoring: 2 frames in 2 bursts, 2 from cache or stage A, 0 to decode, sharpness subject_focus
-20:52:09 py: relative: subject_focus (2 frames) is under 5 frames, so its bursts take the universal tiers of subject_focus
-20:52:09 py: burst 0: 1 of 1 frames scored, mode subject_focus, keepers 0
-20:52:09 py: burst 1: 1 of 1 frames scored, mode subject_focus, keepers 1
-20:52:09 py: scoring: 2 frames in 2 bursts, 0 from cache or stage A, 2 to decode, sharpness tiles_uniformity
-20:52:09 py: burst 0: 1 of 1 frames scored, mode tiles_uniformity, keepers 0
-20:52:09 py: burst 1: 1 of 1 frames scored, mode tiles_uniformity, keepers 1
-20:52:09 py: scoring: 2 frames in 2 bursts, 1 from cache or stage A, 1 to decode, sharpness subject_focus
-20:52:09 py: burst 1: 1 of 1 frames scored, mode subject_focus, keepers 1
-20:52:10 py: burst 0: 1 of 1 frames scored, mode subject_focus, keepers 0
-20:52:10 py: scoring: 2 frames in 2 bursts, 0 from cache or stage A, 2 to decode, sharpness motion_aware
-20:52:10 py: motion 0 (burst0.jpg): ordinary, straightness 0.00, subject 2012, crop 48x48, centre third (no detector)
-20:52:10 py: burst 0: 1 of 1 frames scored, mode motion_aware, keepers 0
-20:52:10 py: motion 1 (burst1.jpg): ordinary, straightness 0.00, subject 990, crop 48x48, centre third (no detector)
-20:52:10 py: burst 1: 1 of 1 frames scored, mode motion_aware, keepers 1
-20:52:10 py: scoring: 2 frames in 2 bursts, 2 from cache or stage A, 0 to decode, sharpness motion_aware
-20:52:10 py: burst 0: 1 of 1 frames scored, mode motion_aware, keepers 0
-20:52:10 py: burst 1: 1 of 1 frames scored, mode motion_aware, keepers 1
-20:52:10 py: scoring: 2 frames in 2 bursts, 2 from cache or stage A, 0 to decode, sharpness subject_focus
-20:52:10 py: burst 0: 1 of 1 frames scored, mode subject_focus, keepers 0
-20:52:10 py: burst 1: 1 of 1 frames scored, mode subject_focus, keepers 1
-20:52:10 py: scoring: 2 frames in 2 bursts, 0 from cache or stage A, 2 to decode, sharpness subject_focus
-20:52:10 py: burst 1: 1 of 1 frames scored, mode subject_peak from EXIF (median 0.008 s, f/8; 0 = unknown), keepers 1
-20:52:10 py: burst 0: 1 of 1 frames scored, mode subject_peak from EXIF (median 0.008 s, f/8; 0 = unknown), keepers 0
-20:52:11 py: finding subjects: 5 frames in 1 bursts, 0 from cache, detector off
-20:52:11 py: burst 9: shortlist of 5 frames: 0 point, 1 point, 2 point
-20:52:11 py: finding subjects: done
-20:52:11 py: scoring: 5 frames in 1 bursts, 2 from cache or stage A, 3 to decode, sharpness sam_subject
-20:52:11 py: burst 9: 5 of 5 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 0
-20:52:11 py: burst 9: shortlist of 5 frames: 0 point cached, 1 point cached, 2 point cached
-20:52:11 py: finding subjects: 5 frames in 1 bursts, 5 from cache, detector off
-20:52:11 py: finding subjects: done
-20:52:11 py: scoring: 5 frames in 1 bursts, 5 from cache or stage A, 0 to decode, sharpness sam_subject
-20:52:11 py: burst 9: 5 of 5 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 0
-20:52:11 py: burst 9: shortlist of 5 frames: 0 point, 1 point, 2 point
-20:52:11 py: finding subjects: 5 frames in 1 bursts, 5 from cache, detector off
-20:52:11 py: finding subjects: done
-20:52:12 py: archived report: C:\Users\Louis\AppData\Local\Temp\tmp3ma61_6p\reports\20261116-205212.csv
+16:37:23 py: finding subjects: 5 frames in 1 bursts, 0 from cache, detector off
+16:37:23 py: burst 9: shortlist of 5 frames: 0 point, 1 point, 2 point
+16:37:23 py: finding subjects: done
+16:37:23 py: finding subjects: 2 frames in 1 bursts, 0 from cache, detector off
+16:37:23 py: skip saliency 7 (/var/folders/nz/vys208qx42q2wqdxhcbhjrf80000gp/T/tmph8menev4/gone.jpg): [Errno 2] No such file or directory: '/var/folders/nz/vys208qx42q2wqdxhcbhjrf80000gp/T/tmph8menev4/gone.jpg'
+16:37:23 py: burst 9: shortlist of 1 frames: 0 point
+16:37:23 py: finding subjects: done
+16:37:23 py: scoring: 5 frames in 1 bursts, 5 from cache or stage A, 0 to decode, sharpness sam_subject
+16:37:23 py: burst 9: 5 of 5 frames scored, mode sam_subject, masked 0 of 3 shortlisted, so subject bias, keepers 0
+16:37:23 py: scoring: 2 frames in 2 bursts, 0 from cache or stage A, 2 to decode, sharpness subject_focus
+16:37:23 py: burst 0: 1 of 1 frames scored, mode subject_focus, keepers 0
+16:37:23 py: burst 1: 1 of 1 frames scored, mode subject_focus, keepers 1
+16:37:23 py: scoring: 2 frames in 2 bursts, 2 from cache or stage A, 0 to decode, sharpness subject_focus
+16:37:23 py: relative: subject_focus (2 frames) is under 5 frames, so its bursts take the universal tiers of subject_focus
+16:37:23 py: burst 0: 1 of 1 frames scored, mode subject_focus, keepers 0
+16:37:23 py: burst 1: 1 of 1 frames scored, mode subject_focus, keepers 1
+16:37:23 py: scoring: 2 frames in 2 bursts, 0 from cache or stage A, 2 to decode, sharpness tiles_uniformity
+16:37:24 py: burst 1: 1 of 1 frames scored, mode tiles_uniformity, keepers 1
+16:37:24 py: burst 0: 1 of 1 frames scored, mode tiles_uniformity, keepers 0
+16:37:24 py: scoring: 2 frames in 2 bursts, 1 from cache or stage A, 1 to decode, sharpness subject_focus
+16:37:24 py: burst 1: 1 of 1 frames scored, mode subject_focus, keepers 1
+16:37:24 py: burst 0: 1 of 1 frames scored, mode subject_focus, keepers 0
+16:37:24 py: scoring: 2 frames in 2 bursts, 0 from cache or stage A, 2 to decode, sharpness motion_aware
+16:37:24 py: motion 1 (burst1.jpg): ordinary, straightness 0.00, subject 990, crop 48x48, centre third (no detector)
+16:37:24 py: burst 1: 1 of 1 frames scored, mode motion_aware, keepers 1
+16:37:24 py: motion 0 (burst0.jpg): ordinary, straightness 0.00, subject 2012, crop 48x48, centre third (no detector)
+16:37:24 py: burst 0: 1 of 1 frames scored, mode motion_aware, keepers 0
+16:37:24 py: scoring: 2 frames in 2 bursts, 2 from cache or stage A, 0 to decode, sharpness motion_aware
+16:37:24 py: burst 0: 1 of 1 frames scored, mode motion_aware, keepers 0
+16:37:24 py: burst 1: 1 of 1 frames scored, mode motion_aware, keepers 1
+16:37:24 py: scoring: 2 frames in 2 bursts, 2 from cache or stage A, 0 to decode, sharpness subject_focus
+16:37:24 py: burst 0: 1 of 1 frames scored, mode subject_focus, keepers 0
+16:37:24 py: burst 1: 1 of 1 frames scored, mode subject_focus, keepers 1
+16:37:24 py: scoring: 2 frames in 2 bursts, 0 from cache or stage A, 2 to decode, sharpness subject_focus
+16:37:24 py: burst 0: 1 of 1 frames scored, mode subject_peak from EXIF (median 0.008 s, f/8; 0 = unknown), keepers 0
+16:37:24 py: burst 1: 1 of 1 frames scored, mode subject_peak from EXIF (median 0.008 s, f/8; 0 = unknown), keepers 1
+16:37:24 py: finding subjects: 5 frames in 1 bursts, 0 from cache, detector off
+16:37:25 py: burst 9: shortlist of 5 frames: 0 point, 1 point, 2 point
+16:37:25 py: finding subjects: done
+16:37:25 py: scoring: 5 frames in 1 bursts, 2 from cache or stage A, 3 to decode, sharpness sam_subject
+16:37:25 py: burst 9: 5 of 5 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 0
+16:37:25 py: burst 9: shortlist of 5 frames: 0 point cached, 1 point cached, 2 point cached
+16:37:25 py: finding subjects: 5 frames in 1 bursts, 5 from cache, detector off
+16:37:25 py: finding subjects: done
+16:37:25 py: scoring: 5 frames in 1 bursts, 5 from cache or stage A, 0 to decode, sharpness sam_subject
+16:37:25 py: burst 9: 5 of 5 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 0
+16:37:25 py: burst 9: shortlist of 5 frames: 0 point, 1 point, 2 point
+16:37:25 py: finding subjects: 5 frames in 1 bursts, 5 from cache, detector off
+16:37:25 py: finding subjects: done
+16:37:25 py: archived report: /var/folders/nz/vys208qx42q2wqdxhcbhjrf80000gp/T/tmp6v9wruqv/reports/20261118-163725.csv
