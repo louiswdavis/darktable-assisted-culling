@@ -1,29 +1,44 @@
-19:36:48 lua: run started: darktable 5.6.2, 6 images (0 locked left out)
-19:36:48 lua: settings: rank universal, sharpness motion_aware, exposure none, keepers dynamic_burst, non-keepers leave
-19:36:48 lua: Assisted Culling: started on 6 images…
-19:36:48 lua: group support native: 0 of 6 photos in groups of 2+
-19:36:48 lua: fast JPEG true, apply while scoring true, SAM model none
-19:36:48 lua: Assisted Culling: scoring 6 images in 6 groups (dynamic burst keepers, universal ranking, native grouping)
-19:36:48 lua: vehicle detector: dfine_x_coco.onnx
-19:36:48 lua: scoring: "C:\Users\Louis\Pictures\DarkTable\Settings\Plugins/darktable-assisted-culling/.venv/Scripts/python.exe" -u "C:\Users\Louis\Pictures\DarkTable\Settings\Plugins/darktable-assisted-culling/python/score_images.py" "C:\Users\Louis\AppData\Local\Temp/dt_assisted_culling_1795030608_4_manifest.csv" "C:\Users\Louis\AppData\Local\Temp/dt_assisted_culling_1795030608_4_results.csv" "--progress" "C:\Users\Louis\AppData\Local\Temp/dt_assisted_culling_1795030608_4_progress.txt" "--rank-mode" "universal" "--sharp-mode" "motion_aware" "--exp-mode" "none" "--keep-mode" "dynamic_burst" "--nk-mode" "leave" "--tag-only-flags" "overexposed,underexposed,eyes_closed" "--star-scale" "1" "--keep-margin" "0.95" "--blank-share" "0.95" "--fast-jpeg" "--spread-keepers" "--keep-angles" "--motion-look" "--star-slope" "--detector" "C:\Users\Louis\Pictures\DarkTable\Settings\Plugins/darktable-assisted-culling/models/dfine_x_coco.onnx" "--detections" "C:/Users/Louis/AppData/Local/darktable/assisted_plugins/detections.sqlite" "--car-boxes" "C:/Users/Louis/AppData/Local/darktable/assisted_tagging/last-run/Rallye.boxes.json" "--cache" "C:\Users\Louis\AppData\Local\darktable/assisted_culling/scores.sqlite" "--report" "C:\Users\Louis\AppData\Local\darktable/assisted_culling/last-run.csv" "--report-archive-dir" "C:\Users\Louis\AppData\Local\darktable/assisted_culling/reports"
-19:36:52 py: scoring: 6 frames in 6 bursts, 0 from cache or stage A, 6 to decode, sharpness motion_aware
-19:37:00 py: motion 203966 (DSC09172.ARW): pan, straightness 0.57, subject 420, crop 523x292
-19:37:00 py: motion 204004 (DSC09191.ARW): motion_blur, straightness 0.64, subject 284, crop 821x454
-19:37:00 py: motion 200012 (DSC00909.ARW): motion_blur, straightness 0.65, subject 299, crop 986x574
-19:37:00 py: motion 203996 (DSC09187.ARW): ordinary, straightness 0.00, subject 546, crop 344x211
-19:37:00 py: motion 199970 (DSC00888.ARW): motion_blur, straightness 0.67, subject 277, crop 822x373
-19:37:00 py: motion 199966 (DSC00886.ARW): ordinary, straightness 0.00, subject 336, crop 546x307
-19:37:01 py: detections: 0 cached, 6 detected
-19:37:01 py: car boxes: 55 frames from C:/Users/Louis/AppData/Local/darktable/assisted_tagging/last-run/Rallye.boxes.json; checked 0 frames: 0 boxes removed, 0 frames left with no vehicle
-19:37:01 py: star slope: 6 keepers, under 10, so the tier tables rate them
-19:37:01 py: burst 1: 1 of 1 frames scored, mode motion_aware, keepers 203966
-19:37:01 py: burst 3: 1 of 1 frames scored, mode motion_aware, keepers 204004
-19:37:01 py: burst 6: 1 of 1 frames scored, mode motion_aware, keepers 200012
-19:37:01 py: burst 2: 1 of 1 frames scored, mode motion_aware, keepers 203996
-19:37:01 py: burst 5: 1 of 1 frames scored, mode motion_aware, keepers 199970
-19:37:01 py: burst 4: 1 of 1 frames scored, mode motion_aware, keepers 199966
-19:37:01 py: archived report: C:\Users\Louis\AppData\Local\darktable/assisted_culling/reports\20261118-193701.csv
-19:37:01 lua: scoring: scorer exit 0
-19:37:01 lua: Assisted Culling: done. 6 keepers, 0 not kept. No groups found: every frame judged alone (group first for keepers).
-19:37:01 lua: apply: timing: 0.0s in tag and rating-per-image calls, 0.0s in rating batches, 0.0s paused, 0.0s in progress updates; final drain took 0s
-19:37:01 lua: run finished
+19:53:36 lua: run started: darktable 5.6.2, 110 images (0 locked left out)
+19:53:36 lua: settings: rank universal, sharpness motion_aware, exposure none, keepers dynamic_burst, non-keepers leave
+19:53:36 lua: Assisted Culling: started on 110 images…
+19:53:36 lua: group support native: 55 of 55 photos in groups of 2+
+19:53:36 lua: fast JPEG true, apply while scoring true, SAM model none
+19:53:36 lua: Assisted Culling: scoring 55 images in 6 groups (dynamic burst keepers, universal ranking, native grouping)
+19:53:36 lua: Assisted Culling: 55 image(s) share a shot with another (a duplicate, or the RAW of a RAW+JPEG pair); each shot is scored once and its result copied to all of it.
+19:53:36 lua: vehicle detector: dfine_x_coco.onnx
+19:53:36 lua: scoring: "C:\Users\Louis\Pictures\DarkTable\Settings\Plugins/darktable-assisted-culling/.venv/Scripts/python.exe" -u "C:\Users\Louis\Pictures\DarkTable\Settings\Plugins/darktable-assisted-culling/python/score_images.py" "C:\Users\Louis\AppData\Local\Temp/dt_assisted_culling_1795031616_3_manifest.csv" "C:\Users\Louis\AppData\Local\Temp/dt_assisted_culling_1795031616_3_results.csv" "--progress" "C:\Users\Louis\AppData\Local\Temp/dt_assisted_culling_1795031616_3_progress.txt" "--rank-mode" "universal" "--sharp-mode" "motion_aware" "--exp-mode" "none" "--keep-mode" "dynamic_burst" "--nk-mode" "leave" "--tag-only-flags" "overexposed,underexposed,eyes_closed" "--star-scale" "1" "--keep-margin" "0.95" "--blank-share" "0.95" "--fast-jpeg" "--spread-keepers" "--keep-angles" "--motion-look" "--star-slope" "--detector" "C:\Users\Louis\Pictures\DarkTable\Settings\Plugins/darktable-assisted-culling/models/dfine_x_coco.onnx" "--detections" "C:/Users/Louis/AppData/Local/darktable/assisted_plugins/detections.sqlite" "--car-boxes" "C:/Users/Louis/AppData/Local/darktable/assisted_tagging/last-run/Rallye.boxes.json" "--cache" "C:\Users\Louis\AppData\Local\darktable/assisted_culling/scores.sqlite" "--report" "C:\Users\Louis\AppData\Local\darktable/assisted_culling/last-run.csv" "--report-archive-dir" "C:\Users\Louis\AppData\Local\darktable/assisted_culling/reports"
+19:53:40 py: scoring: 55 frames in 6 bursts, 55 from cache or stage A, 0 to decode, sharpness motion_aware
+19:53:40 py: detections: 0 cached, 0 detected
+19:53:40 py: car boxes: 55 frames from C:/Users/Louis/AppData/Local/darktable/assisted_tagging/last-run/Rallye.boxes.json; checked 55 frames: 6 boxes removed, 0 frames left with no vehicle
+19:53:40 py: star slope: 9 keepers, under 10, so the tier tables rate them
+19:53:40 py: burst 1: 15 of 15 frames scored, mode motion_aware, keepers 203979, 203989, 203971, 203973, 203993
+19:53:40 py: burst 2: 4 of 4 frames scored, mode motion_aware, keepers 204003
+19:53:40 py: burst 3: 7 of 7 frames scored, mode motion_aware, keepers 204007, 204009, 204013
+19:53:40 py: burst 4: 2 of 2 frames scored, mode motion_aware, keepers 199969
+19:53:40 py: burst 5: 21 of 21 frames scored, mode motion_aware, keepers 200009, 199979, 199987, 199989, 199997
+19:53:40 py: burst 6: 6 of 6 frames scored, mode motion_aware, keepers 200013
+19:53:40 py: archived report: C:\Users\Louis\AppData\Local\darktable/assisted_culling/reports\20261118-195340.csv
+19:53:40 lua: scoring: scorer exit 0
+19:53:40 lua: Assisted Culling: analysis done, applying ratings to the last 52 images...
+19:53:40 lua: applying: results 4 of 55
+19:53:44 lua: ratings: selecting 4 images for 1 stars
+19:53:45 lua: ratings: rating action
+19:53:45 lua: ratings: selecting 10 images for 2 stars
+19:53:46 lua: ratings: rating action
+19:53:46 lua: ratings: selecting 4 images for 3 stars
+19:53:46 lua: ratings: act-on is 1 images, not the batch; rating one by one
+19:53:46 lua: ratings: selecting 2 images for 4 stars
+19:53:46 lua: ratings: act-on is 1 images, not the batch; rating one by one
+19:53:46 lua: ratings: restoring selection of 110
+19:53:47 lua: applying: results 32 of 55
+19:53:57 lua: ratings: selecting 2 images for 1 stars
+19:53:57 lua: ratings: rating action
+19:53:58 lua: ratings: selecting 2 images for 2 stars
+19:53:58 lua: ratings: rating action
+19:53:58 lua: ratings: selecting 2 images for 3 stars
+19:53:58 lua: ratings: rating action
+19:53:58 lua: ratings: restoring selection of 110
+19:53:58 lua: Assisted Culling: done. 16 keepers, 39 not kept, 9 cut off.
+19:53:58 lua: apply: timing: 0.1s in tag and rating-per-image calls, 17.4s in rating batches, 0.6s paused, 0.0s in progress updates; final drain took 18s
+19:53:58 lua: 10 missed by darktable's rating action (rated one by one)
+19:53:59 lua: run finished
