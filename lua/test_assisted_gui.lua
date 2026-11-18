@@ -50,8 +50,8 @@ for _, file in ipairs({ "/python/score_images.py", "/python/launch.py", "/.venv/
 end
 
 -- score_images.py -----------------------------------------------------------------
--- What the fake process writes, and what it was last asked.
-local PYTHON = { results = "", points = "", progress = "", exit = 0, runs = {} }
+-- What the fake process writes, and what it was last asked. With `hang` it never reports done.
+local PYTHON = { results = "", points = "", progress = "", exit = 0, hang = false, runs = {} }
 
 -- The launch as plugin_common.run_async_python writes it: a job file on Windows, a shell line elsewhere.
 os.execute = function(cmd)
@@ -77,13 +77,15 @@ os.execute = function(cmd)
     local finds_subjects = false
     for _, arg in ipairs(argv) do finds_subjects = finds_subjects or arg == "--emit-saliency-points" end
     write_file(argv[3], finds_subjects and PYTHON.points or PYTHON.results)
-    write_file(done_path, PYTHON.exit .. "\n")
+    if not PYTHON.hang then write_file(done_path, PYTHON.exit .. "\n") end
     return true
 end
 
 -- darktable -----------------------------------------------------------------------
 local prints, jobs, images_by_id, tags_by_name, tag_list, panel = {}, {}, {}, {}, {}, nil
 local hinter_calls, rating_actions = 0, 0
+-- called at each dt.control.sleep, where darktable runs its own events (a cancel click, an error)
+local on_sleep = nil
 -- how many images were selected at each tag attach
 local selected_at_attach = {}
 local prefs = { ["assisted_plugins/plugins_root"] = ROOT .. "/plugins" }
@@ -163,7 +165,7 @@ dt = {
             end
         end,
     }, { __len = function() return #tag_list end, __index = function(_, i) return tag_list[i] end }),
-    control = { sleep = function() end, dispatch = function(fn) fn() end },
+    control = { sleep = function() if on_sleep then on_sleep() end end, dispatch = function(fn) fn() end },
     database = { get_image = function(id) return images_by_id[id] end },
     register_event = function() end,
     destroy_event = function() end,
@@ -419,6 +421,61 @@ PYTHON.exit = 0
 click("Cull selection", { jpeg4 })
 check("cull, all locked: explains", last_print():find("every selected image is tagged Assisted Culling|Locked", 1, true) ~= nil, true)
 
+-- darktable refuses to select again (an image left the library during the run): the run still ends
+local real_selection = dt.gui.selection
+dt.gui.selection = function(images)
+    if images and #images > 0 then error("selection refused") end
+    return real_selection(images)
+end
+jpeg1.rating, jpeg2.rating = 0, 0
+click("Cull selection", { jpeg1, jpeg2 })
+check("cull, selection not restored: says so", printed("Assisted Culling: couldn't restore the selection: "), true)
+check("cull, selection not restored: the button is back to its label", button(panel, "Cull selection") ~= nil, true)
+dt.gui.selection = real_selection
+jpeg1.rating = 0
+click("Cull selection", { jpeg1, jpeg2 })
+check("cull, selection not restored: the next click starts a run", #PYTHON.runs .. " run, keeper rated " .. jpeg1.rating, "1 run, keeper rated 3")
+
+-- darktable raises while the selection's Locked tag is read, before the scorer starts: the panel is not left busy
+local real_find = dt.tags.find
+dt.tags.find = function() error("tag list unavailable") end
+click("Cull selection", { jpeg1, jpeg2 })
+dt.tags.find = real_find
+check("cull, error before the run starts: says so and the button is back to its label",
+    tostring(printed("Assisted Culling: couldn't run. ")) .. "; " .. tostring(button(panel, "Cull selection") ~= nil), "true; true")
+jpeg1.rating = 0
+if button(panel, "Cull selection") then click("Cull selection", { jpeg1, jpeg2 }) end
+check("cull, error before the run starts: the next click starts a run", #PYTHON.runs .. " run, keeper rated " .. jpeg1.rating, "1 run, keeper rated 3")
+
+-- darktable raises partway through a run, with progress on the panel line
+jpeg1.rating, jpeg2.rating = 0, 0
+on_sleep = function() if status_now ~= "" then error("darktable is closing") end end
+click("Cull selection", { jpeg1, jpeg2 })
+on_sleep = nil
+check("cull, error during the run: says so, the panel line is cleared and the button is back to its label",
+    tostring(printed("Assisted Culling: couldn't run. ")) .. "; '" .. status_label.label .. "'; "
+    .. tostring(button(panel, "Cull selection") ~= nil), "true; ''; true")
+
+-- Cancelled partway with "Apply ratings while scoring": the scorer is still going, the job bar's X is clicked
+-- once results are applied. The message names Restore previous ratings only when a rating was changed.
+local while_scoring = find_widget(panel, "check_button", "Apply ratings while scoring")
+while_scoring.value = true
+while_scoring.clicked_callback(while_scoring)
+PYTHON.hang = true
+on_sleep = function() if #PYTHON.runs > 0 and jobs[1] then jobs[1].valid = false end end
+jpeg1.rating, jpeg2.rating = 5, 4
+click("Cull selection", { jpeg1, jpeg2 })
+local cancelled_rated = last_print()
+click("Cull selection", { jpeg1, jpeg2 })
+on_sleep = nil
+PYTHON.hang = false
+while_scoring.value = false
+while_scoring.clicked_callback(while_scoring)
+check("cull, cancelled while scoring: the message names the way to undo what was written", cancelled_rated .. " / " .. last_print(),
+    "Assisted Culling: cancelled. 2 of 2 images were already rated and keep their changes. Run again to finish, or use Clear culling marks to remove the tags and Restore previous ratings to put the star ratings back."
+    .. " / Assisted Culling: cancelled. 2 of 2 images were already rated and keep their changes. Run again to finish, or use Clear culling marks to remove the tags.")
+check("cull, cancelled while scoring: no Lua error", lua_errors(), nil)
+
 -- Clear culling marks ---------------------------------------------------------------
 click("Clear culling marks", {})
 check("clear, nothing selected: asks for a selection", last_print(), "Assisted Culling: select some images first")
@@ -433,6 +490,80 @@ check("clear: the end message", last_print(),
     "Assisted Culling: removed culling tags from 2 of 3 images. Star ratings were not changed.")
 check("clear: the hinter is never used", hinter_calls, 0)
 check("clear: no Lua error", lua_errors(), nil)
+
+dt.tags.attach(dt.tags.create("Assisted Culling|Keeper"), jpeg1)
+dt.gui.selection = function(images)
+    if images and #images > 0 then error("selection refused") end
+    return real_selection(images)
+end
+click("Clear culling marks", { jpeg1, jpeg2 })
+dt.gui.selection = real_selection
+check("clear, selection not restored: says so and still reports the clear",
+    tostring(printed("Assisted Culling: couldn't restore the selection: ")) .. "; " .. last_print(),
+    "true; Assisted Culling: removed culling tags from 1 of 2 images. Star ratings were not changed.")
+check("clear, selection not restored: the panel line is cleared", status_label.label, "")
+
+-- Restore previous ratings ----------------------------------------------------------
+local PREVIOUS_RATINGS = ROOT .. "/config/assisted_culling.previous-ratings.csv"
+click("Restore previous ratings", {})
+check("restore, nothing selected: asks for a selection", last_print(), "Assisted Culling: select some images first")
+
+os.remove(PREVIOUS_RATINGS)
+click("Restore previous ratings", { jpeg1, jpeg2 })
+check("restore, no run yet: says so", last_print(),
+    "Assisted Culling: no run has changed a rating yet, so there is nothing to restore.")
+
+jpeg1.rating, jpeg2.rating, jpeg3.rating = 5, 4, 2
+click("Cull selection", { jpeg1, jpeg2, jpeg3 })
+check("restore: the run rated both scored frames", jpeg1.rating .. " " .. jpeg2.rating .. " " .. jpeg3.rating, "3 1 2")
+check("restore: the run saved the rating each frame had", read_file(PREVIOUS_RATINGS),
+    "1,5,3,/photos/DSC00001.JPG\n2,4,1,/photos/DSC00002.JPG\n")
+
+-- a run that changes no rating keeps the file of the run before it
+click("Cull selection", { jpeg1, jpeg2, jpeg3 })
+check("restore: a run that changes no rating keeps the saved ratings", read_file(PREVIOUS_RATINGS),
+    "1,5,3,/photos/DSC00001.JPG\n2,4,1,/photos/DSC00002.JPG\n")
+
+jpeg2.rating = 2
+selected_at_attach = {}
+local restore_selection = { jpeg1, jpeg2, jpeg3 }
+click("Restore previous ratings", restore_selection)
+check("restore: the frame the run rated is back", jpeg1.rating, 5)
+check("restore: a frame rated since the run is left alone", jpeg2.rating, 2)
+check("restore: a frame the run did not rate is left alone", jpeg3.rating, 2)
+check("restore: progress goes to the panel line", status_shown("restoring ratings 3 / 3"), true)
+check("restore: the panel line is cleared at the end", status_label.label, "")
+check("restore: the selection is back at the end", dt.gui.action_images, restore_selection)
+check("restore: tags are kept", has_tag(jpeg1, "Assisted Culling|Keeper"), true)
+check("restore: the end message", last_print(),
+    "Assisted Culling: restored the previous rating of 1 of 3 images, 1 rated since the run left alone. Tags were not changed.")
+
+click("Restore previous ratings", { jpeg1 })
+check("restore, twice: the second click changes nothing", jpeg1.rating .. "; " .. last_print(),
+    "5; Assisted Culling: restored the previous rating of 0 of 1 images, 1 rated since the run left alone. Tags were not changed.")
+
+-- another file with the same image id (a different library) is not touched
+write_file(PREVIOUS_RATINGS, "1,0,5,/elsewhere/DSC00001.JPG\n")
+click("Restore previous ratings", { jpeg1 })
+check("restore, another library's file: left alone", jpeg1.rating, 5)
+
+-- a file name with a comma and a line break still matches its saved line
+local odd = image(5, "DSC,5\n.JPG")
+odd.rating = 4
+PYTHON.results = "5,0.90,,,1,3,\n"
+click("Cull selection", { odd })
+click("Restore previous ratings", { odd })
+check("restore, comma and line break in the file name: the frame is back", odd.rating, 4)
+
+-- an image removed from the library since the click raises when read: the rest are still restored
+jpeg1.rating, jpeg2.rating = 5, 4
+PYTHON.results = "1,0.90,,,1,3,\n2,0.40,,,0,1,\n"
+click("Cull selection", { jpeg1, jpeg2 })
+local removed = setmetatable({}, { __index = function() error("image no longer in the library") end })
+click("Restore previous ratings", { jpeg1, removed, jpeg2 })
+check("restore, an image removed from the library: the others are back", jpeg1.rating .. " " .. jpeg2.rating .. "; " .. last_print(),
+    "5 4; Assisted Culling: restored the previous rating of 2 of 3 images, 1 couldn't be updated. Tags were not changed.")
+check("restore: no Lua error", lua_errors(), nil)
 
 os.execute = real_execute
 real_execute(WINDOWS and ('rmdir /s /q "' .. ROOT:gsub("/", "\\") .. '"') or ("rm -rf '" .. ROOT .. "'"))

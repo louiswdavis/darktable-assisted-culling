@@ -643,6 +643,12 @@ def run_tests():
     motion_fresh = plain_run(sharp_mode="motion_aware")
     check("motion_aware: every frame scored without a detector", sorted(motion_fresh), ["0", "1"])
     check("motion_aware: a rerun reads its cache entries", plain_run(sharp_mode="motion_aware"), motion_fresh)
+    report_p = os.path.join(tmp, "plain_report.csv")
+    plain_run(report=report_p)
+    written = list(_csv.reader(open(report_p)))
+    check("report: a real run writes the header and one cell per column, view and motion look blank without a detector",
+          (written[0], written[0][-2:], [(len(r), r[-2:]) for r in written[1:]]),
+          (S.REPORT_HEADER, ["view", "motion_look"], [(len(S.REPORT_HEADER), ["", ""])] * 2))
 
     # ticket 84: the star slope through the real scorer
     def plain_rows(**kw):
@@ -878,18 +884,89 @@ def run_tests():
     check("report: score parts blank outside motion_aware", rep[0][15:20], ["", "", "", "", ""])
     parts = S.report_rows(rep_manifest, rep_results, lambda n: 1, None,
                           {"1": (69.565217, "pan", 0.812345, "640x400 → 600", 55.123456)})
-    check("report: score parts per frame, rounded", (parts[0][15:20], parts[1][15:20]),
-          ([69.5652, "pan", 0.8123, "640x400 → 600", 55.1235], ["", "", "", "", ""]))
+    check("report: score parts per frame, as measured", (parts[0][15:20], parts[1][15:20]),
+          ([69.565217, "pan", 0.812345, "640x400 → 600", 55.123456], ["", "", "", "", ""]))
     check("report: parts without an own-size subject leave it blank",
           S.report_rows(rep_manifest, rep_results, lambda n: 1, None, {"1": (1.0, "pan", 0.5, "9x9")})[0][19], "")
-    check("report: parts columns, then reads, then judge, are last", S.REPORT_HEADER[-8:],
-          ["id", "subject", "motion", "straightness", "crop", "subject_own", "reads", "judge"])
+    check("report: parts columns, then reads, judge, view and motion look, are last", S.REPORT_HEADER[-10:],
+          ["id", "subject", "motion", "straightness", "crop", "subject_own", "reads", "judge", "view", "motion_look"])
     judged_rep = S.report_rows(rep_manifest, rep_results, lambda n: 1, judged_of={"1": 0.612345})
-    check("report: the judge score per judged frame, blank for the rest", [r[-1] for r in judged_rep], [0.6123, "", ""])
+    check("report: the judge score per judged frame, blank for the rest", [r[-3] for r in judged_rep], [0.612345, "", ""])
+    viewed_rep = S.report_rows(rep_manifest, rep_results, lambda n: 1, views_of={"1": 0, "2": None, "3": 2}, look_of={"1"})
+    check("report: the view and motion-look eligibility per frame, blank for the rest", [r[-2:] for r in viewed_rep],
+          [[0, "yes"], ["", ""], [2, ""]])
+    # a straightness just under MOTION_LOOK_STRAIGHT replays as the run rated it: no Motion look keeper
+    import csv
+    import eval_culling as E
+    under = S.MOTION_LOOK_STRAIGHT - 0.000004
+    look_results = [["2", "40.0", "", "0", "0", "leave", "Why|Outranked"], ["1", "80.0", "", "0", "1", "4", "Why|Keeper"],
+                    ["3", "55.0", "", "1", "1", "3", "Why|Keeper"]]
+    look_settings = E.settings_of({**{k: v[0] for k, v in E.SUGGEST_GRID.items()}, "star_slope": "off"})
+    live_keepers = S.rate_burst({"1": 80.0, "2": 40.0}, {"1": (), "2": ()}, 2, look_settings, {"1", "2"}, None, "motion_aware",
+                                motion_look={"2": under})[1]
+    with tempfile.TemporaryDirectory() as look_tmp:
+        look_report = os.path.join(look_tmp, "last-run.csv")
+        with open(look_report, "w", newline="", encoding="utf-8") as f:
+            w = csv.writer(f)
+            w.writerow(S.REPORT_HEADER)
+            w.writerows(S.report_rows(rep_manifest, look_results, lambda n: 1, parts_of={"2": (40.0, "motion_blur", under, "9x9")},
+                                      look_of={"2"}))
+        replayed = E.replay(E.read_report(look_report, "motion_aware", suggest=True), look_settings, "motion_aware")
+    check("report: the replay keeps the frames the run kept at the motion look threshold",
+          (sorted(f["file"] for f in replayed if f["keeper"] and f["burst"] == "0"), sorted(live_keepers)), (["a.jpg"], ["1"]))
+
+    # a value a rounding step from a threshold replays as the run rated it: the report holds it as measured
+    def replayed_keepers(scores, settings, parts_of=None, reads_of=None, judged_of=None, knobs=E.PART_DEFAULTS, live_scores=None):
+        """(the ids the replay of the run's report keeps, the ids rate_burst keeps live)."""
+        flags = {i: () for i in scores}
+        live = S.rate_burst(live_scores or scores, flags, 2, settings, set(scores), None, "motion_aware", frozenset(), None,
+                            reads_of, judged_of)[1]
+        with tempfile.TemporaryDirectory() as run_tmp:
+            results, report = os.path.join(run_tmp, "results.csv"), os.path.join(run_tmp, "last-run.csv")
+            S.process_burst_logic("0", scores, flags, 2, settings, results, mode="motion_aware", reads=reads_of,
+                                  judged=judged_of)
+            with open(results, newline="", encoding="utf-8") as f:
+                result_rows = [row for row in csv.reader(f) if row]
+            with open(report, "w", newline="", encoding="utf-8") as f:
+                w = csv.writer(f)
+                w.writerow(S.REPORT_HEADER)
+                w.writerows(S.report_rows(rep_manifest, result_rows, lambda n: 1, parts_of=parts_of, reads_of=reads_of,
+                                          judged_of=judged_of))
+            frames = E.replay(E.rescore(E.read_report(report, "motion_aware", suggest=True), knobs), settings, "motion_aware")
+        return sorted(str(f["id"]) for f in frames if f["keeper"]), sorted(live)
+
+    grid_defaults = {**{k: v[0] for k, v in E.SUGGEST_GRID.items()}, "star_slope": "off"}
+    reads_settings = E.settings_of({**grid_defaults, "number_reads": "on"})
+    clearer_read = {"1": {"37": 0.5}, "2": {"37": 0.9}}  # decides once the two frames are a close call
+    import rating
+    under_share = 100.0 * rating.CLOSE_CALL_SHARE - 0.00004
+    check("report: the replay keeps the run's keeper for a score just under the close-call share",
+          replayed_keepers({"1": 100.0, "2": under_share}, reads_settings, reads_of=clearer_read), (["1"], ["1"]))
+    check("report: the replay keeps the run's keeper for a subject just under the close-call share",
+          replayed_keepers({"1": 100.0, "2": under_share}, reads_settings, reads_of=clearer_read,
+                           parts_of={"1": (100.0, "ordinary", 0.0, "9x9", 100.0), "2": (under_share, "ordinary", 0.0, "9x9", 50.0)}),
+          (["1"], ["1"]))
+    check("report: SAME_SCALE=0 replays an own-size subject just under the close-call share as rate_burst rates it",
+          replayed_keepers({"1": 100.0, "2": 50.0}, reads_settings, reads_of=clearer_read,
+                           parts_of={"1": (100.0, "ordinary", 0.0, "9x9", 100.0), "2": (50.0, "ordinary", 0.0, "9x9", under_share)},
+                           knobs={**E.PART_DEFAULTS, "SAME_SCALE": 0.0}, live_scores={"1": 100.0, "2": under_share}),
+          (["1"], ["1"]))
+    check("report: the replay swaps to the clearer number read at the read gap, as the run did",
+          replayed_keepers({"1": 100.0, "2": 96.0}, reads_settings, reads_of={"1": {"37": 0.4996}, "2": {"37": 0.6003}}),
+          (["2"], ["2"]))
+    check("report: the replay keeps the run's keeper for a judge score just under the judge gap",
+          replayed_keepers({"1": 100.0, "2": 96.0}, E.settings_of({**grid_defaults, "sharp_judge": "on"}),
+                           judged_of={"1": 0.50004, "2": 0.52502}), (["1"], ["1"]))
     judged_results = [["2", "40.0", "", "0", "0", "leave", "Why|Close call"],
                       ["1", "80.0", "", "0", "1", "4", "Why|Subject clearer"], ["3", "55.0", "", "1", "1", "3", ""]]
     check("report: a judge keeper says why", S.report_rows(rep_manifest, judged_results, lambda n: 1)[0][9],
           "kept: rank 1 of 2, a close call the sharpness judge scores clearer")
+    extra_results = [["1", "80.0", "", "0", "1", "4", "Why|Keeper"], ["2", "40.0", "", "0", "1", "3", "Why|Other angle"],
+                     ["3", "55.0", "", "1", "1", "5", "Why|Motion look"]]
+    check("report: an other-angle or motion-look keeper says why, not the keeper margin",
+          [r[9] for r in S.report_rows(rep_manifest, extra_results, lambda n: 1)[1:]],
+          ["kept: rank 2 of 2, the best of another view of the car",
+           "kept: rank 1 of 1, the straightest motion blur of the burst"])
 
     # framing_flags --------------------------------------------------------------
     def det(*boxes):

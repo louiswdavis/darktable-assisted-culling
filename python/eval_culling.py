@@ -22,11 +22,19 @@ left unrated are excluded from the correlation and counted. The sharpness-mode a
 motion-class summaries use the report's Technique tags; --sharp-mode names the run's mode.
 
 --suggest replays the run's scores through every combination of ranking mode, keepers,
-keeper margin, star strictness and non-keepers (SUGGEST_GRID, the panel's own choices) with
+keeper margin, other angles, motion look, star slope, star strictness and non-keepers
+(SUGGEST_GRID, the panel's own choices) with
 the same rules the plugin applies (rating.py), and prints the best few against the truth,
 each as JSON to paste into a preset file. Nothing is changed. One shoot overfits: add
 others with --shoot REPORT TRUTH (a saved last-run.csv and its --snapshot), all run in the
 same --sharp-mode, which --suggest needs to know.
+
+--learn [DIR] needs no snapshot and no PHOTOS: it reads every archived report in DIR (default
+the reports folder beside last-run.csv) and the sidecars as they are now. Stars or a reject
+flag that differ from what the run wrote are your correction; a frame you edited (its sidecar's
+darktable:history_current_hash equals neither the basic nor the auto hash) is a pick that
+outranks any star rating. Only bursts with a correction or an edit count, a frame counts in
+the newest report holding it, and the counts are printed. With --suggest these are the truth.
 
 Per burst (after the counts above): top-1 agreement (the plugin's best frame is a pick) and
 the Spearman correlation between its scores and your stars, on the burst's hand-rated frames;
@@ -36,14 +44,17 @@ the mean top-1, the median Spearman and the 5 worst bursts with their first fram
 --set PAN_BONUS=1.1 (or MISSED_PAN_FACTOR, CLOSE_CALL_SHARE; repeatable) rebuilds each
 motion_aware score from the report's score parts (subject × class factor, motion blur lifted
 as score_images does) and rates the run again with the panel settings given by --rank-mode,
---keep-mode, --keep-margin, --non-keeper and --star-scale (the plugin's defaults unless
+--keep-mode, --keep-margin, --keep-angles, --motion-look, --star-slope, --non-keeper and
+--star-scale (the plugin's defaults unless
 passed). No photo is decoded. It says how many bursts the rebuild ranks as the live run did
 and, with no change, keeps the same frames: a mismatch means the settings differ from the run's."""
 
 import argparse
 import csv
+import functools
 import itertools
 import json
+import math
 import os
 import re
 import statistics
@@ -53,7 +64,7 @@ from argparse import Namespace
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import rating
 from common import RAW_EXTENSIONS
-from rating import rate_burst, relative_references
+from rating import rate_burst, relative_references, slope_stars
 
 # --suggest tries every combination; the values are the panel's choices (assisted_culling.lua
 # PRESET_SCHEMA), in panel order so the plugin's defaults come first among equals.
@@ -64,6 +75,9 @@ SUGGEST_GRID = {
     "spread_keepers": ["off", "on"],
     "number_reads": ["off", "on"],
     "sharp_judge": ["off", "on"],
+    "keep_angles": ["on", "off"],
+    "motion_look": ["on", "off"],
+    "star_slope": ["on", "off"],
     "non_keeper": ["leave", "graded"],
     "star_scale": ["1", "0.5", "0.75", "1.25", "1.5", "2"],
 }
@@ -87,6 +101,10 @@ PART_DEFAULTS = {"PAN_BONUS": 1.15, "MISSED_PAN_FACTOR": 0.7}
 PART_DEFAULTS["SAME_SCALE"] = 1.0
 SET_NAMES = ("PAN_BONUS", "MISSED_PAN_FACTOR", "CLOSE_CALL_SHARE", "SAME_SCALE")  # what --set may change
 RATING_RE = re.compile(r'xmp:Rating\s*=\s*"(-?\d+)"|<xmp:Rating>\s*(-?\d+)\s*</xmp:Rating>')
+HASH_RE = re.compile(r'darktable:history_(basic|auto|current)_hash\s*=\s*"([^"]*)"'
+                     r'|<darktable:history_(basic|auto|current)_hash>\s*([^<]*?)\s*</darktable:history_')
+EDITED_STARS = 6  # --learn's truth for a frame you edited: a pick that outranks every star rating
+REPORT_ARCHIVE_DIR = os.path.join(os.path.dirname(DEFAULT_REPORT), "reports")  # assisted_culling.lua's of the same name
 TRUE_WORDS = {"1", "yes", "true", "y", "-1"}
 
 
@@ -123,18 +141,46 @@ def parse_rating(text: str):
 def sidecar_rating(path: str):
     """The rating of the photo's darktable sidecar (`photo.ext.xmp`), else of any sidecar with
     the same stem in its folder (the paired RAW's), else None."""
-    candidates = [path + ".xmp"]
+    for text in sidecar_texts(path):
+        rating = parse_rating(text)
+        if rating is not None:
+            return rating
+    return None
+
+
+def sidecar_texts(path: str) -> list:
+    """The text of the photo's own sidecar (`photo.ext.xmp`) first, then of every sidecar with
+    the same stem in its folder (the paired RAW's)."""
     folder, stem = os.path.dirname(path) or ".", os.path.splitext(os.path.basename(path))[0].lower()
-    if os.path.isdir(folder):
-        candidates += sorted(os.path.join(folder, f) for f in os.listdir(folder)
-                             if f.lower().endswith(".xmp") and os.path.splitext(os.path.splitext(f)[0])[0].lower() == stem)
-    for xmp in candidates:
+    own = (os.path.basename(path) + ".xmp").lower()
+    texts = []
+    for xmp in [path + ".xmp"] + [x for x in folder_sidecars(folder).get(stem, []) if os.path.basename(x).lower() != own]:
         if os.path.isfile(xmp):
             with open(xmp, encoding="utf-8", errors="replace") as f:
-                rating = parse_rating(f.read())
-            if rating is not None:
-                return rating
-    return None
+                texts.append(f.read())
+    return texts
+
+
+@functools.lru_cache(maxsize=None)
+def folder_sidecars(folder: str) -> dict:
+    """Lowercase photo stem -> the folder's sidecar paths with that stem, sorted; {} for a
+    folder that is not there. A folder is listed once per run, however many of its frames ask."""
+    sidecars = {}
+    for name in sorted(os.listdir(folder)) if os.path.isdir(folder) else []:
+        if name.lower().endswith(".xmp"):
+            stem = os.path.splitext(os.path.splitext(name)[0])[0].lower()
+            sidecars.setdefault(stem, []).append(os.path.join(folder, name))
+    return sidecars
+
+
+def parse_edited(text: str) -> bool:
+    """True when the sidecar's history differs from what darktable applies by itself: it has a
+    darktable:history_current_hash that equals neither history_basic_hash nor
+    history_auto_hash (darktable's own "altered" test, dt_history_hash_get_status). A sidecar
+    with no current hash is not edited."""
+    hashes = {m.group(1) or m.group(3): m.group(2) if m.group(1) else m.group(4) for m in HASH_RE.finditer(text)}
+    current = hashes.get("current")
+    return bool(current) and current not in (hashes.get("basic"), hashes.get("auto"))
 
 
 def sidecar_truth(files: list) -> dict:
@@ -190,8 +236,9 @@ def frame_of(row: dict, sharp_mode: str) -> dict:
     """One report row as the eval sees it: plugin stars (None when the run left the frame
     alone), keeper, motion class, the burst's sharpness mode, darktable id and rank, the
     score parts (subject None when the report has none: another mode or an older run) and
-    the car-number reads ({number: confidence}, {} when the report has none) and the
-    sharpness judge's score (None when the run did not judge the frame)."""
+    the car-number reads ({number: confidence}, {} when the report has none), the
+    sharpness judge's score (None when the run did not judge the frame), the view of the
+    car (None when the report has none) and whether the frame can keep for its motion look."""
     tags = [t for t in (row.get("tags") or "").split(";") if t]
     stars = (row.get("stars") or "").strip()
     mode = sharp_mode
@@ -208,7 +255,9 @@ def frame_of(row: dict, sharp_mode: str) -> dict:
              "subject_own": float(row["subject_own"]) if (row.get("subject_own") or "").strip() else None,
              "cls": (row.get("motion") or "").strip(), "straight": float(row.get("straightness") or 0.0),
              "reads": {n: float(c) for n, _, c in (r.rpartition(":") for r in (row.get("reads") or "").split("|") if r)},
-             "judge": float(row["judge"]) if (row.get("judge") or "").strip() else None}
+             "judge": float(row["judge"]) if (row.get("judge") or "").strip() else None,
+             "view": int(row["view"]) if (row.get("view") or "").strip() else None,
+             "look": (row.get("motion_look") or "").strip().lower() == "yes"}
     if "score" in row:  # what a --suggest replay needs
         frame.update({"score": float(row["score"] or 0.0),
                       "flags": tuple(f for f in (row.get("flags") or "").split(";") if f),
@@ -235,6 +284,9 @@ def settings_of(choice: dict) -> Namespace:
                      spread_keepers=choice["spread_keepers"] == "on",
                      number_reads=choice["number_reads"] == "on",
                      sharp_judge=choice["sharp_judge"] == "on",
+                     keep_angles=choice["keep_angles"] == "on",
+                     motion_look=choice["motion_look"] == "on",
+                     star_slope=choice["star_slope"] == "on",
                      star_scale=float(choice["star_scale"]))
 
 
@@ -246,7 +298,11 @@ def replay(frames: list, settings, sharp_mode: str) -> list:
     run left alone for no vehicle stay left alone. A burst
     is scored in one mode: the one EXIF switched it to when any of its frames says so. With
     settings.number_reads the frames' reads settle close calls, and with settings.sharp_judge
-    the judge's scores settle the ones the reads left; each frame gets its Why reason."""
+    the judge's scores settle the ones the reads left; each frame gets its Why reason.
+    settings.keep_angles and settings.motion_look use the report's view and motion_look
+    columns (an older report has neither, so they keep nothing extra). settings.star_slope
+    rates the run twice, as score_images does: the first pass finds the sharpness keepers,
+    the second spreads their stars (universal ranking only)."""
     bursts = {}
     for f in frames:
         bursts.setdefault(f["burst"], []).append(f)
@@ -257,10 +313,10 @@ def replay(frames: list, settings, sharp_mode: str) -> list:
             if f["eligible"] and "blank" not in f["flags"]:  # rate_burst rejects these; the run left them out too
                 groups.setdefault((mode_of[burst], f["masked"]), []).append(f["score"])
     references = relative_references(groups) if settings.rank_mode == "relative" else {}
-    out = []
-    for burst, burst_frames in bursts.items():
+
+    def rate(burst, burst_frames, slope=None):
         first = burst_frames[0]
-        _members, keepers, stars_of, reasons = rate_burst(
+        return rate_burst(
             {f["path"]: f["score"] for f in burst_frames}, {f["path"]: f["flags"] for f in burst_frames},
             first["of"] or len(burst_frames), settings, {f["path"] for f in burst_frames if f["eligible"]},
             references.get((mode_of[burst], first["masked"])), mode_of[burst],
@@ -268,7 +324,21 @@ def replay(frames: list, settings, sharp_mode: str) -> list:
             [f["path"] for f in sorted(burst_frames, key=lambda f: (f["id"] is None, f["id"] or 0, f["file"]))],
             {f["path"]: f["reads"] for f in burst_frames if f["reads"]} if getattr(settings, "number_reads", False) else None,
             {f["path"]: f["judge"] for f in burst_frames if f["judge"] is not None}
-            if getattr(settings, "sharp_judge", False) else None)
+            if getattr(settings, "sharp_judge", False) else None,
+            {f["path"]: f["view"] for f in burst_frames if f.get("view") is not None},
+            {f["path"]: f["straight"] for f in burst_frames if f.get("look")}, slope)
+
+    slope = None
+    if getattr(settings, "star_slope", False) and settings.rank_mode == "universal":
+        keeper_sharpness = {}
+        for burst, burst_frames in bursts.items():
+            _members, keepers, _stars, reasons = rate(burst, burst_frames)
+            keeper_sharpness.update({f["path"]: f["score"] for f in burst_frames if f["path"] in set(keepers)
+                                     and reasons[f["path"]] not in ("Other angle", "Motion look")})
+        slope = slope_stars(keeper_sharpness)
+    out = []
+    for burst, burst_frames in bursts.items():
+        _members, keepers, stars_of, reasons = rate(burst, burst_frames, slope)
         kept = set(keepers)
         for f in burst_frames:
             stars = stars_of[f["path"]]
@@ -314,8 +384,8 @@ def lift_blur(scores: dict, motion: dict) -> dict:
 
 def parts_agreement(frames: list) -> tuple:
     """(bursts the score parts rank in the live order with today's constants, bursts with
-    parts). The report's score is rounded to 0.1, so the rebuilt one is too; ties keep the
-    live order."""
+    parts). The rebuilt score is rounded to 0.1, so an older report's parts, stored at 4
+    decimals, still agree; ties keep the live order."""
     rebuilt = {f["path"]: round(f["score"], 1) for f in rescore(frames, PART_DEFAULTS)}
     bursts = [fs for fs in by_burst(frames).values() if all(f["subject"] is not None for f in fs)]
     agree = sum(1 for fs in bursts if [f["path"] for f in sorted(fs, key=lambda f: (-rebuilt[f["path"]], f["rank"]))]
@@ -348,10 +418,13 @@ def suggest(shoots: list, sharp_mode: str, pick_stars: int, top: int) -> list:
     """shoots are (report frames of a whole run, truth) pairs. Every SUGGEST_GRID choice is
     replayed on each shoot and scored on the frames with a hand rating, pooled; the list is
     best first by hit rate minus false-keeper rate, then Spearman, and two choices with the
-    same outcome keep the earlier (the panel's default) one."""
+    same outcome keep the earlier (the panel's default) one. A setting the reports cannot
+    tell apart (fixed_settings) is tried at its default only."""
+    fixed = fixed_settings(shoots)
+    grid = {name: values[:1] if name in fixed else values for name, values in SUGGEST_GRID.items()}
     outcomes = {}
-    for values in itertools.product(*SUGGEST_GRID.values()):
-        choice = dict(zip(SUGGEST_GRID, values))
+    for values in itertools.product(*grid.values()):
+        choice = dict(zip(grid, values))
         s = summarise(pooled(shoots, settings_of(choice), sharp_mode, pick_stars))
         key = (s["hits"], s["picks"], s["false"], s["kept"], None if s["spearman"] is None else round(s["spearman"], 6))
         if key not in outcomes:
@@ -366,6 +439,26 @@ def suggest(shoots: list, sharp_mode: str, pick_stars: int, top: int) -> list:
     return sorted(outcomes.values(), key=goodness, reverse=True)[:top]
 
 
+def fixed_settings(shoots: list) -> dict:
+    """SUGGEST_GRID setting -> why every one of its values replays the shoots the same, so
+    suggest tries only the first: keep_angles with no view in any report, motion_look with no
+    motion_look frame, star_slope when no shoot has SLOPE_MIN_KEEPERS frames that can keep
+    (a keeper is always an eligible frame) or the grid has no universal ranking."""
+    frames = [f for shoot_frames, _truth in shoots for f in shoot_frames]
+    most = max((sum(f["eligible"] for f in shoot_frames) for shoot_frames, _truth in shoots), default=0)
+    fixed = {}
+    if all(f["view"] is None for f in frames):
+        fixed["keep_angles"] = "no report has a view of the car"
+    if not any(f["look"] for f in frames):
+        fixed["motion_look"] = "no report has a frame that can keep for its motion look"
+    if "universal" not in SUGGEST_GRID["rank_mode"]:
+        fixed["star_slope"] = "the star slope needs universal ranking"
+    elif most < rating.SLOPE_MIN_KEEPERS:
+        fixed["star_slope"] = (f"no shoot has {rating.SLOPE_MIN_KEEPERS} frames that can keep "
+                               f"(the most is {most}), so the slope never applies")
+    return fixed
+
+
 def pooled(shoots: list, settings, sharp_mode: str, pick_stars: int) -> list:
     """Each shoot's frames with a hand rating, replayed under settings, with their truth and pick."""
     out = []
@@ -378,6 +471,61 @@ def pooled(shoots: list, settings, sharp_mode: str, pick_stars: int) -> list:
                 out.append({**rated[f["path"]], "truth": -1 if rejected else stars,
                             "pick": not rejected and stars >= pick_stars})
     return out
+
+
+def learned_shoots(report_paths: list, sharp_mode: str, pick_stars: int) -> tuple:
+    """(shoots, counts) from past runs' reports, oldest first, and the sidecars as they are now:
+    the truth is what you did after each run. A frame's stars or reject flag that differ from
+    what the run wrote are a correction; equal, they are not judged. A frame the run left
+    alone is compared with what an older report wrote, else with unrated. An edited frame
+    (any of its sidecars, its own or the paired RAW's, is edited: parse_edited) is a pick of EDITED_STARS unless rejected. Only a burst with a correction
+    or an edit counts, and then all its frames do, with their stars as they are now; a frame
+    counts in the newest report that holds it, and one with no rated sidecar is skipped.
+    shoots are (the report's frames, truth) pairs for suggest, reports with nothing learned
+    left out. counts: bursts and frames by source, bursts left out, frames skipped, your
+    picks and how many the run kept, and the frames you raised and lowered."""
+    runs = [read_report(path, sharp_mode, True) for path in report_paths]
+    newest = {shot_key(f["path"]): n for n, frames in enumerate(runs) for f in frames}
+    counts = dict.fromkeys(("corrected_bursts", "corrected_frames", "edited_bursts", "edited_frames", "untouched_bursts",
+                            "no_sidecar", "picks", "kept", "raised", "lowered"), 0)
+    shoots, written = [], {}
+    for n, frames in enumerate(runs):
+        truth = {}
+        for burst_frames in by_burst(frames).values():
+            states = {}
+            for f in burst_frames:
+                key = shot_key(f["path"])
+                written[key] = (written.get(key, (0, False)) if f["stars"] is None
+                                else (0, True) if f["stars"] < 0 else (f["stars"], False))
+                if newest[key] != n:
+                    continue
+                texts = sidecar_texts(f["path"])
+                now = next((rating for rating in map(parse_rating, texts) if rating is not None), None)
+                if now is None:
+                    counts["no_sidecar"] += 1
+                else:
+                    states[key] = (f, written[key], now, any(parse_edited(text) for text in texts))
+            corrected = sum(1 for _f, before, now, _edited in states.values() if now != before)
+            edited = sum(1 for _f, _before, _now, edited in states.values() if edited)
+            if not corrected and not edited:
+                counts["untouched_bursts"] += bool(states)
+                continue
+            counts["corrected_bursts"] += bool(corrected)
+            counts["corrected_frames"] += corrected
+            counts["edited_bursts"] += bool(edited)
+            counts["edited_frames"] += edited
+            for key, (f, before, now, edited) in states.items():
+                truth[key] = (EDITED_STARS, False) if edited and not now[1] else now
+                stars, rejected = truth[key]
+                if not rejected and stars >= pick_stars:
+                    counts["picks"] += 1
+                    counts["kept"] += f["keeper"]
+                change = (-1 if now[1] else now[0]) - (-1 if before[1] else before[0])
+                counts["raised"] += change > 0
+                counts["lowered"] += change < 0
+        if truth:
+            shoots.append((frames, truth))
+    return shoots, counts
 
 
 def number_read_lines(shoots: list, settings, sharp_mode: str, pick_stars: int) -> list:
@@ -414,14 +562,23 @@ def preset_json(choice: dict, sharp_mode: str) -> str:
                        "spread_keepers": choice["spread_keepers"] == "on",
                        "number_reads": choice["number_reads"] == "on",
                        "sharp_judge": choice["sharp_judge"] == "on",
+                       "keep_angles": choice["keep_angles"] == "on",
+                       "motion_look": choice["motion_look"] == "on",
+                       "star_slope": choice["star_slope"] == "on",
                        "non_keeper": choice["non_keeper"], "star_scale": choice["star_scale"]}, indent=2)
 
 
-def render_suggestions(ranked: list, shoots: int, frames: int, sharp_mode: str, pick_stars: int) -> str:
+def render_suggestions(ranked: list, shoots: int, frames: int, sharp_mode: str, pick_stars: int, fixed: dict = None) -> str:
+    """fixed is fixed_settings' setting -> reason: each is listed with the value it stays at,
+    then how many of the grid's combinations were tried."""
     lines = [f"suggest: {shoots} shoot{'s' if shoots != 1 else ''}, {frames} frames rated by hand, "
              f"a pick is {pick_stars}+ stars and not rejected, sharpness mode {sharp_mode}"]
     if shoots < 2:
         lines.append("one shoot only: these fit that shoot, not your taste; add another with --shoot REPORT TRUTH")
+    if fixed:
+        lines += [f"{name} stays {SUGGEST_GRID[name][0]}: {why}" for name, why in fixed.items()]
+        lines.append(f"tried {math.prod(len(v) for k, v in SUGGEST_GRID.items() if k not in fixed)} of "
+                     f"{math.prod(map(len, SUGGEST_GRID.values()))} combinations")
     for n, (choice, s) in enumerate(ranked, 1):
         lines += ["", f"{n}. " + ", ".join(f"{k} {v}" for k, v in choice.items()), f"   {line_of('   result', s).strip()}",
                   "   " + preset_json(choice, sharp_mode).replace("\n", "\n   ")]
@@ -569,6 +726,9 @@ def main():
                     help="replay the run under other settings and print the best few (needs --sharp-mode)")
     ap.add_argument("--shoot", nargs=2, action="append", default=[], metavar=("REPORT", "TRUTH"),
                     help="another shoot for --suggest: its saved last-run.csv and --snapshot CSV; repeatable")
+    ap.add_argument("--learn", nargs="?", const=REPORT_ARCHIVE_DIR, metavar="DIR",
+                    help="take the truth from what you did after past runs: the archived reports in DIR (default: "
+                         "darktable's config folder) against the sidecars as they are now; no PHOTOS")
     ap.add_argument("--top", type=int, default=5, help="how many suggestions to print (default 5)")
     ap.add_argument("--write-preset", metavar="FILE",
                     help="write the best suggestion as a preset file (a new file; the plugin reads presets on Reload)")
@@ -576,14 +736,18 @@ def main():
                     help="re-rank from the stored score parts with this constant changed: " + ", ".join(SET_NAMES))
     for name, flag in (("rank_mode", "--rank-mode"), ("keep_mode", "--keep-mode"), ("keep_margin", "--keep-margin"),
                        ("spread_keepers", "--spread-keepers"), ("number_reads", "--number-reads"),
-                       ("sharp_judge", "--sharp-judge"), ("non_keeper", "--non-keeper"), ("star_scale", "--star-scale")):
+                       ("sharp_judge", "--sharp-judge"), ("keep_angles", "--keep-angles"),
+                       ("motion_look", "--motion-look"), ("star_slope", "--star-slope"),
+                       ("non_keeper", "--non-keeper"), ("star_scale", "--star-scale")):
         ap.add_argument(flag, dest=name, choices=SUGGEST_GRID[name], default=SUGGEST_GRID[name][0],
                         help=f"the run's panel setting, for --set (default {SUGGEST_GRID[name][0]})")
     a = ap.parse_args()
     sets = parse_sets(a.set)
     if (a.suggest or sets) and a.sharp_mode == "run":
         sys.exit("--suggest and --set need the run's sharpness mode: pass --sharp-mode (the panel's sharpness choice)")
-    if not a.paths and not (a.suggest and a.shoot):
+    if a.learn and a.paths:
+        sys.exit("--learn reads the archived reports and their photos' sidecars: leave out PHOTOS")
+    if not a.paths and not (a.suggest and a.shoot) and not a.learn:
         sys.exit("give photos, folders or @list.txt")
     knobs = {**PART_DEFAULTS, **{k: v for k, v in sets.items() if k in PART_DEFAULTS}}
     notes = []
@@ -633,6 +797,18 @@ def main():
             if not os.path.isfile(p):
                 sys.exit(f"--shoot file not found: {p}")
         shoots.append((rescore(read_report(path, a.sharp_mode, True), knobs), read_truth_csv(truth_path)))
+    if a.learn:
+        if not os.path.isdir(a.learn):
+            sys.exit(f"--learn folder not found: {a.learn}; culling archives each run's report there")
+        # the archive names its reports by time, so name order is oldest first
+        learned, n = learned_shoots(sorted(os.path.join(a.learn, f) for f in os.listdir(a.learn) if f.lower().endswith(".csv")),
+                                    a.sharp_mode, a.pick_stars)
+        shoots += [(rescore(frames, knobs), truth) for frames, truth in learned]
+        notes += [f"learned from {len(learned)} runs: {n['corrected_frames']} corrected frames in {n['corrected_bursts']} "
+                  f"bursts, {n['edited_frames']} edited frames in {n['edited_bursts']} bursts; {n['untouched_bursts']} "
+                  f"bursts you did not touch left out, {n['no_sidecar']} frames with no rated sidecar skipped",
+                  f"plugin kept {n['kept']} of the {n['picks']} frames you picked; "
+                  f"you raised {n['raised']}, lowered {n['lowered']}"]
     if a.sharp_mode != "run" and any(f["reads"] and "score" in f for frames, _t in shoots for f in frames):
         notes += number_read_lines(shoots, settings_of({k: getattr(a, k) for k in SUGGEST_GRID}), a.sharp_mode,
                                    a.pick_stars)
@@ -643,13 +819,15 @@ def main():
         if not rated:
             sys.exit("no report row has a hand rating; check the truth and the report belong to the same photos")
         ranked = suggest(shoots, a.sharp_mode, a.pick_stars, a.top)
-        text = render_suggestions(ranked, len(shoots), rated, a.sharp_mode, a.pick_stars)
+        text = render_suggestions(ranked, len(shoots), rated, a.sharp_mode, a.pick_stars, fixed_settings(shoots))
         if a.write_preset:
             if os.path.exists(a.write_preset):
                 sys.exit(f"{a.write_preset} exists; pick a new file name")
             with open(a.write_preset, "w", encoding="utf-8") as f:
                 f.write(preset_json(ranked[0][0], a.sharp_mode) + "\n")
             text += f"\n\nwritten the first as {a.write_preset}"
+    elif a.learn:
+        text = "add --suggest --sharp-mode MODE to try other settings against these"
     else:
         text = render(evaluate(report, truth, a.pick_stars), a.pick_stars)
     text = "\n".join(notes + [text])

@@ -208,19 +208,26 @@ A few things a re-run doesn't touch:
 
 - **Frames that can't be read** (counted as "unreadable" in the done message) keep whatever an earlier run left on them, tags and stars included.
 - **Frames outside the selection** aren't re-scored. Groups are read from the selected frames only, so re-running on part of a burst can leave a keeper from each run. Select whole bursts, or the whole shoot.
-- **A cancelled run** keeps the changes it already made; the rest keep their old values.
+- **A cancelled run** keeps the changes it already made; the rest keep their old values. Its message says how many images were changed. Run again to finish, or undo it: **Clear culling marks** removes the tags, and when the run had changed a star rating, **Restore previous ratings** puts the ratings back.
 
 Tick **Tag each run** to also stamp every frame a run writes with `Assisted Culling|Run|YYYY-MM-DD HH:MM`, so you can filter darktable down to one run's frames. Stamps accumulate, and **Clear culling marks** leaves them; remove old ones in darktable's tag manager.
 
-Each scoring run also writes `assisted_culling/last-run.csv` in darktable's config folder (the folder holding `assisted_culling.log`): one row per scored frame with its burst, rank in the burst, score, stars, keeper yes/no, flags, diagnostic tags, a `why` line ("kept: rank 1 of 4, 2 allowed", "not kept: rank 3 of 4, only 2 allowed or not eligible; flagged blur"), the file's folder and a `reason` column (the frame's `Why` tag: Keeper, Keeper by margin, Outranked, Graded, Not shortlisted, No vehicle, Blank, Close call, Spread, Number clearer or Subject clearer) and a `car` column: the first car tag on the frame under the car tag node, blank when no node was set or the frame had none (frames carrying several cars stay in their shared pool). A `direction` column holds the burst's travel direction (left, right or unknown) in motorsport mode with the vehicle detector, blank otherwise. Then `id` (darktable's image id, which follows capture order) and, in *motion_aware* mode, the score parts `eval_culling.py --set` rebuilds from: `subject` (subject sharpness at the burst's shared size), `motion` (pan, missed_pan, motion_blur or ordinary), `straightness`, `crop` (the crop's size and the size it was compared at) and `subject_own` (subject sharpness at the crop's own size); blank in other modes. Last, `reads`: the car numbers tagging read on the frame as `number:confidence`, best first, joined by `|`, only when *Break close calls on the number read* is on. Then `judge`: the sharpness judge's score for the frame, only for frames it judged with *Break close calls with the sharpness judge* on. The allowance counts every frame of the burst, including frames that couldn't be read. Open it in a spreadsheet to see why a frame lost, or to tune thresholds from evidence. It is overwritten by the next run, but each run's copy is also kept as `assisted_culling/reports/YYYYMMDD-HHMMSS.csv` (newest 20), so two runs can be compared.
+Each scoring run also writes `assisted_culling/last-run.csv` in darktable's config folder (the folder holding `assisted_culling.log`): one row per scored frame with its burst, rank in the burst, score, stars, keeper yes/no, flags, diagnostic tags, a `why` line ("kept: rank 1 of 4, 2 allowed", "not kept: rank 3 of 4, only 2 allowed or not eligible; flagged blur"), the file's folder and a `reason` column (the frame's `Why` tag: Keeper, Keeper by margin, Outranked, Graded, Not shortlisted, No vehicle, Blank, Close call, Spread, Number clearer or Subject clearer) and a `car` column: the first car tag on the frame under the car tag node, blank when no node was set or the frame had none (frames carrying several cars stay in their shared pool). A `direction` column holds the burst's travel direction (left, right or unknown) in motorsport mode with the vehicle detector, blank otherwise. Then `id` (darktable's image id, which follows capture order) and, in *motion_aware* mode, the score parts `eval_culling.py --set` rebuilds from: `subject` (subject sharpness at the burst's shared size), `motion` (pan, missed_pan, motion_blur or ordinary), `straightness`, `crop` (the crop's size and the size it was compared at) and `subject_own` (subject sharpness at the crop's own size); blank in other modes. Last, `reads`: the car numbers tagging read on the frame as `number:confidence`, best first, joined by `|`, only when *Break close calls on the number read* is on. Then `judge`: the sharpness judge's score for the frame, only for frames it judged with *Break close calls with the sharpness judge* on. Then `view` (which view of the car the frame shows, a number per burst; blank with no detector or no car) and `motion_look` (`yes` when the frame shows enough of the car to keep for its motion look), which let `eval_culling.py` replay the other-angle and motion-look keepers. The allowance counts every frame of the burst, including frames that couldn't be read. Open it in a spreadsheet to see why a frame lost, or to tune thresholds from evidence. It is overwritten by the next run, but each run's copy is also kept as `assisted_culling/reports/YYYYMMDD-HHMMSS.csv` (newest 20), so two runs can be compared.
 
-While a run is going, **Clear culling marks** and the culling shortcut queue behind it instead of refusing. Each queued job keeps the selection and settings from when you clicked, and starts when the run before it finishes. Cancelling drops the queue. (The panel button turns into **Cancel culling** during a run, so a second culling run can only be queued with the shortcut.)
+While a run is going, **Clear culling marks**, **Restore previous ratings** and the culling shortcut queue behind it instead of refusing. Each queued job keeps the selection and settings from when you clicked, and starts when the run before it finishes. Cancelling drops the queue. (The panel button turns into **Cancel culling** during a run, so a second culling run can only be queued with the shortcut.)
 
 In the panel, **Open last report** opens `last-run.csv` in your spreadsheet app. **Why these ratings?** explains the selected images from that report (stars, rank in the burst, flags) without changing anything: one image shows its line on screen, several show a count with the full text in the log.
 
 To protect a frame, tag it `Assisted Culling|Locked` yourself (create the tag in the **tagging** module). Runs then leave it out entirely: its stars and tags stay as they are, and it doesn't take a keeper slot in its burst, so another frame from that burst can be kept as well. The done message counts the locked frames it left alone.
 
 **Clear culling marks** removes all the plugin's tags from the selection without touching star ratings. It still clears `Keeper`/`Rejected`/flag tags on locked frames, but never removes `Locked` itself. Colour labels are never read or written, so any you apply by hand are yours.
+
+**Restore previous ratings** undoes the star ratings of the last run that changed one. Select the images and click it:
+
+- each image goes back to the rating it had before that run
+- an image you rated again since the run is left alone
+- tags are not changed; use **Clear culling marks** for those
+- only one run back: each run that changes a rating replaces the saved ratings (`assisted_culling.previous-ratings.csv` in darktable's config folder), so restore before re-running. A cancelled or failed run saves what it had changed. A run that changes no rating keeps the earlier run's file.
 
 Older versions used red/yellow colour labels and a `Culled` tag. The tag comes off the next time an image is re-scored (or with **Clear culling marks**); the labels stay. To remove them once, collect by the `Assisted Culling` tag, select all, and toggle the labels off.
 
@@ -408,6 +415,7 @@ Two headings: **explain the last run** (the first two buttons, which change noth
 - **Why these ratings?** Explains the selected images from the last run's report. Changes nothing.
 - **Open last report.** Opens `last-run.csv` in your spreadsheet app.
 - **Clear culling marks.** Removes the plugin's tags from the selected images (see [Re-running and clearing](#re-running-and-clearing)).
+- **Restore previous ratings.** Sets the selected images back to the star rating they had before the last run that changed a rating (same section).
 
 ## Preferences
 
@@ -559,6 +567,7 @@ Use a selection with at least two bursts of 3+ frames each.
 10. **Clear culling marks** on the selection. *Expect:* the plugin's tags are gone; star ratings are unchanged.
 11. **Tag switches.** Cull a batch with every tag on and note the stars. Under **tags written** in the panel, turn off *Subject* and *Rejected*, then cull the same batch again. *Expect:* the stars and keepers are the same as before; no image in the batch has an `Assisted Culling|Subject|Vehicle|Detected` or `Assisted Culling|Rejected` tag; `Keeper`, the flags, `Subject|Vehicle|Guessed`, `Technique`, `Scored` and `Why` are still there. Filter on `Assisted Culling|Why|Outranked`: every match is a non-keeper. Turn off *Why* and cull again: the `Why` tags are gone from the batch. No `LUA ERROR`.
 12. **Checks survive diagnostics off.** Turn off *Subject*, *Technique*, *Scored* and *Why* (leave *Subject guessed* on) and cull a burst where the vehicle detector finds nothing. *Expect:* `Assisted Culling|Subject|Vehicle|Guessed` is still written and no `Detected`, `Technique`, `Scored` or `Why` tags appear.
+13. **Restore previous ratings.** Give three frames ratings by hand and note them, cull them, then change one frame's rating by hand. Select all three and click **Restore previous ratings**. *Expect:* the two untouched frames are back to the ratings you noted; the one you changed keeps your new rating; the plugin's tags are unchanged; the message counts 2 restored and 1 rated since the run. Try it on a few hundred frames and note how long it takes.
 
 ## Development
 
@@ -629,13 +638,13 @@ python python/eval_culling.py @rally-photos.txt --truth rally-truth.csv --sharp-
 
 - `NAME` is `PAN_BONUS`, `MISSED_PAN_FACTOR`, `CLOSE_CALL_SHARE` or `SAME_SCALE`; repeat `--set` to change several.
 - `--set SAME_SCALE=0` ranks each car at its own crop size (`subject_own`), as before bursts were compared at one size. Run the eval with and without it to see what the shared size changes against your picks.
-- Pass the run's panel settings too (`--rank-mode`, `--keep-mode`, `--keep-margin`, `--spread-keepers`, `--number-reads` (on/off), `--sharp-judge` (on/off), `--non-keeper`, `--star-scale`; each defaults to the plugin's default). A first line says in how many bursts a replay with nothing changed keeps the live run's frames: anything short of all means the settings differ from the run's.
+- Pass the run's panel settings too (`--rank-mode`, `--keep-mode`, `--keep-margin`, `--spread-keepers`, `--number-reads` (on/off), `--sharp-judge` (on/off), `--keep-angles`, `--motion-look`, `--star-slope` (on/off, each on by default), `--non-keeper`, `--star-scale`; each defaults to the plugin's default). A first line says in how many bursts a replay with nothing changed keeps the live run's frames: anything short of all means the settings differ from the run's.
 - Another line says in how many bursts the stored parts rebuild the live order. Anything short of all means `score_images.py` and `eval_culling.py` disagree on the constants.
 - A report from another sharpness mode, or from an older version, has no parts: `--set PAN_BONUS` then stops with a message. `--set CLOSE_CALL_SHARE` works on any report.
 
 #### Letting it suggest settings
 
-Instead of re-running the plugin per setting, `--suggest` replays the run's scores under every combination of ranking mode, keepers, keeper margin, spread keepers, number reads, star strictness and non-keepers (the panel's own choices) and prints the best few against your picks:
+Instead of re-running the plugin per setting, `--suggest` replays the run's scores under every combination of ranking mode, keepers, keeper margin, spread keepers, number reads, the sharpness judge, other angles, motion look, star slope, star strictness and non-keepers (the panel's own choices; other angles and motion look need a report with the `view` and `motion_look` columns) and prints the best few against your picks:
 
 ```
 python python/eval_culling.py @rally-photos.txt --truth rally-truth.csv --sharp-mode subject_focus --suggest
@@ -647,6 +656,22 @@ Each suggestion shows its hit rate, false keepers and Spearman, then the preset 
 - One shoot overfits: the best settings for one rally are the ones that happen to fit that rally. Keep each run's `last-run.csv` and `--snapshot` CSV and add them with `--shoot REPORT TRUTH` (repeatable; all must be runs in the same `--sharp-mode`). Counts are pooled across shoots. With one shoot it says so.
 - The replay reads the report, not the photos: it uses the same scores, bursts and shortlist. Frames the run could not read are not in the report, and tag-only flags are not either, so every flag it lists costs a star. The ranking is hit rate minus false-keeper rate, then Spearman; when two choices give the same numbers the panel's default wins.
 - `python/rating.py` holds the keeper and star rules for both the plugin and the replay, so the two agree exactly.
+- A setting the reports cannot tell apart is not searched and stays at the panel's default: other angles with no `view` in any report, motion look with no `motion_look` frame, star slope when no shoot has 10 (`SLOPE_MIN_KEEPERS`) frames that can keep. The output names each one with the reason and says how many of the combinations it tried.
+
+#### Learning from what you did after a run
+
+`--learn` needs no snapshot and no photo list. It reads every archived report (the `reports` folder beside `last-run.csv`, or `--learn DIR`) and the sidecars as they are now, and takes what you changed as the truth:
+
+```
+python python/eval_culling.py --learn
+python python/eval_culling.py --learn --sharp-mode motion_aware --suggest
+```
+
+- A correction: a frame's stars or reject flag differ from what the run wrote. The same value means you did not judge it. A frame the run left alone is compared with what an older report wrote, else with unrated.
+- An edit: a frame you developed is a pick, stronger than any star rating, unless you rejected it. Edited means the sidecar's `darktable:history_current_hash` equals neither `history_basic_hash` nor `history_auto_hash`, which is darktable's own test for an altered image. A paired RAW's sidecar counts.
+- Only a burst with a correction or an edit counts, and then all its frames do, with their stars as they are now. A frame counts in the newest report that holds it. A frame with no rated sidecar is skipped.
+- It prints how many frames and bursts it learned from by source, what it left out, and `plugin kept N of the M frames you picked; you raised A, lowered B`. With `--suggest` these are the truth; `--shoot` adds more.
+- Run it on the machine that holds the photos, with darktable writing sidecars. The archive keeps the newest 20 reports, and all of them are read as runs in the `--sharp-mode` you pass.
 
 ### End-to-end without the GUI
 

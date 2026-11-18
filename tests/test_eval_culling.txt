@@ -50,6 +50,7 @@ ok   cli: prints the summary
 ok   cli: --out holds the same text
 ok   cli: missing report exits 1 with a hint
 ok   settings_of: margin off is 0, scale is a float
+ok   settings_of: the ticket 84 switches are booleans
 ok   settings_of: margin 90 is 0.9
 ok   read_report --suggest: score, flags, of, eligible
 ok   replay: single_best keeps one per burst
@@ -65,8 +66,16 @@ ok   preset_json: a custom preset with the run's sharpness mode
 ok   render_suggestions: one shoot warns
 ok   render_suggestions: two shoots do not
 ok   render_suggestions: numbered with the preset
+ok   fixed_settings: no view, no motion look, under 10 frames that can keep
+ok   fixed_settings: a report with views, a motion look frame and 10 frames that can keep fixes none
+ok   fixed_settings: one frame short of the slope
+ok   suggest: three fixed on/off settings cut the grid to an eighth
+ok   suggest: a fixed setting stays at the panel's default
+ok   render_suggestions: names each fixed setting, its reason and the combinations tried
+ok   render_suggestions: nothing fixed says nothing
 ok   cli: --suggest needs --sharp-mode
 ok   cli: --suggest with a second --shoot
+ok   cli: --suggest says what it did not search
 ok   cli: --write-preset writes the first suggestion
 ok   cli: --shoot alone works and an existing preset file is refused
 ok   frame_of: score parts
@@ -88,6 +97,12 @@ ok   frame_of: judge score
 ok   frame_of: no judge column
 ok   replay: judge on lets the subject the judge scores clearer keep
 ok   judge_lines: hit rate off and on, close calls settled
+ok   frame_of: view and motion look
+ok   frame_of: no view or motion_look column
+ok   replay: keep_angles on keeps the other view's best
+ok   replay: motion_look on keeps the straightest eligible frame
+ok   replay: the motion look keeper says why
+ok   replay: star_slope on spreads the run's keepers over the slope's stars
 ok   parts_agreement: a score out of step disagrees
 ok   keeper_agreement: same keepers
 ok   keeper_agreement: one burst differs
@@ -101,5 +116,20 @@ ok   cli: --set replays with the live keepers first
 ok   cli: --set PAN_BONUS lifts p2 to top-1
 ok   cli: --set of a part needs a report with parts
 ok   cli: --set needs --sharp-mode
+ok   parse_edited: a current hash unlike the basic and auto ones is an edit
+ok   parse_edited: the auto-applied or basic history is not an edit
+ok   parse_edited: no current hash is not an edit
+ok   parse_edited: element form
+ok   learn: the photos' folder is listed once, not for every frame
+ok   learn: each sidecar is read once
+ok   learn: only bursts with a correction or an edit carry truth, every frame of them as it is now
+ok   learn: the newest report holding a frame decides; a left-alone frame compares with the older report
+ok   learn: frames and bursts by source, frames with no sidecar skipped
+ok   learn: your picks and how many the run kept
+ok   learn: picks follow --pick-stars
+ok   learn: an edited frame is a pick above five stars, a rejected one never
+ok   cli: --learn prints what it learned from
+ok   cli: --learn --suggest tunes on the learned truth
+ok   cli: --learn takes no photos
 
 all ok

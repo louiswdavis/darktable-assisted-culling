@@ -169,7 +169,9 @@ function M.explain_report(text, wanted)
             if hit then
                 local stars = f[6] == "leave" and "left as it was" or (f[6] .. " stars")
                 local reason = f[12] and f[12] ~= "" and (" Why: " .. f[12] .. ".") or ""
-                lines[#lines + 1] = string.format("%s: %s, burst %s, score %s. %s%s", f[2], stars, f[1], f[5], f[10], reason)
+                -- the report holds the score as measured; one decimal is enough to read
+                local score = tonumber(f[5]) and string.format("%.1f", tonumber(f[5])) or f[5]
+                lines[#lines + 1] = string.format("%s: %s, burst %s, score %s. %s%s", f[2], stars, f[1], score, f[10], reason)
             end
         end
     end
@@ -518,6 +520,9 @@ local function detector_argv(detector, settings)
 end
 local REPORT_PATH = dt.configuration.config_dir .. "/assisted_culling/last-run.csv"
 local REPORT_ARCHIVE_DIR = dt.configuration.config_dir .. "/assisted_culling/reports"
+-- "id,previous,written,path" per image the last rating-changing run rated; read by M.restore_ratings.
+-- The path is last, so its commas are kept; a line break in it is written as a space.
+local PREVIOUS_RATINGS_PATH = dt.configuration.config_dir .. "/assisted_culling.previous-ratings.csv"
 
 -- Masks are per darktable instance (not per run) so a scorer finishing after a cancel
 -- can't overwrite a live run's, and they share the sweep's naming.
@@ -867,43 +872,45 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
     nk_mode = nk_mode or "leave"
 
     local n_locked = 0
-    local lock_tag = images and tags.find(TAG_LOCKED)
-    if lock_tag and #lock_tag > 0 then
-        local locked = {}
-        for i = 1, #lock_tag do locked[tonumber(lock_tag[i].id)] = true end
-        local unlocked = {}
-        for _, img in ipairs(images) do
-            if locked[tonumber(img.id)] then n_locked = n_locked + 1 else unlocked[#unlocked + 1] = img end
-        end
-        images = unlocked
-    end
-
-    if not images or #images == 0 then
-        dt.print(n_locked > 0 and _("Assisted Culling: every selected image is tagged Assisted Culling|Locked, so there's nothing to cull. Remove that tag from images you want scored.")
-            or _("Assisted Culling: select some images first"))
-        is_running = false
-        if action_button then action_button.label = _("Cull selection") end
-        run_next()
-        return
-    end
-
-    new_run_paths()
-    flush_log() -- anything logged since the last run (e.g. a failed clear) belongs to its log
-    pcall(os.remove, PREV_LOG_PATH)
-    pcall(os.rename, LOG_PATH, PREV_LOG_PATH)
-    log(string.format("run started: darktable %s, %d images (%d locked left out)",
-        tostring(dt.configuration.version), #images, n_locked))
-    log(string.format("settings: rank %s, sharpness %s, exposure %s, keepers %s, non-keepers %s",
-        rank_mode, sharp_mode, exp_mode, keep_mode, nk_mode))
-
+    -- false while the run has only looked at the selection: no run files or log of its own yet
+    local run_started = false
     local culling_job = nil
     local sam_ids = {}
     local main_started = false
     local stage_a_alive = false
     -- the selection as it was before the final drain emptied it; restored below even after an error
     local hidden_selection = nil
+    -- image id → { path, previous, written }: the rating each image had when the run first met it
+    local previous_ratings = {}
 
     local success, run_err = pcall(function()
+        local lock_tag = images and tags.find(TAG_LOCKED)
+        if lock_tag and #lock_tag > 0 then
+            local locked = {}
+            for i = 1, #lock_tag do locked[tonumber(lock_tag[i].id)] = true end
+            local unlocked = {}
+            for _, img in ipairs(images) do
+                if locked[tonumber(img.id)] then n_locked = n_locked + 1 else unlocked[#unlocked + 1] = img end
+            end
+            images = unlocked
+        end
+
+        if not images or #images == 0 then
+            dt.print(n_locked > 0 and _("Assisted Culling: every selected image is tagged Assisted Culling|Locked, so there's nothing to cull. Remove that tag from images you want scored.")
+                or _("Assisted Culling: select some images first"))
+            return
+        end
+
+        run_started = true
+        new_run_paths()
+        flush_log() -- anything logged since the last run (e.g. a failed clear) belongs to its log
+        pcall(os.remove, PREV_LOG_PATH)
+        pcall(os.rename, LOG_PATH, PREV_LOG_PATH)
+        log(string.format("run started: darktable %s, %d images (%d locked left out)",
+            tostring(dt.configuration.version), #images, n_locked))
+        log(string.format("settings: rank %s, sharpness %s, exposure %s, keepers %s, non-keepers %s",
+            rank_mode, sharp_mode, exp_mode, keep_mode, nk_mode))
+
         -- the job and the start message go up before the selection's tags and groups are read
         if dt.gui then
             culling_job = dt.gui.create_job(_("Assisted Culling"), true, stop_job)
@@ -1292,6 +1299,10 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             local have = tags_of(img)
 
             if want_rating ~= nil and img.rating ~= want_rating then
+                local record = previous_ratings[img.id]
+                    or { path = (img.path .. "/" .. img.filename):gsub("[\r\n]", " "), previous = img.rating }
+                record.written = want_rating
+                previous_ratings[img.id] = record
                 if rating_batch then
                     local list = rating_batch[want_rating] or {}
                     list[#list + 1] = img
@@ -1590,8 +1601,9 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
 
         if M.cancel_requested then
             if applied_total > 0 then
-                say(string.format("Assisted Culling: cancelled. %d of %d images were already rated and keep their changes. Run again to finish, or use Clear culling marks to remove the tags.",
-                    applied_total, #images))
+                say(string.format("Assisted Culling: cancelled. %d of %d images were already rated and keep their changes. Run again to finish, or use Clear culling marks to remove the tags%s.",
+                    applied_total, #images,
+                    next(previous_ratings) and " and Restore previous ratings to put the star ratings back" or ""))
             else
                 say(_("Assisted Culling: cancelled. No images were changed."))
             end
@@ -1640,15 +1652,42 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         end
     end)
 
-    C.restore_selection(dt, hidden_selection)
+    -- guarded: an error here would leave the panel busy until darktable restarts
+    local restored, restore_err = pcall(C.restore_selection, dt, hidden_selection)
     is_running = false
     if action_button then
         action_button.label = _("Cull selection")
+    end
+    show_status("")
+    if not restored then
+        notify_error(_("Assisted Culling: couldn't restore the selection: ") .. tostring(restore_err))
     end
 
     if not success then
         if culling_job then pcall(function() culling_job.valid = false end) end
         notify_error(_("Assisted Culling: couldn't run. ") .. tostring(run_err))
+    end
+    if not run_started then
+        run_next()
+        return
+    end
+
+    -- a run that changed no rating leaves the earlier run's file in place
+    if next(previous_ratings) then
+        local saved, save_err = pcall(function()
+            local lines = {}
+            for id, record in pairs(previous_ratings) do
+                lines[#lines + 1] = string.format("%d,%d,%d,%s", id, record.previous, record.written, record.path)
+            end
+            table.sort(lines)
+            local f = assert(io.open(PREVIOUS_RATINGS_PATH, "wb"))
+            f:write(table.concat(lines, "\n"), "\n")
+            f:close()
+        end)
+        if not saved then
+            notify_error(_("Assisted Culling: couldn't save the previous ratings, so this run can't be undone: ")
+                .. tostring(save_err))
+        end
     end
 
     -- A cancelled scorer that is still running keeps its cancel flag and launcher,
@@ -1729,11 +1768,74 @@ function M.clear_marks(images)
                 math.min(STAGE2_SLEEP_MAX_MS, math.floor((os.clock() - slice_start) * 1000))))
         end
     end)
-    C.restore_selection(dt, hidden_selection)
+    local restored, restore_err = pcall(C.restore_selection, dt, hidden_selection)
     show_status("")
+    if not restored then
+        notify_error(_("Assisted Culling: couldn't restore the selection: ") .. tostring(restore_err))
+    end
     if not ok then notify_error("Assisted Culling: clearing marks failed: " .. tostring(err)); return end
     dt.print(string.format("Assisted Culling: removed culling tags from %d of %d images%s. Star ratings were not changed.",
         cleared, total, failed > 0 and (", " .. failed .. " couldn't be updated") or ""))
+end
+
+-- Sets each image back to the rating it had before the last run that changed a rating
+-- (PREVIOUS_RATINGS_PATH). An image whose rating is no longer what that run wrote was rated
+-- since and is left alone. Tags are not changed.
+function M.restore_ratings(images)
+    if not images or #images == 0 then
+        dt.print(_("Assisted Culling: select some images first"))
+        return
+    end
+    local text = read_file(PREVIOUS_RATINGS_PATH)
+    if not text then
+        dt.print(_("Assisted Culling: no run has changed a rating yet, so there is nothing to restore."))
+        return
+    end
+    local record_of = {}
+    for id, previous, written, path in text:gmatch("(%d+),(%-?%d+),(%-?%d+),([^\r\n]*)") do
+        record_of[tonumber(id)] = { previous = tonumber(previous), written = tonumber(written), path = path }
+    end
+
+    local total, restored, rated_since, failed = #images, 0, 0, 0
+    local i = 1
+    local hidden_selection = C.hide_selection(dt, log)
+    local ok, err = pcall(function()
+        while i <= total do
+            local budget = STAGE2_WRITE_BUDGET
+            local slice_start = os.clock()
+            while i <= total and budget > 0 do
+                local img = images[i]
+                -- guarded per image: one removed from the library since the click raises on any read
+                if not pcall(function()
+                    local record = record_of[img.id]
+                    if record and record.path == (img.path .. "/" .. img.filename):gsub("[\r\n]", " ") then
+                        if img.rating ~= record.written then
+                            rated_since = rated_since + 1
+                        else
+                            img.rating = record.previous
+                            restored = restored + 1
+                        end
+                    end
+                end) then
+                    failed = failed + 1
+                end
+                budget = budget - 1
+                i = i + 1
+            end
+            show_status(string.format("restoring ratings %d / %d", i - 1, total))
+            dt.control.sleep(math.max(STAGE2_SLEEP_MIN_MS,
+                math.min(STAGE2_SLEEP_MAX_MS, math.floor((os.clock() - slice_start) * 1000))))
+        end
+    end)
+    local reselected, reselect_err = pcall(C.restore_selection, dt, hidden_selection)
+    show_status("")
+    if not reselected then
+        notify_error(_("Assisted Culling: couldn't restore the selection: ") .. tostring(reselect_err))
+    end
+    if not ok then notify_error("Assisted Culling: restoring ratings failed: " .. tostring(err)); return end
+    dt.print(string.format("Assisted Culling: restored the previous rating of %d of %d images%s%s. Tags were not changed.",
+        restored, total, rated_since > 0 and (", " .. rated_since .. " rated since the run left alone") or "",
+        failed > 0 and (", " .. failed .. " couldn't be updated") or ""))
 end
 
 local preset_file_store, make_preset_controls = C.preset_file_store, C.make_preset_controls
@@ -2012,6 +2114,30 @@ local function install_panel()
         if not ok_c then notify_error("Assisted Culling: clearing marks failed: " .. tostring(err_c)) end
     end)
 
+    local restore_button = new_widget("button") {
+        label = _("Restore previous ratings"),
+        tooltip = _("Set the selected images back to the star rating they had before the last run that changed a rating. An image you rated since that run is left alone. Tags are not changed; use Clear culling marks for those."),
+    }
+
+    restore_button.clicked_callback = C.guarded_callback(guard, "button restore", function()
+        local selected = copy_images(dt.gui.action_images)
+        if queue_if_busy(_("Restore previous ratings"), #selected > 0, function()
+            is_clearing = true
+            local ok_q, err_q = pcall(M.restore_ratings, selected)
+            is_clearing = false
+            if not ok_q then notify_error("Assisted Culling: restoring ratings failed: " .. tostring(err_q)) end
+            run_next()
+        end) then return end
+        if is_running or is_clearing then
+            dt.print(_("Assisted Culling: busy with another job, try again when it finishes."))
+            return
+        end
+        is_clearing = true
+        local ok_r, err_r = pcall(M.restore_ratings, selected)
+        is_clearing = false
+        if not ok_r then notify_error("Assisted Culling: restoring ratings failed: " .. tostring(err_r)) end
+    end)
+
     local why_button = new_widget("button") {
         label = _("Why these ratings?"),
         tooltip = _("Explain the selected images from the last run's report: stars, rank in the burst, flags. Changes nothing."),
@@ -2127,7 +2253,7 @@ local function install_panel()
         { new_widget("section_label") { label = _("explain the last run (changes nothing)") },
           why_button, report_button,
           new_widget("section_label") { label = _("undo") },
-          clear_button },
+          clear_button, restore_button },
     }
     local pages = {}
     for i, page in ipairs(M.PANEL_PAGES) do

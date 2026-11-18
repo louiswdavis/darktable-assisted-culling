@@ -1351,7 +1351,7 @@ def process_burst_logic(burst_id, burst_sharpness, burst_flags, burst_size, args
     keepers = set(burst_keepers)
     burst_rows = [[
         img_id,
-        round(burst_sharpness[img_id], 1),
+        float(burst_sharpness[img_id]),  # not rounded: the report's replay compares it as the run did
         ";".join(burst_flags[img_id]),
         burst_id,
         int(img_id in keepers),
@@ -1365,11 +1365,12 @@ def process_burst_logic(burst_id, burst_sharpness, burst_flags, burst_size, args
 
 
 REPORT_HEADER = ["burst", "file", "rank", "of", "score", "stars", "keeper", "flags", "tags", "why", "folder", "reason", "car",
-                 "direction", "id", "subject", "motion", "straightness", "crop", "subject_own", "reads", "judge"]
+                 "direction", "id", "subject", "motion", "straightness", "crop", "subject_own", "reads", "judge", "view",
+                 "motion_look"]
 
 
 def report_rows(manifest, result_rows, keepers_per_burst, direction_of=None, parts_of=None, reads_of=None,
-                judged_of=None) -> list:
+                judged_of=None, views_of=None, look_of=None) -> list:
     """One row per scored frame, bursts in manifest order and frames best first, saying why it
     was kept or not. stars is "leave" for a non-keeper the run left alone. reason is the
     frame's Why tag (WHY_REASONS); car is the car number the frame was pooled under, "" if none;
@@ -1380,8 +1381,13 @@ def report_rows(manifest, result_rows, keepers_per_burst, direction_of=None, par
     crop "WxH → size"); subject_own is at the crop's own size. reads is the frame's car-number
     reads from tagging (reads_of, read_number_reads) as "number:confidence" joined by "|", best
     first, so eval_culling.py can replay the number tiebreak. judge is the sharpness judge's
-    score (judged_of), blank for a frame it didn't score. These are last so older readers of
-    the columns keep working."""
+    score (judged_of), blank for a frame it didn't score. view is the frame's view of the car
+    (views_of, burst_views), blank with no detector or no car; motion_look is "yes" for a frame
+    that shows enough of the car to keep for its motion look (look_of, finish_burst), so
+    eval_culling.py can replay --keep-angles and --motion-look. score, subject, subject_own,
+    straightness, the read confidences and judge are not rounded: the replay compares them with
+    the tiers, CLOSE_CALL_SHARE, NUMBER_READ_MIN_GAP, JUDGE_MIN_GAP and MOTION_LOOK_STRAIGHT as
+    the run did. The columns after direction are last so older readers of the columns keep working."""
     file_of = {row[0]: row[1] for row in manifest}
     car_of = {row[0]: row[9] for row in manifest}
     by_burst = {}
@@ -1405,6 +1411,8 @@ def report_rows(manifest, result_rows, keepers_per_burst, direction_of=None, par
                    if reason == "Number clearer"
                    else f"kept: rank {rank} of {len(rows)}, a close call the sharpness judge scores clearer"
                    if reason == "Subject clearer"
+                   else f"kept: rank {rank} of {len(rows)}, the best of another view of the car" if reason == "Other angle"
+                   else f"kept: rank {rank} of {len(rows)}, the straightest motion blur of the burst" if reason == "Motion look"
                    else f"kept: rank {rank} of {len(rows)}, {allowed} allowed" if keeper == "1" and rank <= allowed
                    else f"kept: rank {rank} of {len(rows)}, within the keeper margin of the best" if keeper == "1"
                    else f"not kept: rank {rank} of {len(rows)}, only {allowed} allowed or not eligible")
@@ -1418,11 +1426,13 @@ def report_rows(manifest, result_rows, keepers_per_burst, direction_of=None, par
                         score, stars, "yes" if keeper == "1" else "no", flags, tags, why,
                         os.path.dirname(path), reason, car_of.get(img_id, ""),
                         (direction_of or {}).get(burst_id, ""), img_id,
-                        "" if subject == "" else round(subject, 4), cls,
-                        "" if straight == "" else round(straight, 4), crop, "" if own == "" else round(own, 4),
-                        "|".join(f"{n}:{c:.3f}" for n, c in sorted((reads_of or {}).get(img_id, {}).items(),
+                        "" if subject == "" else float(subject), cls,
+                        straight, crop, "" if own == "" else float(own),
+                        "|".join(f"{n}:{float(c)!r}" for n, c in sorted((reads_of or {}).get(img_id, {}).items(),
                                                                    key=lambda nc: -nc[1])),
-                        "" if img_id not in (judged_of or {}) else round(judged_of[img_id], 4)])
+                        "" if img_id not in (judged_of or {}) else float(judged_of[img_id]),
+                        "" if (views_of or {}).get(img_id) is None else views_of[img_id],
+                        "yes" if img_id in (look_of or ()) else ""])
     return out
 
 
@@ -1444,7 +1454,7 @@ def archive_report(report_path, archive_dir, keep):
         log(f"couldn't archive the report: {e}")
 
 
-def write_report(manifest, args, direction_of=None, parts_of=None, judged_of=None):
+def write_report(manifest, args, direction_of=None, parts_of=None, judged_of=None, views_of=None, look_of=None):
     """Writes args.report (CSV, REPORT_HEADER) from the finished results file, then archives it
     when args.report_archive_dir is set; a failure is logged, never fatal, since the scores are
     already on their way back to darktable."""
@@ -1456,7 +1466,8 @@ def write_report(manifest, args, direction_of=None, parts_of=None, judged_of=Non
             w.writerow(REPORT_HEADER)
             w.writerows(report_rows(manifest, result_rows, lambda n: keepers_allowed(args.keep_mode, n),
                                     direction_of, parts_of,
-                                    read_number_reads(getattr(args, "number_reads", ""), manifest)[0], judged_of))
+                                    read_number_reads(getattr(args, "number_reads", ""), manifest)[0], judged_of,
+                                    views_of, look_of))
     except OSError as e:
         log(f"couldn't write the report {args.report}: {e}")
         return
@@ -1479,9 +1490,9 @@ def main(args):
         if getattr(args, "emit_saliency_points", False):
             emit_saliency_points(manifest, args, cache, detections)
         else:
-            direction_of, parts_of, judged_of = score_manifest(manifest, args, cache, detections)
+            direction_of, parts_of, judged_of, views_of, look_of = score_manifest(manifest, args, cache, detections)
             if getattr(args, "report", ""):
-                write_report(manifest, args, direction_of, parts_of, judged_of)
+                write_report(manifest, args, direction_of, parts_of, judged_of, views_of, look_of)
     finally:
         cache.close()
         detections.close()
@@ -1574,6 +1585,8 @@ def score_manifest(manifest, args, cache, detections):
             straightness_of = {i: burst_motion[i][1] for i, target, extra in zip(ids, targets, framing)
                                if target is not None and i in burst_motion and "cut_off" not in extra
                                and box_area(target) >= MOTION_LOOK_MIN_BOX * typical}
+            views_of.update(views)
+            look_of.update(straightness_of)
             direction_of[burst_id] = direction
             for i, extra in zip(ids, framing):
                 if extra:
@@ -1657,6 +1670,8 @@ def score_manifest(manifest, args, cache, detections):
             log("sharpness judge: off, it needs motion_aware's car crop")
     motion_of = {}  # burst → {id: (class, straightness, no vehicle)}, motion_aware only
     direction_of = {}  # burst → travel direction (framing_flags), with a detector only
+    views_of = {}  # id → view of the car (burst_views), with a detector only, for the report
+    look_of = set()  # ids that can keep for their motion look (finish_burst), with a detector only, for the report
     parts_of = {}  # id → (subject sharpness, class, straightness, crop[, own-size subject]), motion_aware only, for the report
     ladder_of = {}  # id → scale_ladder until its burst is finished, motion_aware only
     det_hits = det_fresh = 0
@@ -1821,7 +1836,7 @@ def score_manifest(manifest, args, cache, detections):
                                       motion_look=straightness_of, slope=slope)
         log(f"{note}, keepers {', '.join(keepers) or 'none'}"
             + (f", {len(no_vehicle)} left alone (no vehicle)" if no_vehicle else ""))
-    return direction_of, parts_of, judged_of
+    return direction_of, parts_of, judged_of, views_of, look_of
 
 
 if __name__ == "__main__":

@@ -6,6 +6,12 @@ ok   parse_csv_line: wrong field count is nil
 ok   lead_rank: full-size JPEG beats RAW
 ok   detections_path: <config_dir>/assisted_plugins/detections.sqlite, backslashes folded
 ok   detections_path: one value, so it can end an argument list
+ok   hide_selection: selection emptied
+ok   hide_selection: returns what was selected
+ok   hide_selection: logs the count
+ok   restore_selection: selection back
+ok   hide_selection: empty selection logs nothing
+ok   restore_selection: nil leaves the selection
 ok   temp_base: <dir>/<prefix><epoch>_<seq>_
 ok   sweep_temp: removes only this prefix's stale files
 ok   sweep_temp: newer file kept
@@ -61,6 +67,7 @@ ok   explain_report: a keeper shows its stars
 ok   explain_report: a RAW finds its pair's row
 ok   explain_report: the RAW isn't reported missing
 ok   explain_report: a selected pair gives one line
+ok   explain_report: a score held as measured shows one decimal
 ok   explain_report: a same-named file in another folder doesn't match
 ok   explain_report: a 12-column report adds the reason
 ok   explain_report: 13-column report row is read
@@ -149,6 +156,8 @@ ok   no_groups_notice: none mode and single frame are silent
 ok   preset schema: keeper margin defaults off
 ok   preset schema: spread keepers defaults off
 ok   preset schema: number reads defaults off
+ok   preset schema: other angle, motion look and star slope default on
+ok   TAG_TOGGLES: Why writes thirteen reasons, ending with the two new keepers
 ok   preset schema: sharpness judge defaults off
 ok   preset schema: graded non-keepers can be picked
 ok   preset schema: star strictness defaults to standard

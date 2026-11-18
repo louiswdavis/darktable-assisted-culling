@@ -217,6 +217,9 @@ check("explain_report: a RAW finds its pair's row", why_raw[1], why_a[1])
 check("explain_report: the RAW isn't reported missing", #why_raw_missing, 0)
 local why_both = C.explain_report(report_text, { ["a.ARW"] = true, ["a.jpg"] = true })
 check("explain_report: a selected pair gives one line", #why_both, 1)
+check("explain_report: a score held as measured shows one decimal",
+    C.explain_report('burst,file,rank,of,score,stars,keeper,flags,tags,why\n0,m.jpg,1,1,69.565217,4,yes,,,kept\n', { ["m.jpg"] = true })[1],
+    "m.jpg: 4 stars, burst 0, score 69.6. kept")
 local report_folders = 'burst,file,rank,of,score,stars,keeper,flags,tags,why,folder\n'
     .. '0,a.jpg,1,1,80.0,4,yes,,,kept,C:\\shoot\\cam1\n'
     .. '1,a.jpg,1,1,30.0,1,yes,,,kept,C:\\shoot\\cam2\n'
