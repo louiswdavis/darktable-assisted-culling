@@ -25,6 +25,12 @@ ok   cull: the locked frame is untouched
 ok   cull: the end message
 ok   cull: the button is back to its label
 ok   cull: no Lua error
+ok   cull, detector installed: the scorer ran once
+ok   cull, detector installed: the detector and the detection cache are passed
+ok   cull, detector installed: the argument after the cache path is an option
+ok   cull, every argument option on: each one reaches the scorer
+ok   cull, detector installed: the keeper is rated
+ok   cull, detector installed: no Lua error
 ok   cull, scorer fails: says so
 ok   cull, scorer fails: the panel line is cleared
 ok   cull, scorer fails: the job bar is closed

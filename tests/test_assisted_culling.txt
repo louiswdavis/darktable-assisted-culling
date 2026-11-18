@@ -5,6 +5,7 @@ ok   parse_csv_line: quoted comma and doubled quote
 ok   parse_csv_line: wrong field count is nil
 ok   lead_rank: full-size JPEG beats RAW
 ok   detections_path: <config_dir>/assisted_plugins/detections.sqlite, backslashes folded
+ok   detections_path: one value, so it can end an argument list
 ok   temp_base: <dir>/<prefix><epoch>_<seq>_
 ok   sweep_temp: removes only this prefix's stale files
 ok   sweep_temp: newer file kept

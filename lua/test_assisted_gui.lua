@@ -283,6 +283,61 @@ check("cull: the end message", last_print(), "Assisted Culling: done. 1 keepers,
 check("cull: the button is back to its label", button(panel, "Cull selection") ~= nil, true)
 check("cull: no Lua error", lua_errors(), nil)
 
+-- Cull with the vehicle detector and the judge installed and every option that adds a scorer
+-- argument on: each argument-building branch runs through the real command line
+local function find_widget(widget, kind, label)
+    if widget.kind == kind and widget.label == label then return widget end
+    for _, child in ipairs(widget) do
+        local found = find_widget(child, kind, label)
+        if found then return found end
+    end
+    return nil
+end
+local function combo(widget, label) return find_widget(widget, "combobox", label) end
+local ARGUMENT_CHECKS = { "Leave frames with no vehicle", "Spread keepers over the burst",
+    "Break close calls on the number read", "Break close calls with the sharpness judge" }
+local function set_argument_checks(value)
+    for _, label in ipairs(ARGUMENT_CHECKS) do
+        local check_button = find_widget(panel, "check_button", label)
+        check_button.value = value
+        check_button.clicked_callback(check_button)
+    end
+end
+make_dir(PLUGIN .. "/models")
+write_file(PLUGIN .. "/models/dfine_x_coco.onnx", "")
+write_file(PLUGIN .. "/models/hyperiqa_model.onnx", "")
+set_argument_checks(true)
+local sharp_combo = combo(panel, "sharpness")
+sharp_combo.selected = 7 -- motorsport (subject & motion)
+sharp_combo.changed_callback(sharp_combo)
+jpeg1.rating, jpeg2.rating = 0, 0
+click("Cull selection", { jpeg1, jpeg2 })
+check("cull, detector installed: the scorer ran once", #PYTHON.runs, 1)
+local detector_run = PYTHON.runs[1] or { argv = {} }
+local detector_args = {}
+for i, arg in ipairs(detector_run.argv) do
+    if arg == "--detector" or arg == "--detections" then detector_args[#detector_args + 1] = arg .. " " .. tostring(detector_run.argv[i + 1]) end
+end
+check("cull, detector installed: the detector and the detection cache are passed", table.concat(detector_args, "; "),
+    "--detector " .. PLUGIN .. "/models/dfine_x_coco.onnx; --detections " .. ROOT .. "/config/assisted_plugins/detections.sqlite")
+check("cull, detector installed: the argument after the cache path is an option",
+    (table.concat(detector_run.argv, " "):match("detections%.sqlite (%S+)")), "--car-boxes")
+local option_args = {}
+for i, arg in ipairs(detector_run.argv) do
+    if arg == "--no-vehicle-leave" or arg == "--spread-keepers" then option_args[#option_args + 1] = arg end
+    if arg == "--number-reads" or arg == "--sharp-judge" then option_args[#option_args + 1] = arg .. " " .. tostring(detector_run.argv[i + 1]) end
+end
+check("cull, every argument option on: each one reaches the scorer", table.concat(option_args, "; "),
+    "--no-vehicle-leave; --spread-keepers; --number-reads " .. ROOT .. "/config/assisted_tagging/last-run/.boxes.json; --sharp-judge "
+    .. PLUGIN .. "/models/hyperiqa_model.onnx")
+check("cull, detector installed: the keeper is rated", jpeg1.rating, 3)
+check("cull, detector installed: no Lua error", lua_errors(), nil)
+os.remove(PLUGIN .. "/models/dfine_x_coco.onnx")
+os.remove(PLUGIN .. "/models/hyperiqa_model.onnx")
+set_argument_checks(false)
+sharp_combo.selected = 5
+sharp_combo.changed_callback(sharp_combo)
+
 jpeg1.rating, jpeg2.rating = 0, 0
 PYTHON.exit = 1
 click("Cull selection", { jpeg1, jpeg2 })

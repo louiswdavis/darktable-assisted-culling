@@ -362,8 +362,9 @@ function C.library_key(dt)
 end
 
 -- The per-frame vehicle detection cache culling and tagging share (python creates the folder).
+-- One value: gsub's count must not follow the path into an argument list.
 function C.detections_path(dt)
-    return (dt.configuration.config_dir .. "/assisted_plugins/detections.sqlite"):gsub("\\", "/"):gsub("/+", "/")
+    return ((dt.configuration.config_dir .. "/assisted_plugins/detections.sqlite"):gsub("\\", "/"):gsub("/+", "/"))
 end
 
 -- Drops a ledger's entries (numeric keys: image ids) whose image `exists(id)` no longer
