@@ -44,6 +44,7 @@ local is_clearing = false
 local queue = {}
 local run_next -- defined after start_culling; score_images calls it as a run finishes
 local clear_button = nil
+local status_label, status_text = nil, "" -- the progress line at the foot of the panel
 
 -- Shared with the other two plugins (plugin_common.lua); re-exported for the tests.
 M.latest_group_tag, M.latest_group_keys, M.group_tags_hint, M.GROUP_TAGS_HINT =
@@ -818,6 +819,13 @@ local function say(msg)
     log(msg)
 end
 
+-- A panel label, not dt.print_hinter: the hinter crashes darktable 5.6 when set often from Lua.
+local function show_status(text)
+    if not status_label or text == status_text then return end
+    status_text = text
+    status_label.label = text
+end
+
 -- dt.print_error only writes to darktable's log (-d lua); users never see it.
 local function notify_error(msg)
     dt.print(msg)
@@ -1029,7 +1037,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         if n_primary > 1000 then
             say(_("Assisted Culling: large selection, this can take several minutes. Click Cancel culling to stop at any time."))
         end
-        dt.print_hinter(_("Assisted Culling: starting analysis..."))
+        show_status(_("starting analysis…"))
 
         local sc_script = score_script()
         if not df.test_file(sc_script, "e") and not file_exists(sc_script) then
@@ -1092,7 +1100,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                 if cur and culling_job and tonumber(tot) > 0 then
                     culling_job.percent = PROGRESS_SUBJECTS * tonumber(cur) / tonumber(tot)
                 end
-                dt.print_hinter(string.format("Assisted Culling: finding subjects %s / %s", cur or "0", tot or "?"))
+                show_status(string.format("finding subjects %s / %s", cur or "0", tot or "?"))
                 dt.control.sleep(150)
             end
             if cancelled() then
@@ -1161,9 +1169,9 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                     if culling_job then
                         culling_job.percent = PROGRESS_SUBJECTS + (PROGRESS_SAM - PROGRESS_SUBJECTS) * i / #points
                     end
-                    dt.print_hinter(string.format("Assisted Culling: outlining subjects %d / %d%s", i, #points,
+                    show_status(string.format("outlining subjects %d / %d%s", i, #points,
                         fmt_eta(os.time() - sam_start, i, #points)))
-                    dt.control.sleep(10) -- hand the Lua lock back so the cancel button and hinter respond
+                    dt.control.sleep(10) -- hand the Lua lock back so the cancel button responds
                 end
 
                 -- not dt.print_error: the run carries on, and a red toast reads as a failure
@@ -1472,8 +1480,8 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                         local elapsed = os.time() - stage1_start
                         local rate = (elapsed >= 3 and num > 0) and string.format(" | %.1f img/s", num / elapsed) or ""
                         local applied_txt = overlap and string.format(" | applied %d", pending_idx - 1) or ""
-                        dt.print_hinter(string.format(
-                            "Assisted Culling: analyzing %d / %d | bursts %s / %s%s%s%s",
+                        show_status(string.format(
+                            "analyzing %d / %d | bursts %s / %s%s%s%s",
                             num, total, b_cur or "?", b_tot or "?", applied_txt, rate, fmt_eta(elapsed, num, total)
                         ))
                     end
@@ -1538,8 +1546,8 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                     culling_job.percent = PROGRESS_ANALYSIS
                         + (1 - PROGRESS_ANALYSIS) * math.min(1.0, (pending_idx - 1) / total_lines)
                 end
-                dt.print_hinter(string.format(
-                    "Assisted Culling: applying ratings %d / %d (%d%%)%s", pending_idx - 1, total_lines,
+                show_status(string.format(
+                    "applying ratings %d / %d (%d%%)%s", pending_idx - 1, total_lines,
                     math.floor(((pending_idx - 1) / total_lines) * 100), fmt_eta(os.time() - started, done, remaining)))
                 local milestone = math.floor(((pending_idx - 1) / total_lines) * 4) * 25
                 if milestone > last_toast_pct and milestone < 100 then
@@ -1555,7 +1563,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             culling_job.valid = false
         end
 
-        dt.print_hinter(" ")
+        show_status("")
 
         if M.cancel_requested then
             if applied_total > 0 then
@@ -1588,11 +1596,14 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             if stats.subject_bias > 0 then
                 msg = msg .. string.format(", %d scored by subject bias", stats.subject_bias)
             end
-            if n_skipped > 0 then msg = msg .. string.format(", %d unreadable (skipped, see log)", n_skipped) end
-            if n_locked > 0 then msg = msg .. string.format(", %d locked (left alone)", n_locked) end
-            if failed_total > 0 then msg = msg .. string.format(", %d failed to update (see log)", failed_total) end
+            msg = msg .. "."
+            local left_out = {}
+            if n_skipped > 0 then left_out[#left_out + 1] = n_skipped .. " unreadable" end
+            if n_locked > 0 then left_out[#left_out + 1] = n_locked .. " locked" end
+            if failed_total > 0 then left_out[#left_out + 1] = failed_total .. " failed to update" end
+            if #left_out > 0 then msg = msg .. " Left out: " .. table.concat(left_out, "; ") .. " (see log)." end
             local notice = M.no_groups_notice(mechanism, n_primary, n_groups_before_split)
-            if notice then msg = msg .. "; " .. notice end
+            if notice then msg = msg .. " " .. notice:gsub("^%l", string.upper) .. "." end
             say(msg)
             if n_action_missed > 0 then
                 log(string.format("%d missed by darktable's rating action (rated one by one)", n_action_missed))
@@ -1686,12 +1697,12 @@ function M.clear_marks(images)
                 end
                 i = i + 1
             end
-            dt.print_hinter(string.format("Assisted Culling: clearing marks %d / %d", i - 1, total))
+            show_status(string.format("clearing marks %d / %d", i - 1, total))
             dt.control.sleep(math.max(STAGE2_SLEEP_MIN_MS,
                 math.min(STAGE2_SLEEP_MAX_MS, math.floor((os.clock() - slice_start) * 1000))))
         end
     end)
-    dt.print_hinter(" ")
+    show_status("")
     if not ok then notify_error("Assisted Culling: clearing marks failed: " .. tostring(err)); return end
     dt.print(string.format("Assisted Culling: removed culling tags from %d of %d images%s. Star ratings were not changed.",
         cleared, total, failed > 0 and (", " .. failed .. " couldn't be updated") or ""))
@@ -2077,6 +2088,7 @@ local function install_panel()
         pages[i] = { number = page.number, title = _(page.title), widgets = page_widgets[i] }
     end
 
+    status_label = new_widget("label") { label = "", halign = "start" }
     local panel_box = new_widget("box") {
         orientation = "vertical",
         -- shows the template defaults; nothing is saved
@@ -2086,6 +2098,7 @@ local function install_panel()
         end,
         ctl.widget,
         C.paged_sections("assisted_culling", pages),
+        status_label,
     }
 
     dt.register_lib(
