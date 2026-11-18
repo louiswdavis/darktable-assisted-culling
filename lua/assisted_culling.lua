@@ -1385,6 +1385,8 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         -- culling layout), so it only runs when those are exactly the batch; otherwise,
         -- and for any image the action missed, it falls back to per-image writes.
         local n_action_missed = 0
+        -- os.clock is wall time on Windows: seconds in tag writes, rating writes and pauses
+        local tag_s, rating_s, pause_s = 0, 0, 0
         local function flush_ratings()
             local batch = rating_batch
             if next(batch) == nil then return end
@@ -1443,16 +1445,22 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                     pending_idx = pending_idx + 1
                     lines = lines + 1
                 end
+                local ratings_start = os.clock()
+                tag_s = tag_s + ratings_start - slice_start
                 flush_ratings()
+                rating_s = rating_s + os.clock() - ratings_start
             else
                 local budget = STAGE2_WRITE_BUDGET
                 while pending_idx <= #pending and budget > 0 do
                     budget = budget - math.max(1, apply_line(pending[pending_idx]))
                     pending_idx = pending_idx + 1
                 end
+                tag_s = tag_s + os.clock() - slice_start
             end
             local slice_ms = (os.clock() - slice_start) * 1000
+            local pause_start = os.clock()
             dt.control.sleep(math.max(STAGE2_SLEEP_MIN_MS, math.min(STAGE2_SLEEP_MAX_MS, math.floor(slice_ms))))
+            pause_s = pause_s + os.clock() - pause_start
             return true
         end
 
@@ -1605,6 +1613,8 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             local notice = M.no_groups_notice(mechanism, n_primary, n_groups_before_split)
             if notice then msg = msg .. " " .. notice:gsub("^%l", string.upper) .. "." end
             say(msg)
+            log(string.format("apply: timing: %.1fs in tag and rating-per-image calls, %.1fs in rating batches, %.1fs paused",
+                tag_s, rating_s, pause_s))
             if n_action_missed > 0 then
                 log(string.format("%d missed by darktable's rating action (rated one by one)", n_action_missed))
             end

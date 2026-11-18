@@ -496,10 +496,14 @@ end
 -- Paced tag/group writes: every attach, detach or group change rewrites an XMP sidecar, so
 -- after `budget` writes the GUI gets `sleep_ms`. w.write(fn, weight) runs fn under pcall and
 -- counts it as `weight` writes (default 1); w.failed and w.first_error say what went wrong.
+-- w.call_s is the seconds spent inside the write calls (os.clock: wall time on Windows) and
+-- w.sleeps the number of pauses, for the timing line in the log.
 function C.paced_writer(dt, budget, sleep_ms)
-    local w = { writes = 0, failed = 0, first_error = nil }
+    local w = { writes = 0, failed = 0, first_error = nil, call_s = 0, sleeps = 0 }
     function w.write(fn, weight)
+        local call_start = os.clock()
         local okw, werr = pcall(fn)
+        w.call_s = w.call_s + os.clock() - call_start
         if not okw then
             w.failed = w.failed + 1
             w.first_error = w.first_error or tostring(werr)
@@ -507,6 +511,7 @@ function C.paced_writer(dt, budget, sleep_ms)
         w.writes = w.writes + (weight or 1)
         if w.writes >= budget then
             w.writes = 0
+            w.sleeps = w.sleeps + 1
             dt.control.sleep(sleep_ms)
         end
         return okw
