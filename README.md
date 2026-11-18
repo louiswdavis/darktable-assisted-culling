@@ -214,7 +214,7 @@ Tick **Tag each run** to also stamp every frame a run writes with `Assisted Cull
 
 Each scoring run also writes `assisted_culling/last-run.csv` in darktable's config folder (the folder holding `assisted_culling.log`): one row per scored frame with its burst, rank in the burst, score, stars, keeper yes/no, flags, diagnostic tags, a `why` line ("kept: rank 1 of 4, 2 allowed", "not kept: rank 3 of 4, only 2 allowed or not eligible; flagged blur"), the file's folder and a `reason` column (the frame's `Why` tag: Keeper, Keeper by margin, Outranked, Graded, Not shortlisted, No vehicle, Blank, Close call, Spread, Number clearer or Subject clearer) and a `car` column: the first car tag on the frame under the car tag node, blank when no node was set or the frame had none (frames carrying several cars stay in their shared pool). A `direction` column holds the burst's travel direction (left, right or unknown) in motorsport mode with the vehicle detector, blank otherwise. Then `id` (darktable's image id, which follows capture order) and, in *motion_aware* mode, the score parts `eval_culling.py --set` rebuilds from: `subject` (subject sharpness at the burst's shared size), `motion` (pan, missed_pan, motion_blur or ordinary), `straightness`, `crop` (the crop's size and the size it was compared at) and `subject_own` (subject sharpness at the crop's own size); blank in other modes. Last, `reads`: the car numbers tagging read on the frame as `number:confidence`, best first, joined by `|`, only when *Break close calls on the number read* is on. Then `judge`: the sharpness judge's score for the frame, only for frames it judged with *Break close calls with the sharpness judge* on. Then `view` (which view of the car the frame shows, a number per burst; blank with no detector or no car) and `motion_look` (`yes` when the frame shows enough of the car to keep for its motion look), which let `eval_culling.py` replay the other-angle and motion-look keepers. The allowance counts every frame of the burst, including frames that couldn't be read. Open it in a spreadsheet to see why a frame lost, or to tune thresholds from evidence. It is overwritten by the next run, but each run's copy is also kept as `assisted_culling/reports/YYYYMMDD-HHMMSS.csv` (newest 20), so two runs can be compared.
 
-While a run is going, **Clear culling marks**, **Restore previous ratings** and the culling shortcut queue behind it instead of refusing. Each queued job keeps the selection and settings from when you clicked, and starts when the run before it finishes. Cancelling drops the queue. (The panel button turns into **Cancel culling** during a run, so a second culling run can only be queued with the shortcut.)
+While a run is going, **Clear culling marks**, **Restore previous ratings**, **Reset ratings to 0** and the culling shortcut queue behind it instead of refusing. Each queued job keeps the selection and settings from when you clicked, and starts when the run before it finishes. Cancelling drops the queue. (The panel button turns into **Cancel culling** during a run, so a second culling run can only be queued with the shortcut.)
 
 In the panel, **Open last report** opens `last-run.csv` in your spreadsheet app. **Why these ratings?** explains the selected images from that report (stars, rank in the burst, flags) without changing anything: one image shows its line on screen, several show a count with the full text in the log.
 
@@ -228,6 +228,14 @@ To protect a frame, tag it `Assisted Culling|Locked` yourself (create the tag in
 - an image you rated again since the run is left alone
 - tags are not changed; use **Clear culling marks** for those
 - only one run back: each run that changes a rating replaces the saved ratings (`assisted_culling.previous-ratings.csv` in darktable's config folder), so restore before re-running. A cancelled or failed run saves what it had changed. A run that changes no rating keeps the earlier run's file.
+
+**Reset ratings to 0** sets the selected images to 0 stars. Select the images and click it:
+
+- images are set one after the other, a few per step, so darktable stays usable while it works
+- the panel line shows `resetting ratings 120 / 800` with the time left, and a job bar shows the same progress
+- the job bar's **x** stops it after the current step; images already set stay at 0, the rest keep their rating
+- a rejected image is set to 0 stars too; an image already at 0 is skipped
+- tags and the selection are not changed, and the saved ratings for **Restore previous ratings** are not updated
 
 Older versions used red/yellow colour labels and a `Culled` tag. The tag comes off the next time an image is re-scored (or with **Clear culling marks**); the labels stay. To remove them once, collect by the `Assisted Culling` tag, select all, and toggle the labels off.
 
@@ -416,6 +424,7 @@ Two headings: **explain the last run** (the first two buttons, which change noth
 - **Open last report.** Opens `last-run.csv` in your spreadsheet app.
 - **Clear culling marks.** Removes the plugin's tags from the selected images (see [Re-running and clearing](#re-running-and-clearing)).
 - **Restore previous ratings.** Sets the selected images back to the star rating they had before the last run that changed a rating (same section).
+- **Reset ratings to 0.** Sets the selected images to 0 stars one after the other, with progress and a cancellable job bar (same section).
 
 ## Preferences
 
@@ -568,6 +577,7 @@ Use a selection with at least two bursts of 3+ frames each.
 11. **Tag switches.** Cull a batch with every tag on and note the stars. Under **tags written** in the panel, turn off *Subject* and *Rejected*, then cull the same batch again. *Expect:* the stars and keepers are the same as before; no image in the batch has an `Assisted Culling|Subject|Vehicle|Detected` or `Assisted Culling|Rejected` tag; `Keeper`, the flags, `Subject|Vehicle|Guessed`, `Technique`, `Scored` and `Why` are still there. Filter on `Assisted Culling|Why|Outranked`: every match is a non-keeper. Turn off *Why* and cull again: the `Why` tags are gone from the batch. No `LUA ERROR`.
 12. **Checks survive diagnostics off.** Turn off *Subject*, *Technique*, *Scored* and *Why* (leave *Subject guessed* on) and cull a burst where the vehicle detector finds nothing. *Expect:* `Assisted Culling|Subject|Vehicle|Guessed` is still written and no `Detected`, `Technique`, `Scored` or `Why` tags appear.
 13. **Restore previous ratings.** Give three frames ratings by hand and note them, cull them, then change one frame's rating by hand. Select all three and click **Restore previous ratings**. *Expect:* the two untouched frames are back to the ratings you noted; the one you changed keeps your new rating; the plugin's tags are unchanged; the message counts 2 restored and 1 rated since the run. Try it on a few hundred frames and note how long it takes.
+14. **Reset ratings to 0.** Give a few hundred frames 3 stars and reject one. Select them all and click **Reset ratings to 0**. *Expect:* the panel line counts up (`resetting ratings 120 / 300`), a job bar appears, and the thumbnails lose their stars as it goes. Click the job bar's **x** part-way. *Expect:* it stops within a second or two; the message says how many were set and how many were not reached; the frames not reached still have 3 stars. Click the button again. *Expect:* it finishes the rest, counts the first part as "already at 0", the rejected frame is at 0 stars, tags and the selection are unchanged. Note how long the full reset takes next to darktable's own `0` key on the same selection.
 
 ## Development
 

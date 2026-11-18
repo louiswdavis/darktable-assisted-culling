@@ -558,6 +558,47 @@ check("restore, an image removed from the library: the others are back", jpeg1.r
     "5 4; Assisted Culling: restored the previous rating of 2 of 3 images, 1 couldn't be updated. Tags were not changed.")
 check("restore: no Lua error", lua_errors(), nil)
 
+-- Reset ratings to 0 ------------------------------------------------------------------
+click("Reset ratings to 0", {})
+check("reset, nothing selected: asks for a selection", last_print(), "Assisted Culling: select some images first")
+check("reset, nothing selected: no job bar", #jobs, 0)
+
+jpeg1.rating, jpeg2.rating, jpeg3.rating = 5, -1, 0
+selection_sets = 0
+click("Reset ratings to 0", { jpeg1, jpeg2, jpeg3 })
+check("reset: every frame is at 0 stars, the rejected one too", jpeg1.rating .. " " .. jpeg2.rating .. " " .. jpeg3.rating, "0 0 0")
+check("reset: progress goes to the panel line", status_shown("resetting ratings 3 / 3"), true)
+check("reset: the panel line is cleared at the end", status_label.label, "")
+check("reset: one job bar, closed at the end", #jobs .. " " .. tostring(jobs[1] and jobs[1].valid), "1 false")
+check("reset: the selection is never changed", selection_sets, 0)
+check("reset: tags are kept", has_tag(jpeg1, "Assisted Culling|Keeper"), true)
+check("reset: the end message", last_print(),
+    "Assisted Culling: set 2 of 3 images to 0 stars, 1 already at 0. Tags were not changed.")
+
+-- the job bar's x during the first slice: the frames not reached keep their rating
+local many = {}
+for n = 1, 30 do
+    many[n] = image(100 + n, string.format("DSC%05d.JPG", 100 + n))
+    many[n].rating = 3
+end
+on_sleep = function() if jobs[1] then jobs[1].valid = false end end
+click("Reset ratings to 0", many)
+on_sleep = nil
+check("reset, cancelled: the first slice is at 0, the rest keep their rating",
+    many[1].rating .. " " .. many[12].rating .. " " .. many[13].rating .. " " .. many[30].rating, "0 0 3 3")
+check("reset, cancelled: the message counts both", last_print(),
+    "Assisted Culling: reset cancelled. 12 of 30 images were set to 0 stars; 18 not reached keep their rating.")
+check("reset, cancelled: the panel line is cleared", status_label.label, "")
+
+click("Reset ratings to 0", { many[13] })
+check("reset, after a cancel: the next reset runs, the panel isn't left busy", many[13].rating, 0)
+
+jpeg1.rating, jpeg2.rating = 5, 4
+click("Reset ratings to 0", { jpeg1, removed, jpeg2 })
+check("reset, an image removed from the library: the others are at 0", jpeg1.rating .. " " .. jpeg2.rating .. "; " .. last_print(),
+    "0 0; Assisted Culling: set 2 of 3 images to 0 stars, 1 couldn't be updated. Tags were not changed.")
+check("reset: no Lua error", lua_errors(), nil)
+
 os.execute = real_execute
 real_execute(WINDOWS and ('rmdir /s /q "' .. ROOT:gsub("/", "\\") .. '"') or ("rm -rf '" .. ROOT .. "'"))
 

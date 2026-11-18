@@ -1416,6 +1416,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             local in_lighttable = dt.gui.current_view().id == "lighttable"
             trace("ratings: darktable answered")
             local saved = in_lighttable and dt.gui.selection() or nil
+            trace("ratings: got the selection")
             if saved then
                 -- dt.gui.selection() leaves out the hidden members of collapsed groups; the act-on list has them
                 local acted, in_acted = {}, {}
@@ -1429,6 +1430,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                 end
                 if covers then saved = acted end
             end
+            trace("ratings: got the act-on list")
             for rating, imgs in pairs(batch) do
                 local used_action = false
                 if in_lighttable then
@@ -1836,6 +1838,62 @@ function M.restore_ratings(images)
         failed > 0 and (", " .. failed .. " couldn't be updated") or ""))
 end
 
+-- Sets each image to 0 stars, a few per slice, with a job bar whose x stops it between slices.
+-- A rejected image is set to 0 stars too. Tags are not changed.
+function M.reset_ratings(images)
+    if not images or #images == 0 then
+        dt.print(_("Assisted Culling: select some images first"))
+        return
+    end
+    local total, reset, already, failed = #images, 0, 0, 0
+    local job = dt.gui.create_job(_("Assisted Culling: reset ratings to 0"), true,
+        function(cancelled_job) cancelled_job.valid = false end)
+    local started = os.time()
+    local i = 1
+    local ok, err = pcall(function()
+        while i <= total and job.valid do
+            local budget = STAGE2_WRITE_BUDGET
+            local slice_start = os.clock()
+            while i <= total and budget > 0 do
+                local img = images[i]
+                -- guarded per image: one removed from the library since the click raises on any read
+                local ok_one, wrote = pcall(function()
+                    if img.rating == 0 then return false end
+                    img.rating = 0
+                    return true
+                end)
+                if not ok_one then
+                    failed = failed + 1
+                elseif wrote then
+                    reset = reset + 1
+                    budget = budget - 1
+                else
+                    already = already + 1
+                end
+                i = i + 1
+            end
+            job.percent = (i - 1) / total
+            show_status(string.format("resetting ratings %d / %d%s", i - 1, total, fmt_eta(os.time() - started, i - 1, total)))
+            dt.control.sleep(math.max(STAGE2_SLEEP_MIN_MS,
+                math.min(STAGE2_SLEEP_MAX_MS, math.floor((os.clock() - slice_start) * 1000))))
+        end
+    end)
+    local cancelled = ok and i <= total
+    pcall(function() job.valid = false end)
+    show_status("")
+    if not ok then notify_error("Assisted Culling: resetting ratings failed: " .. tostring(err)); return end
+    local counts = string.format("%s%s", already > 0 and (", " .. already .. " already at 0") or "",
+        failed > 0 and (", " .. failed .. " couldn't be updated") or "")
+    log(string.format("reset ratings: %d images, %ds", total, os.time() - started))
+    if cancelled then
+        say(string.format("Assisted Culling: reset cancelled. %d of %d images were set to 0 stars%s; %d not reached keep their rating.",
+            reset, total, counts, total - i + 1))
+    else
+        say(string.format("Assisted Culling: set %d of %d images to 0 stars%s. Tags were not changed.", reset, total, counts))
+    end
+    flush_log()
+end
+
 local preset_file_store, make_preset_controls = C.preset_file_store, C.make_preset_controls
 
 
@@ -2136,6 +2194,30 @@ local function install_panel()
         if not ok_r then notify_error("Assisted Culling: restoring ratings failed: " .. tostring(err_r)) end
     end)
 
+    local reset_button = new_widget("button") {
+        label = _("Reset ratings to 0"),
+        tooltip = _("Set the selected images to 0 stars, a few at a time, with progress in the panel and a job bar you can cancel. A rejected image is set to 0 stars too. Tags are not changed."),
+    }
+
+    reset_button.clicked_callback = C.guarded_callback(guard, "button reset", function()
+        local selected = copy_images(dt.gui.action_images)
+        if queue_if_busy(_("Reset ratings to 0"), #selected > 0, function()
+            is_clearing = true
+            local ok_q, err_q = pcall(M.reset_ratings, selected)
+            is_clearing = false
+            if not ok_q then notify_error("Assisted Culling: resetting ratings failed: " .. tostring(err_q)) end
+            run_next()
+        end) then return end
+        if is_running or is_clearing then
+            dt.print(_("Assisted Culling: busy with another job, try again when it finishes."))
+            return
+        end
+        is_clearing = true
+        local ok_r, err_r = pcall(M.reset_ratings, selected)
+        is_clearing = false
+        if not ok_r then notify_error("Assisted Culling: resetting ratings failed: " .. tostring(err_r)) end
+    end)
+
     local why_button = new_widget("button") {
         label = _("Why these ratings?"),
         tooltip = _("Explain the selected images from the last run's report: stars, rank in the burst, flags. Changes nothing."),
@@ -2251,7 +2333,7 @@ local function install_panel()
         { new_widget("section_label") { label = _("explain the last run (changes nothing)") },
           why_button, report_button,
           new_widget("section_label") { label = _("undo") },
-          clear_button, restore_button },
+          clear_button, restore_button, reset_button },
     }
     local pages = {}
     for i, page in ipairs(M.PANEL_PAGES) do
