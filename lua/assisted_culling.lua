@@ -1606,7 +1606,8 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             drain_s = os.time() - started
         end
 
-        if culling_job then
+        -- closed once: closing a job the bar's x already closed crashes darktable
+        if culling_job and culling_job.valid then
             culling_job.percent = 1.0
             dt.control.sleep(50)
             culling_job.valid = false
@@ -1674,7 +1675,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
     show_status("")
 
     if not success then
-        if culling_job then pcall(function() culling_job.valid = false end) end
+        if culling_job then pcall(function() if culling_job.valid then culling_job.valid = false end end) end
         notify_error(_("Assisted Culling: couldn't run. ") .. tostring(run_err))
     end
     if not run_started then
@@ -1839,7 +1840,8 @@ function M.restore_ratings(images)
 end
 
 -- Sets each image to 0 stars, a few per slice, with a job bar whose x stops it between slices.
--- A rejected image is set to 0 stars too. Tags are not changed.
+-- A rejected image is set to 0 stars too. Tags are not changed. The job is closed once: by its x,
+-- or here at the end; closing a closed job crashes darktable.
 function M.reset_ratings(images)
     if not images or #images == 0 then
         dt.print(_("Assisted Culling: select some images first"))
@@ -1879,7 +1881,7 @@ function M.reset_ratings(images)
         end
     end)
     local cancelled = ok and i <= total
-    pcall(function() job.valid = false end)
+    pcall(function() if job.valid then job.valid = false end end)
     show_status("")
     if not ok then notify_error("Assisted Culling: resetting ratings failed: " .. tostring(err)); return end
     local counts = string.format("%s%s", already > 0 and (", " .. already .. " already at 0") or "",

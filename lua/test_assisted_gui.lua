@@ -86,6 +86,7 @@ local prints, jobs, images_by_id, tags_by_name, tag_list, panel = {}, {}, {}, {}
 local hinter_calls, rating_actions = 0, 0
 -- image id → true for members darktable hides in a collapsed group; writes to the selection so far
 local hidden_ids, selection_sets = {}, 0
+local double_closes = 0 -- times a job that was already closed was closed again
 -- called at each dt.control.sleep, where darktable runs its own events (a cancel click, an error)
 local on_sleep = nil
 -- how many images were selected at each tag attach
@@ -204,8 +205,19 @@ dt = {
         -- the rating action does nothing here, so every rating falls back to a per-image write
         action = function() rating_actions = rating_actions + 1 end,
         current_view = function() return { id = "lighttable" } end,
+        -- as darktable 5.6: closing a closed job frees it twice (a crash), and its percent can't be set
         create_job = function(title)
-            local job = { valid = true, percent = 0, title = title }
+            local state = { valid = true, percent = 0, title = title }
+            local job = setmetatable({}, {
+                __index = state,
+                __newindex = function(_, key, value)
+                    if not state.valid then
+                        if key == "valid" then double_closes = double_closes + 1 end
+                        error("Accessing an invalid job")
+                    end
+                    state[key] = value
+                end,
+            })
             jobs[#jobs + 1] = job
             return job
         end,
@@ -463,7 +475,7 @@ local while_scoring = find_widget(panel, "check_button", "Apply ratings while sc
 while_scoring.value = true
 while_scoring.clicked_callback(while_scoring)
 PYTHON.hang = true
-on_sleep = function() if #PYTHON.runs > 0 and jobs[1] then jobs[1].valid = false end end
+on_sleep = function() if #PYTHON.runs > 0 and jobs[1] and jobs[1].valid then jobs[1].valid = false end end
 jpeg1.rating, jpeg2.rating = 5, 4
 click("Cull selection", { jpeg1, jpeg2 })
 local cancelled_rated = last_print()
@@ -581,7 +593,7 @@ for n = 1, 30 do
     many[n] = image(100 + n, string.format("DSC%05d.JPG", 100 + n))
     many[n].rating = 3
 end
-on_sleep = function() if jobs[1] then jobs[1].valid = false end end
+on_sleep = function() if jobs[1] and jobs[1].valid then jobs[1].valid = false end end
 click("Reset ratings to 0", many)
 on_sleep = nil
 check("reset, cancelled: the first slice is at 0, the rest keep their rating",
@@ -598,6 +610,7 @@ click("Reset ratings to 0", { jpeg1, removed, jpeg2 })
 check("reset, an image removed from the library: the others are at 0", jpeg1.rating .. " " .. jpeg2.rating .. "; " .. last_print(),
     "0 0; Assisted Culling: set 2 of 3 images to 0 stars, 1 couldn't be updated. Tags were not changed.")
 check("reset: no Lua error", lua_errors(), nil)
+check("no job bar is closed twice", double_closes, 0)
 
 os.execute = real_execute
 real_execute(WINDOWS and ('rmdir /s /q "' .. ROOT:gsub("/", "\\") .. '"') or ("rm -rf '" .. ROOT .. "'"))
