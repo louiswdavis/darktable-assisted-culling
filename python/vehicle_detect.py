@@ -287,30 +287,32 @@ def detection_key(path: str, detector: Detector) -> str:
 class DetectionCache:
     """Stored entries in SQLite under the darktable config dir, shared by both plugins and
     keyed by detection_key. Nothing plugin-specific is in the key; thresholds apply on read.
-    An empty path disables it. Rows unused for CACHE_MAX_AGE_DAYS are pruned on open.
-    Each put commits at once: identify.py's worker processes each hold one, and an open write
-    transaction would lock the others out past the 30 s timeout."""
+    An empty path disables it. The journal is WAL with synchronous=NORMAL, so a commit is an
+    append with no disk sync. Each put commits at once: identify.py's worker processes each hold
+    one, and an open write transaction would lock the others out past the 30 s timeout."""
 
-    def __init__(self, path: str):
+    def __init__(self, path: str, prune: bool = False):
+        """`prune` drops rows unused for CACHE_MAX_AGE_DAYS: a run's parent process passes it
+        once, its workers don't."""
         self.db, self.used = None, []
         if not path:
             return
         os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
         try:
             self.db = sqlite3.connect(path, timeout=30)
+            self.db.execute("PRAGMA journal_mode=WAL")
+            self.db.execute("PRAGMA synchronous=NORMAL")
             self.db.execute("CREATE TABLE IF NOT EXISTS detections "
                             "(key TEXT PRIMARY KEY, value TEXT NOT NULL, used INTEGER NOT NULL)")
-            self.prune()
+            self.db.execute("CREATE INDEX IF NOT EXISTS detections_used ON detections (used)")
+            if prune:
+                self.db.execute("DELETE FROM detections WHERE used < ?",
+                                (int(time.time()) - CACHE_MAX_AGE_DAYS * 86400,))
+            self.db.commit()
         except sqlite3.DatabaseError as e:
             if self.db:
                 self.db.close()  # Windows can't delete or replace a file held open
             raise InputError(f"detection cache {path} is unreadable ({e}); delete it to start a fresh one") from e
-
-    def prune(self, days: int = CACHE_MAX_AGE_DAYS):
-        if not self.db:
-            return
-        self.db.execute("DELETE FROM detections WHERE used < ?", (int(time.time()) - days * 86400,))
-        self.db.commit()
 
     def get(self, key: str):
         if not self.db or key is None:

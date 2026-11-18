@@ -1531,7 +1531,7 @@ def main(args):
         return
 
     cache = ScoreCache(getattr(args, "cache", ""))
-    detections = DetectionCache(getattr(args, "detections", ""))  # shared with tagging; "" = detect every run
+    detections = DetectionCache(getattr(args, "detections", ""), prune=True)  # shared with tagging; "" = detect every run
     try:
         if getattr(args, "emit_saliency_points", False):
             emit_saliency_points(manifest, args, cache, detections)
