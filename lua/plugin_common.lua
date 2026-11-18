@@ -520,22 +520,6 @@ function C.paced_writer(dt, budget, sleep_ms)
     return w
 end
 
--- Empties the selection for a batch of tag writes and returns what it was. On every tag write
--- darktable refreshes the thumbnail info and the tagging module's attached list for every
--- selected image (thumbtable.c, libs/tagging.c), so a large selection slows each write.
-function C.hide_selection(dt, log)
-    local selected = dt.gui.selection()
-    if #selected > 0 then
-        dt.gui.selection({})
-        log(string.format("selection: %d images deselected while tags are written", #selected))
-    end
-    return selected
-end
-
-function C.restore_selection(dt, selected)
-    if selected and #selected > 0 then dt.gui.selection(selected) end
-end
-
 -- Presets -----------------------------------------------------------------------
 -- Presets are flat JSON objects: string, number and boolean values only, so a small codec
 -- does instead of a JSON library (test_preset_block.lua is the matching tests).
