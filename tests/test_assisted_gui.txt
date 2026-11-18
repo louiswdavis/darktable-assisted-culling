@@ -1,0 +1,41 @@
+ok   the panel is installed at startup
+ok   startup has no Lua error
+ok   the panel ends with the progress line
+ok   the progress line starts empty
+ok   cull, nothing selected: asks for a selection
+ok   cull, nothing selected: no job bar
+ok   cull, nothing selected: the scorer is not started
+ok   cull: says it started as soon as it is clicked
+ok   cull: one job bar
+ok   cull: the job bar is titled
+ok   cull: the job bar is closed at the end
+ok   cull: the scorer ran once
+ok   cull: the manifest has the unlocked frames
+ok   cull: the locked frame is not sent
+ok   cull: progress goes to the panel line
+ok   cull: the panel line shows the ratings step
+ok   cull: the panel line is cleared at the end
+ok   cull: the hinter is never used
+ok   cull: the keeper is rated
+ok   cull: the other frame is rated
+ok   cull: the keeper is tagged
+ok   cull: the keeper tag stays off the other frame
+ok   cull: the unreadable frame is untouched
+ok   cull: the locked frame is untouched
+ok   cull: the end message
+ok   cull: the button is back to its label
+ok   cull: no Lua error
+ok   cull, scorer fails: says so
+ok   cull, scorer fails: the panel line is cleared
+ok   cull, scorer fails: the job bar is closed
+ok   cull, all locked: explains
+ok   clear, nothing selected: asks for a selection
+ok   clear: says it started
+ok   clear: progress goes to the panel line
+ok   clear: the panel line is cleared at the end
+ok   clear: the keeper tag is gone
+ok   clear: no culling tags left
+ok   clear: the end message
+ok   clear: the hinter is never used
+ok   clear: no Lua error
+all passed
