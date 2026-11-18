@@ -58,17 +58,17 @@ for name, fn in pairs(C) do
 end
 
 
--- Splits each group into one pool per car, so a burst with two identified cars gets a
--- keeper each. Several cars, no car or no group key leave an id's key unchanged.
-function M.split_by_car(ids, key_of, car_of, multi)
+-- Splits each group into one pool per child tag of a tag node, so a burst with two identified
+-- cars gets a keeper each. Several children, no child or no group key leave an id's key unchanged.
+function M.split_by_tag(ids, key_of, tag_of, multi)
     local several = {}
     for _, id in ipairs(multi) do several[id] = true end
-    local out, outs_of, n_carred = {}, {}, 0
+    local out, outs_of, n_tagged = {}, {}, 0
     for _, id in ipairs(ids) do
-        local key, car = key_of[id], car_of[id]
-        if key ~= nil and car ~= nil and not several[id] then
-            out[id] = key .. "\0" .. car
-            n_carred = n_carred + 1
+        local key, tag = key_of[id], tag_of[id]
+        if key ~= nil and tag ~= nil and not several[id] then
+            out[id] = key .. "\0" .. tag
+            n_tagged = n_tagged + 1
         else
             out[id] = key
         end
@@ -81,14 +81,14 @@ function M.split_by_car(ids, key_of, car_of, multi)
     for _, outs in pairs(outs_of) do
         if next(outs, next(outs)) ~= nil then n_split = n_split + 1 end
     end
-    return out, n_split, n_carred
+    return out, n_split, n_tagged
 end
 
 
 -- Notice for the done message when grouping was on but every frame is its own burst
 -- (the two cull-first orders land here); nil otherwise.
-function M.no_groups_notice(mechanism, n_primary, n_bursts)
-    if mechanism ~= "none" and n_primary >= 2 and n_bursts == n_primary then
+function M.no_groups_notice(grouping_on, n_primary, n_bursts)
+    if grouping_on and n_primary >= 2 and n_bursts == n_primary then
         return "no groups found: every frame judged alone (group first for keepers)"
     end
     return nil
@@ -250,10 +250,14 @@ local keep_margin_opts = {"off", "95", "90", "85", "80", "75"}
 local star_scale_opts = {"0.5", "0.75", "1", "1.25", "1.5", "2"}
 -- a frame this % one flat colour is blank and rejected (the scorer's --blank-share)
 local blank_share_opts = {"off", "99", "97", "95", "90"}
-local group_support_opts = {"native", "tags", "none"}
+-- The panel's tag node boxes, in cut order.
+local GROUP_TAG_KEYS = { "group_tag_1", "group_tag_2", "group_tag_3" }
+-- Typed in a tag node box, it stands for each photo's own latest Assisted Grouping run.
+M.LATEST_GROUPING_NODE = "Assisted Grouping"
+M.TAG_NODE_HINT = "grouping tags found but no native groups; type Assisted Grouping in a tag node box to use them"
 M.CHOICES = { genre = genre_opts, rank_mode = rank_opts, sharp_mode = sharp_opts, exp_mode = exp_opts,
     keep_mode = keep_opts, keep_margin = keep_margin_opts, non_keeper = nk_opts, star_scale = star_scale_opts,
-    blank_share = blank_share_opts, group_support = group_support_opts }
+    blank_share = blank_share_opts }
 
 -- The four modes each genre fills in. "custom" has none.
 M.GENRE_MODES = {
@@ -310,9 +314,10 @@ M.PRESET_SCHEMA = {
     { key = "keep_margin", kind = "choice", choices = keep_margin_opts, default = "off" },
     { key = "non_keeper", kind = "choice", choices = nk_opts, default = "leave" },
     { key = "star_scale", kind = "choice", choices = star_scale_opts, default = "1" },
-    { key = "group_support", kind = "choice", choices = group_support_opts, default = "native" },
-    { key = "group_node", kind = "string", default = "" },
-    { key = "car_tag_node", kind = "string", default = "" },
+    { key = "group_native", kind = "bool", default = true },
+    { key = "group_tag_1", kind = "string", default = "" },
+    { key = "group_tag_2", kind = "string", default = "" },
+    { key = "group_tag_3", kind = "string", default = "" },
     { key = "run_tag", kind = "bool", default = false },
     { key = "apply_while_scoring", kind = "bool", default = false },
     { key = "fast_jpeg_decode", kind = "bool", default = true },
@@ -355,7 +360,7 @@ M.PANEL_PAGES = {
     { number = 1, title = "scoring", keys = { "genre", "rank_mode", "sharp_mode", "exp_mode", "keep_mode",
         "keep_margin", "spread_keepers", "keep_angles", "motion_look", "number_reads", "sharp_judge", "non_keeper",
         "star_scale", "star_slope" } },
-    { number = 2, title = "bursts", keys = { "group_support", "group_node", "car_tag_node" } },
+    { number = 2, title = "bursts", keys = { "group_native", "group_tag_1", "group_tag_2", "group_tag_3" } },
     { number = 3, title = "penalties & speed", keys = { "apply_while_scoring", "fast_jpeg_decode",
         "penalise_overexposed", "penalise_underexposed", "penalise_eyes_closed", "penalise_cut_off",
         "penalise_blocked", "blank_share", "no_vehicle_leave", "car_boxes_only" } },
@@ -432,14 +437,37 @@ function M.diag_off(enabled)
     return off
 end
 
--- Returns preset text that holds tag_subject_guessed, copied from tag_subject when
--- absent (an old preset keeps its Subject choice for Guessed), and the list of keys
--- copied; text that does not decode or needs no copy comes back unchanged, copied nil.
+-- Returns preset text in today's keys, and the list of keys filled from old ones; text that does
+-- not decode or needs no upgrade comes back unchanged, list nil.
+-- tag_subject_guessed is copied from tag_subject when absent. A preset from the grouping support
+-- dropdown (group_support, group_node, car_tag_node) becomes group_native plus tag nodes that
+-- group the same way: "tags" turns native groups off with its node first (blank node: the latest
+-- grouping run), the car node follows, and "none" drops the car node, which split nothing.
 function M.upgrade_preset_text(text)
     local decoded = M.preset_decode(text)
-    if not decoded or decoded.tag_subject_guessed ~= nil or decoded.tag_subject == nil then return text end
-    decoded.tag_subject_guessed = decoded.tag_subject
-    return M.preset_encode(M.PRESET_SCHEMA, decoded), { "tag_subject_guessed" }
+    if not decoded then return text end
+    local filled = {}
+    if decoded.tag_subject_guessed == nil and decoded.tag_subject ~= nil then
+        decoded.tag_subject_guessed = decoded.tag_subject
+        filled[#filled + 1] = "tag_subject_guessed"
+    end
+    if decoded.group_native == nil and decoded.group_support ~= nil then
+        decoded.group_native = decoded.group_support == "native"
+        filled[#filled + 1] = "group_native"
+        local nodes = {}
+        if decoded.group_support == "tags" then
+            local node = tostring(decoded.group_node or ""):match("^%s*(.-)%s*$")
+            nodes[1] = node ~= "" and node or M.LATEST_GROUPING_NODE
+        end
+        local car_node = tostring(decoded.car_tag_node or ""):match("^%s*(.-)%s*$")
+        if car_node ~= "" and decoded.group_support ~= "none" then nodes[#nodes + 1] = car_node end
+        for n, node in ipairs(nodes) do
+            decoded[GROUP_TAG_KEYS[n]] = node
+            filled[#filled + 1] = GROUP_TAG_KEYS[n]
+        end
+    end
+    if #filled == 0 then return text end
+    return M.preset_encode(M.PRESET_SCHEMA, decoded), filled
 end
 
 local ok, dt = pcall(require, "darktable")
@@ -467,13 +495,9 @@ local PROGRESS_SAM = 0.45        -- SAM mode: end of segmenting
 local STAGE2_WRITE_BUDGET = 12   -- writes per slice before yielding
 local STAGE2_SLEEP_MIN_MS = 20   -- minimum yield per slice
 local STAGE2_SLEEP_MAX_MS = 300  -- maximum yield per slice
--- Final drain only: ratings are batched, so a slice spends its budget on tag
--- writes alone, which don't reload the collection.
+-- Final drain only: the scorer has exited, so a slice can hold more tag and rating writes.
 local STAGE2_BATCH_WRITE_BUDGET = 60
-local STAGE2_BATCH_LINES = 200   -- results per batched slice
-
--- darktable's "views/thumbtable/rating" action elements, by star value
-local RATING_ELEMENTS = { [-1] = "reject", [0] = "zero", "one", "two", "three", "four", "five" }
+local STAGE2_BATCH_LINES = 200   -- results per final-drain slice
 
 local IS_WINDOWS = C.IS_WINDOWS
 
@@ -725,7 +749,7 @@ end
 -- export, so the scorer keys cached masked scores on it. Shutter (seconds),
 -- aperture (f-number) and focal length (mm) always go last, for the scorer's
 -- EXIF intent rules and motion_aware's blur prior.
-local function write_manifest(images, burst_of, mask_for_id, shortlisted, edited, car_of)
+local function write_manifest(images, burst_of, mask_for_id, shortlisted, edited, split_of)
     local f = io.open(MANIFEST_PATH, "w")
     if not f then return false end
     for _, img in ipairs(images) do
@@ -735,7 +759,7 @@ local function write_manifest(images, burst_of, mask_for_id, shortlisted, edited
             shortlisted and (shortlisted[img.id] and "1" or "0") or "",
             edited and tostring(img.change_timestamp) or "",
             img.exif_exposure or 0, img.exif_aperture or 0, img.exif_focal_length or 0,
-            car_of and car_of[img.id] or "" }
+            split_of and split_of[img.id] or "" }
         f:write(M.csv_line(fields), "\n")
     end
     f:close()
@@ -941,9 +965,33 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             end
             return have
         end
-        local mechanism = settings.group_support
-        local key_of, node, multi, n_runs = {}, nil, {}, 0
-        if mechanism == "native" then
+        local nodes = {}
+        for _, key in ipairs(GROUP_TAG_KEYS) do
+            local node = (settings[key] or ""):match("^%s*(.-)%s*$")
+            if node ~= "" then nodes[#nodes + 1] = node end
+        end
+        local grouping_on = settings.group_native or #nodes > 0
+        local tag_items = {}
+        if #nodes > 0 then
+            for _, img in ipairs(primaries) do tag_items[#tag_items + 1] = { id = img.id, tags = have_of(img) } end
+        end
+        -- id → the photo's child tag under the node, the ids with several children, a note for the log
+        local function node_keys(node)
+            if node == M.LATEST_GROUPING_NODE then
+                local tag_of, n_runs = M.latest_group_keys(tag_items)
+                return tag_of, {}, n_runs > 0 and string.format("latest run per photo (%d runs)", n_runs) or "no grouping tags found"
+            end
+            local tag_of, tag_multi = M.tag_group_keys(tag_items, node)
+            return tag_of, tag_multi, next(tag_of) == nil and "matches no selected photo" or nil
+        end
+        local function cut_note(text, note, tag_multi)
+            return text .. (note and " (" .. note .. ")" or "")
+                .. (#tag_multi > 0 and ", several children on ids " .. table.concat(tag_multi, ",") or "")
+        end
+        -- Native groups form the groups when on, else the first filled tag node does; every later
+        -- node cuts them further.
+        local key_of, cut_notes, first_split = {}, {}, 1
+        if settings.group_native then
             local items = {}
             for _, img in ipairs(primaries) do
                 local in_shot = {}
@@ -957,19 +1005,12 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                 items[#items + 1] = { id = img.id, leader = leader }
             end
             key_of = M.native_group_keys(items)
-        elseif mechanism == "tags" then
-            local items = {}
-            for _, img in ipairs(primaries) do items[#items + 1] = { id = img.id, tags = have_of(img) } end
-            local typed = (settings.group_node or ""):match("^%s*(.-)%s*$")
-            if typed ~= "" then
-                node = typed
-                key_of, multi = M.tag_group_keys(items, node)
-            else
-                key_of, n_runs = M.latest_group_keys(items)
-            end
+        elseif nodes[1] then
+            local tag_multi, note
+            key_of, tag_multi, note = node_keys(nodes[1])
+            cut_notes[1] = cut_note(string.format("tag node %s forms the groups", nodes[1]), note, tag_multi)
+            first_split = 2
         end
-        local car_node = (settings.car_tag_node or ""):match("^%s*(.-)%s*$")
-        local car_of, car_multi, n_split = nil, {}, 0
         local n_groups_before_split = 0
         do
             local pre_of, seen = M.number_groups(primary_ids, key_of), {}
@@ -977,13 +1018,16 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                 if not seen[pre_of[id]] then seen[pre_of[id]] = true; n_groups_before_split = n_groups_before_split + 1 end
             end
         end
-        if car_node ~= "" then
-            local items = {}
-            for _, img in ipairs(primaries) do
-                items[#items + 1] = { id = img.id, tags = have_of(img) }
-            end
-            car_of, car_multi = M.tag_group_keys(items, car_node)
-            key_of, n_split = M.split_by_car(primary_ids, key_of, car_of, car_multi)
+        -- id → the child tags that split it off, for manifest column 10
+        local split_of = nil
+        for n = first_split, #nodes do
+            local tag_of, tag_multi, note = node_keys(nodes[n])
+            local n_split, n_tagged
+            key_of, n_split, n_tagged = M.split_by_tag(primary_ids, key_of, tag_of, tag_multi)
+            split_of = split_of or {}
+            for id, child in pairs(tag_of) do split_of[id] = split_of[id] and split_of[id] .. "/" .. child or child end
+            cut_notes[#cut_notes + 1] = cut_note(string.format("tag node %s: %d grouped photos tagged, %d groups split",
+                nodes[n], n_tagged, n_split), note, tag_multi)
         end
         local burst_of = M.number_groups(primary_ids, key_of)
 
@@ -995,28 +1039,17 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         for _, id in ipairs(primary_ids) do
             if size_of[burst_of[id]] >= 2 then grouped = grouped + 1 end
         end
-        local msg = string.format("group support %s: %d of %d photos in groups of 2+", mechanism, grouped, #primaries)
-        if mechanism == "tags" then
-            if node then
-                msg = msg .. string.format(", node %s", node)
-            else
-                msg = msg .. (n_runs > 0 and string.format(", latest run per photo (%d runs)", n_runs) or ", no grouping tags found")
-            end
-            if node and next(key_of) == nil then msg = msg .. " (matches no selected photo)" end
-            if #multi > 0 then msg = msg .. ", several children on ids " .. table.concat(multi, ",") end
-        end
-        if car_of then
-            local n_with_car = 0
-            for _ in pairs(car_of) do n_with_car = n_with_car + 1 end
-            msg = msg .. string.format(", car tag node %s: %d frames with a car, %d groups split", car_node, n_with_car, n_split)
-            if #car_multi > 0 then msg = msg .. ", several cars on ids " .. table.concat(car_multi, ",") end
-        end
+        local msg = string.format("grouping: native groups %s, %d of %d photos in groups of 2+",
+            settings.group_native and "on" or "off", grouped, #primaries)
+        for _, note in ipairs(cut_notes) do msg = msg .. ", " .. note end
         log(msg)
-        if mechanism == "native" and grouped == 0 then
+        if settings.group_native and #nodes == 0 and grouped == 0 then
             local items = {}
             for _, img in ipairs(primaries) do items[#items + 1] = { id = img.id, tags = have_of(img) } end
-            local hint = M.group_tags_hint(grouped, items)
-            if hint then log(hint); dt.print("Assisted Culling: " .. hint) end
+            if M.group_tags_hint(grouped, items) then
+                log(M.TAG_NODE_HINT)
+                dt.print("Assisted Culling: " .. M.TAG_NODE_HINT)
+            end
         end
 
         local overlap, fast_jpeg = settings.apply_while_scoring, settings.fast_jpeg_decode
@@ -1035,14 +1068,15 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             for _, img in ipairs(primaries) do pcall(os.remove, mask_path_for(img.id)) end
         end
 
-        if not write_manifest(primaries, burst_of, nil, nil, sam_model ~= nil, car_of) then
+        if not write_manifest(primaries, burst_of, nil, nil, sam_model ~= nil, split_of) then
             error("couldn't write the image list to darktable's tmp folder (disk full or no write access?)", 0)
         end
 
         log(string.format("fast JPEG %s, apply while scoring %s, SAM model %s",
             tostring(fast_jpeg), tostring(overlap), tostring(sam_model or "none")))
         say(string.format("Assisted Culling: scoring %d images in %d groups (%s keepers, %s ranking, %s grouping)",
-            n_primary, n_bursts, pretty(keep_mode), pretty(rank_mode), mechanism))
+            n_primary, n_bursts, pretty(keep_mode), pretty(rank_mode),
+            settings.group_native and (#nodes > 0 and "native + tag" or "native") or (#nodes > 0 and "tag" or "no")))
         if n_dups > 0 then
             say(string.format("Assisted Culling: %d image(s) share a shot with another (a duplicate, or the RAW of a RAW+JPEG pair); each shot is scored once and its result copied to all of it.", n_dups))
         end
@@ -1195,7 +1229,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                 end
             end
 
-            if not write_manifest(primaries, burst_of, mask_for_id, shortlisted, true, car_of) then
+            if not write_manifest(primaries, burst_of, mask_for_id, shortlisted, true, split_of) then
                 error("couldn't write the image list to darktable's tmp folder (disk full or no write access?)", 0)
             end
             pcall(os.remove, PROGRESS_PATH)
@@ -1281,9 +1315,8 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         -- Reads are cheap; writes reload the lighttable collection / rewrite XMP, so skip no-ops.
         -- Every mark is a tag, never a colour label, so a re-run or "clear" can undo exactly
         -- what earlier passes set without touching labels the user applied by hand.
-        -- Set by the final drain: ratings collect here per star value and go out in
-        -- batches, since each img.rating write reloads the whole collection.
-        local rating_batch = nil
+        -- Set for the final drain, which runs bigger slices: no scorer is sharing the CPU by then.
+        local final_drain = false
 
         -- read once per run
         local tag_on = {}
@@ -1301,13 +1334,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                     or { path = (img.path .. "/" .. img.filename):gsub("[\r\n]", " "), previous = img.rating }
                 record.written = want_rating
                 previous_ratings[img.id] = record
-                if rating_batch then
-                    local list = rating_batch[want_rating] or {}
-                    list[#list + 1] = img
-                    rating_batch[want_rating] = list
-                else
-                    img.rating = want_rating; writes = writes + 1
-                end
+                img.rating = want_rating; writes = writes + 1
             end
 
             writes = writes + sync_tag(img, have, TAG_KEEPER, is_keeper and tag_on.keeper)
@@ -1398,103 +1425,30 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             end
         end
 
-        -- Applies each star value's batch with one rating action on a temporary
-        -- selection, then restores the user's selection. The action targets
-        -- darktable's act-on images (the hovered image, the ones shown in preview or
-        -- culling layout), so it only runs when those are exactly the batch; otherwise,
-        -- and for any image the action missed, it falls back to per-image writes.
-        local n_action_missed = 0
-        -- os.clock is wall time on Windows: seconds in tag writes, rating writes, pauses and the
+        -- os.clock is wall time on Windows: seconds in tag and rating writes, pauses and the
         -- final drain's progress updates (job bar, status label, toast), which wait for darktable's GUI
-        local tag_s, rating_s, pause_s, progress_s, drain_s = 0, 0, 0, 0, 0
-        local function flush_ratings()
-            local batch = rating_batch
-            if next(batch) == nil then return end
-            rating_batch = {}
-            -- the first call into darktable's GUI waits until it has handled the tag writes before it
-            trace("ratings: waiting for darktable")
-            local in_lighttable = dt.gui.current_view().id == "lighttable"
-            trace("ratings: darktable answered")
-            local saved = in_lighttable and dt.gui.selection() or nil
-            trace("ratings: got the selection")
-            if saved then
-                -- dt.gui.selection() leaves out the hidden members of collapsed groups; the act-on list has them
-                local acted, in_acted = {}, {}
-                for _, img in ipairs(dt.gui.action_images) do
-                    acted[#acted + 1] = img
-                    in_acted[img.id] = true
-                end
-                local covers = #acted > #saved
-                for _, img in ipairs(saved) do
-                    if not in_acted[img.id] then covers = false; break end
-                end
-                if covers then saved = acted end
-            end
-            trace("ratings: got the act-on list")
-            for rating, imgs in pairs(batch) do
-                local used_action = false
-                if in_lighttable then
-                    local member = {}
-                    for _, img in ipairs(imgs) do member[img.id] = true end
-                    trace(string.format("ratings: selecting %d images for %d stars", #imgs, rating))
-                    dt.gui.selection(imgs)
-                    local targets, exact = dt.gui.action_images, true
-                    if #targets ~= #imgs then exact = false end
-                    for _, t in ipairs(targets) do
-                        if not member[t.id] then exact = false; break end
-                    end
-                    if exact then
-                        trace("ratings: rating action")
-                        local ok_a, err_a = pcall(dt.gui.action, "views/thumbtable/rating",
-                            RATING_ELEMENTS[rating], rating == -1 and "activate" or "select", 1.0)
-                        if not ok_a then first_error = first_error or tostring(err_a) end
-                        used_action = ok_a
-                    else
-                        trace(string.format("ratings: act-on is %d images, not the batch; rating one by one", #targets))
-                    end
-                end
-                for _, img in ipairs(imgs) do
-                    if img.rating ~= rating then
-                        if used_action then n_action_missed = n_action_missed + 1 end
-                        local ok_set, err = pcall(function() img.rating = rating end)
-                        if not ok_set then
-                            applied_total = applied_total - 1
-                            failed_total = failed_total + 1
-                            first_error = first_error or tostring(err)
-                        end
-                    end
-                end
-            end
-            if saved then
-                trace(string.format("ratings: restoring selection of %d", #saved))
-                dt.gui.selection(saved)
-            end
-        end
+        local write_s, pause_s, progress_s, drain_s = 0, 0, 0, 0
 
         -- One paced slice: stop after the write budget, then yield to the GUI in
         -- proportion to how long the slice took. Returns false if nothing was pending.
         local function apply_slice()
             if pending_idx > #pending then return false end
             local slice_start = os.clock()
-            if rating_batch then
+            if final_drain then
                 local budget, lines = STAGE2_BATCH_WRITE_BUDGET, 0
                 while pending_idx <= #pending and budget > 0 and lines < STAGE2_BATCH_LINES do
                     budget = budget - apply_line(pending[pending_idx])
                     pending_idx = pending_idx + 1
                     lines = lines + 1
                 end
-                local ratings_start = os.clock()
-                tag_s = tag_s + ratings_start - slice_start
-                flush_ratings()
-                rating_s = rating_s + os.clock() - ratings_start
             else
                 local budget = STAGE2_WRITE_BUDGET
                 while pending_idx <= #pending and budget > 0 do
                     budget = budget - math.max(1, apply_line(pending[pending_idx]))
                     pending_idx = pending_idx + 1
                 end
-                tag_s = tag_s + os.clock() - slice_start
             end
+            write_s = write_s + os.clock() - slice_start
             local slice_ms = (os.clock() - slice_start) * 1000
             local pause_start = os.clock()
             dt.control.sleep(math.max(STAGE2_SLEEP_MIN_MS, math.min(STAGE2_SLEEP_MAX_MS, math.floor(slice_ms))))
@@ -1575,7 +1529,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             end
             local started = os.time()
             local last_toast_pct = 0
-            rating_batch = {}
+            final_drain = true
 
             while pending_idx <= total_lines do
                 if M.cancel_requested or (culling_job and not culling_job.valid) or file_exists(CANCEL_PATH) then
@@ -1653,14 +1607,11 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             if n_locked > 0 then left_out[#left_out + 1] = n_locked .. " locked" end
             if failed_total > 0 then left_out[#left_out + 1] = failed_total .. " failed to update" end
             if #left_out > 0 then msg = msg .. " Left out: " .. table.concat(left_out, "; ") .. " (see log)." end
-            local notice = M.no_groups_notice(mechanism, n_primary, n_groups_before_split)
+            local notice = M.no_groups_notice(grouping_on, n_primary, n_groups_before_split)
             if notice then msg = msg .. " " .. notice:gsub("^%l", string.upper) .. "." end
             say(msg)
-            log(string.format("apply: timing: %.1fs in tag and rating-per-image calls, %.1fs in rating batches, %.1fs paused, %.1fs in progress updates; final drain took %ds",
-                tag_s, rating_s, pause_s, progress_s, drain_s))
-            if n_action_missed > 0 then
-                log(string.format("%d missed by darktable's rating action (rated one by one)", n_action_missed))
-            end
+            log(string.format("apply: timing: %.1fs in tag and rating writes, %.1fs paused, %.1fs in progress updates; final drain took %ds",
+                write_s, pause_s, progress_s, drain_s))
             if first_error then
                 dt.print_error("Assisted Culling: first apply error: " .. first_error)
                 log("first apply error: " .. first_error)
@@ -2063,19 +2014,14 @@ local function install_panel()
         start_culling(true)
     end)
 
-    local group_support_combo = choice_combo("group_support", _("grouping support"),
-        _("What groups photos before keepers are picked. Native groups: darktable's image groups. Grouping tags: the children of the tag node below. None: every photo is judged alone.\nDefault: native groups. Pick grouping tags after an Assisted Grouping run you have not applied as darktable groups."),
-        { _("Native groups"), _("Grouping tags"), _("None") })
-    local group_node_entry = new_widget("entry") {
-        placeholder = _("Grouping tag node (blank = latest run per photo)"),
-        tooltip = _("Grouping tags only: the tag node whose children are the groups, e.g. Assisted Grouping|2026-01-01 12:00:00|Group. Blank uses each photo's own latest Assisted Grouping run, so photos regrouped by a later run and photos left on an earlier run both keep their groups.\nDefault: blank. Set it to pin one run."),
-        text = "",
-    }
-    local car_node_entry = new_widget("entry") {
-        placeholder = _("Car tag node (blank = off)"),
-        tooltip = _("Keepers per car: the tag node whose children are car numbers, e.g. Rally|2026 from Assisted Tagging. Each group is split by car before keepers are picked; frames with no car tag share one pool per group.\nDefault: blank (off). Set it after Assisted Tagging has run on these photos."),
-        text = "",
-    }
+    local group_tag_entries = {}
+    for n in ipairs(GROUP_TAG_KEYS) do
+        group_tag_entries[n] = new_widget("entry") {
+            placeholder = string.format(_("tag node %d (blank = not used)"), n),
+            tooltip = _("A tag node whose children section the photos, e.g. Rally|2026 (car numbers from Assisted Tagging) or Assisted Grouping|2026-01-01 12:00:00|Group. Each filled node cuts the groups further, in order: photos with different children go to separate pools, each with its own keepers, and photos without the tag stay together in their group. With native groups off, the first filled node forms the groups and photos without its tag are judged alone. Type Assisted Grouping to use each photo's own latest Assisted Grouping run.\nDefault: blank (not used)."),
+            text = "",
+        }
+    end
 
     -- Check buttons by schema key, in panel order.
     local checks, check_order = {}, {}
@@ -2089,6 +2035,16 @@ local function install_panel()
         checks[key] = c
         check_order[#check_order + 1] = key
         return c
+    end
+
+    local group_widgets = {
+        check("group_native", _("Cull by native groups"),
+            _("On: darktable's image groups are the groups keepers are picked within. Off: the first filled tag node below forms the groups; with none filled, every photo is judged alone.\nDefault: on. Turn off after an Assisted Grouping run you have not applied as darktable groups, and type Assisted Grouping in tag node 1.")),
+        new_widget("section_label") { label = _("extra grouping by tags") },
+    }
+    for n, entry in ipairs(group_tag_entries) do
+        group_widgets[#group_widgets + 1] = new_widget("label") { label = string.format(_("tag node %d"), n), halign = "start" }
+        group_widgets[#group_widgets + 1] = entry
     end
 
     local run_tag_check = check("run_tag", _("Tag each run"),
@@ -2135,8 +2091,7 @@ local function install_panel()
         local s = {}
         for key in pairs(combos) do s[key] = M.CHOICES[key][combos[key].selected] or shown[key] end
         for _, key in ipairs(check_order) do s[key] = checks[key].value and true or false end
-        s.group_node = (group_node_entry.text or ""):match("^%s*(.-)%s*$")
-        s.car_tag_node = (car_node_entry.text or ""):match("^%s*(.-)%s*$")
+        for n, key in ipairs(GROUP_TAG_KEYS) do s[key] = (group_tag_entries[n].text or ""):match("^%s*(.-)%s*$") end
         return s
     end
 
@@ -2144,8 +2099,7 @@ local function install_panel()
         for k, v in pairs(s) do shown[k] = v end
         for key in pairs(combos) do show_choice(key, s[key]) end
         for _, key in ipairs(check_order) do checks[key].value = s[key] end
-        group_node_entry.text = s.group_node
-        car_node_entry.text = s.car_tag_node
+        for n, key in ipairs(GROUP_TAG_KEYS) do group_tag_entries[n].text = s[key] end
     end
 
     clear_button = new_widget("button") {
@@ -2279,7 +2233,7 @@ local function install_panel()
         -- saved back, so the upgrade (and its log line) happens once
         if copied then
             if store.write(name, upgraded) then
-                log("preset " .. name .. ": tag_subject_guessed copied from tag_subject (old preset)")
+                log("preset " .. name .. ": " .. table.concat(copied, ", ") .. " filled from the old preset's settings")
             else
                 log("preset " .. name .. ": couldn't save the upgraded preset to " .. store.path(name))
             end
@@ -2321,13 +2275,7 @@ local function install_panel()
           non_keeper_combo, star_scale_combo,
           check("star_slope", _("Spread keeper stars evenly"),
               _("Rates the run's keepers against each other instead of against fixed score steps: ranked by sharpness and cut into five equal groups, the sharpest group 5 stars, the next 4, down to 1. Other angle keepers stay one star below their burst's best, Motion look keepers keep their own rating, and a flag still costs its stars. Runs with fewer than 10 keepers, and the relative and binary ranking, use the fixed steps.\nDefault: on.")) },
-        {
-            group_support_combo,
-            new_widget("label") { label = _("grouping tag node"), halign = "start" },
-            group_node_entry,
-            new_widget("label") { label = _("car tag node"), halign = "start" },
-            car_node_entry,
-        },
+        group_widgets,
         option_checks,
         tag_checks,
         { new_widget("section_label") { label = _("cull (models; writes ratings and tags)") },

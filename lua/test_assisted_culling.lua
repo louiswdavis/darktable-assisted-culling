@@ -177,6 +177,30 @@ up, copied = C.upgrade_preset_text(full)
 check("upgrade_preset_text: no-op when tag_subject_guessed is present", tostring(up == full) .. "/" .. tostring(copied), "true/nil")
 up, copied = C.upgrade_preset_text("not json {")
 check("upgrade_preset_text: no-op on text that is not JSON", up .. "/" .. tostring(copied), "not json {/nil")
+-- a preset saved by the grouping support dropdown: today's grouping keys out, the old three in
+local function dropdown_preset(group_support, group_node, car_tag_node)
+    local text = C.preset_encode(C.PRESET_SCHEMA, {}):gsub('%s*"group_[%w_]+"%s*:%s*[^,\n]+,', "")
+    return (text:gsub('"run_tag"', string.format('"group_support": "%s",\n  "group_node": "%s",\n  "car_tag_node": "%s",\n  "run_tag"',
+        group_support, group_node, car_tag_node), 1))
+end
+local function upgraded_grouping(group_support, group_node, car_tag_node)
+    local upgraded, filled = C.upgrade_preset_text(dropdown_preset(group_support, group_node, car_tag_node))
+    local s = C.preset_merge(C.PRESET_SCHEMA, C.preset_decode(upgraded))
+    return string.format("%s [%s] [%s] [%s] %s", tostring(s.group_native), s.group_tag_1, s.group_tag_2, s.group_tag_3,
+        table.concat(filled or {}, ","))
+end
+check("upgrade_preset_text: native keeps native groups on", upgraded_grouping("native", "", ""), "true [] [] [] group_native")
+check("upgrade_preset_text: native with a car node puts it in node 1", upgraded_grouping("native", "ignored", " Rally|2026 "),
+    "true [Rally|2026] [] [] group_native,group_tag_1")
+check("upgrade_preset_text: tags with a node turns native off, node first", upgraded_grouping("tags", "Shoot|Groups", ""),
+    "false [Shoot|Groups] [] [] group_native,group_tag_1")
+check("upgrade_preset_text: tags with a blank node uses the latest grouping run", upgraded_grouping("tags", "", "Rally|2026"),
+    "false [Assisted Grouping] [Rally|2026] [] group_native,group_tag_1,group_tag_2")
+check("upgrade_preset_text: none drops the car node", upgraded_grouping("none", "Shoot|Groups", "Rally|2026"),
+    "false [] [] [] group_native")
+local today = C.preset_encode(C.PRESET_SCHEMA, { group_native = false, group_tag_1 = "Rally|2026" })
+up, copied = C.upgrade_preset_text(today)
+check("upgrade_preset_text: no-op on today's grouping keys", tostring(up == today) .. "/" .. tostring(copied), "true/nil")
 
 local flags = C.parse_flags("overexposed;eyes_closed")
 check("parse_flags reads every flag", tostring(flags.overexposed and flags.eyes_closed), "true")
@@ -283,9 +307,12 @@ check("pythonw_of: other launcher is refused", C.pythonw_of("C:/Windows/py.exe")
 require("test_preset_block")(C, check)
 
 local cd = C.preset_defaults(C.PRESET_SCHEMA)
-check("preset schema: mode defaults", string.format("%s %s %s %s %s %s %s [%s]", cd.genre, cd.rank_mode, cd.sharp_mode,
-    cd.exp_mode, cd.keep_mode, cd.non_keeper, cd.group_support, cd.group_node),
-    "landscape universal tiles_uniformity strict single_best leave native []")
+check("preset schema: mode defaults", string.format("%s %s %s %s %s %s", cd.genre, cd.rank_mode, cd.sharp_mode,
+    cd.exp_mode, cd.keep_mode, cd.non_keeper),
+    "landscape universal tiles_uniformity strict single_best leave")
+check("preset schema: grouping defaults to native groups and no tag nodes",
+    string.format("%s [%s] [%s] [%s]", tostring(cd.group_native), tostring(cd.group_tag_1), tostring(cd.group_tag_2),
+        tostring(cd.group_tag_3)), "true [] [] []")
 check("preset schema: switch defaults", string.format("%s %s %s %s %s %s", cd.run_tag, cd.apply_while_scoring,
     cd.fast_jpeg_decode, cd.penalise_overexposed, cd.penalise_underexposed, cd.penalise_eyes_closed),
     "false false true true true true")
@@ -311,26 +338,33 @@ local function pool_numbers(ids, key_of)
     for i, id in ipairs(ids) do out[i] = n[id] end
     return table.concat(out, " ")
 end
-local sk, s_split, s_carred = C.split_by_car({ "1", "2", "3", "4" }, { ["1"] = "g", ["2"] = "g", ["3"] = "g", ["4"] = "g" },
+local sk, s_split, s_tagged = C.split_by_tag({ "1", "2", "3", "4" }, { ["1"] = "g", ["2"] = "g", ["3"] = "g", ["4"] = "g" },
     { ["1"] = "37", ["2"] = "86", ["3"] = "37" }, {})
-check("split_by_car: cars split a group, untagged frames share the group pool",
-    pool_numbers({ "1", "2", "3", "4" }, sk) .. "|" .. s_split .. "|" .. s_carred, "1 2 1 3|1|3")
-local sk2, _, s_carred2 = C.split_by_car({ "1", "2" }, {}, { ["1"] = "37", ["2"] = "37" }, {})
-check("split_by_car: a frame with no group key stays alone",
-    pool_numbers({ "1", "2" }, sk2) .. "|" .. s_carred2, "1 2|0")
-local sk3, s_split3, s_carred3 = C.split_by_car({ "1", "2", "3" }, { ["1"] = "g", ["2"] = "g", ["3"] = "g" },
+check("split_by_tag: child tags split a group, untagged frames share the group pool",
+    pool_numbers({ "1", "2", "3", "4" }, sk) .. "|" .. s_split .. "|" .. s_tagged, "1 2 1 3|1|3")
+local sk2, _, s_tagged2 = C.split_by_tag({ "1", "2" }, {}, { ["1"] = "37", ["2"] = "37" }, {})
+check("split_by_tag: a frame with no group key stays alone",
+    pool_numbers({ "1", "2" }, sk2) .. "|" .. s_tagged2, "1 2|0")
+local sk3, s_split3, s_tagged3 = C.split_by_tag({ "1", "2", "3" }, { ["1"] = "g", ["2"] = "g", ["3"] = "g" },
     { ["1"] = "37", ["2"] = "37", ["3"] = "86" }, { "3" })
-check("split_by_car: several cars → shared pool",
-    pool_numbers({ "1", "2", "3" }, sk3) .. "|" .. s_split3 .. "|" .. s_carred3, "1 1 2|1|2")
+check("split_by_tag: several children → shared pool",
+    pool_numbers({ "1", "2", "3" }, sk3) .. "|" .. s_split3 .. "|" .. s_tagged3, "1 1 2|1|2")
 local in_keys = { ["1"] = "g", ["2"] = "g" }
-local sk4, s_split4 = C.split_by_car({ "1", "2" }, in_keys, {}, {})
-check("split_by_car: no cars → keys unchanged",
+local sk4, s_split4 = C.split_by_tag({ "1", "2" }, in_keys, {}, {})
+check("split_by_tag: no child tags → keys unchanged",
     tostring(sk4["1"] == in_keys["1"] and sk4["2"] == in_keys["2"]) .. "|" .. s_split4, "true|0")
-check("no_groups_notice: all singletons in native mode",
-    C.no_groups_notice("native", 5, 5), "no groups found: every frame judged alone (group first for keepers)")
-check("no_groups_notice: grouped selection is silent", C.no_groups_notice("tags", 5, 2), nil)
-check("no_groups_notice: none mode and single frame are silent",
-    tostring(C.no_groups_notice("none", 5, 5)) .. "|" .. tostring(C.no_groups_notice("native", 1, 1)), "nil|nil")
+-- a second node cuts the first node's pools: 1 and 5 share both children, 4 has only the first
+local five = { "1", "2", "3", "4", "5" }
+local cut1 = C.split_by_tag(five, { ["1"] = "g", ["2"] = "g", ["3"] = "g", ["4"] = "g", ["5"] = "g" },
+    { ["1"] = "a", ["2"] = "a", ["3"] = "b", ["4"] = "b", ["5"] = "a" }, {})
+local cut2, cut2_split, cut2_tagged = C.split_by_tag(five, cut1, { ["1"] = "x", ["2"] = "y", ["3"] = "x", ["5"] = "x" }, {})
+check("split_by_tag: a second node cuts each pool of the first",
+    pool_numbers(five, cut2) .. "|" .. cut2_split .. "|" .. cut2_tagged, "1 2 3 4 1|2|4")
+check("no_groups_notice: all singletons with grouping on",
+    C.no_groups_notice(true, 5, 5), "no groups found: every frame judged alone (group first for keepers)")
+check("no_groups_notice: grouped selection is silent", C.no_groups_notice(true, 5, 2), nil)
+check("no_groups_notice: grouping off and single frame are silent",
+    tostring(C.no_groups_notice(false, 5, 5)) .. "|" .. tostring(C.no_groups_notice(true, 1, 1)), "nil|nil")
 check("preset schema: keeper margin defaults off", cd.keep_margin, "off")
 check("preset schema: spread keepers defaults off", cd.spread_keepers, false)
 check("preset schema: number reads defaults off", cd.number_reads, false)

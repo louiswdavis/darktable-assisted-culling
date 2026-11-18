@@ -144,7 +144,7 @@ Running all three plugins? [WORKFLOW.md](../darktable-assisted-grouping/WORKFLOW
 
 ### What you get
 
-Each frame gets a star rating, which ranks it against the rest of the batch, plus any of these tags. With a car tag node set, a burst with two identified cars keeps a frame of each.
+Each frame gets a star rating, which ranks it against the rest of the batch, plus any of these tags. With a tag node set, a group whose frames carry two of its children (two car numbers, say) keeps a frame of each.
 
 | Tag | Meaning |
 |-----|---------|
@@ -212,7 +212,7 @@ A few things a re-run doesn't touch:
 
 Tick **Tag each run** to also stamp every frame a run writes with `Assisted Culling|Run|YYYY-MM-DD HH:MM`, so you can filter darktable down to one run's frames. Stamps accumulate, and **Clear culling marks** leaves them; remove old ones in darktable's tag manager.
 
-Each scoring run also writes `assisted_culling/last-run.csv` in darktable's config folder (the folder holding `assisted_culling.log`): one row per scored frame with its burst, rank in the burst, score, stars, keeper yes/no, flags, diagnostic tags, a `why` line ("kept: rank 1 of 4, 2 allowed", "not kept: rank 3 of 4, only 2 allowed or not eligible; flagged blur"), the file's folder and a `reason` column (the frame's `Why` tag: Keeper, Keeper by margin, Outranked, Graded, Not shortlisted, No vehicle, Blank, Close call, Spread, Number clearer or Subject clearer) and a `car` column: the first car tag on the frame under the car tag node, blank when no node was set or the frame had none (frames carrying several cars stay in their shared pool). A `direction` column holds the burst's travel direction (left, right or unknown) in motorsport mode with the vehicle detector, blank otherwise. Then `id` (darktable's image id, which follows capture order) and, in *motion_aware* mode, the score parts `eval_culling.py --set` rebuilds from: `subject` (subject sharpness at the burst's shared size), `motion` (pan, missed_pan, motion_blur or ordinary), `straightness`, `crop` (the crop's size and the size it was compared at) and `subject_own` (subject sharpness at the crop's own size); blank in other modes. Last, `reads`: the car numbers tagging read on the frame as `number:confidence`, best first, joined by `|`, only when *Break close calls on the number read* is on. Then `judge`: the sharpness judge's score for the frame, only for frames it judged with *Break close calls with the sharpness judge* on. Then `view` (which view of the car the frame shows, a number per burst; blank with no detector or no car) and `motion_look` (`yes` when the frame shows enough of the car to keep for its motion look), which let `eval_culling.py` replay the other-angle and motion-look keepers. The allowance counts every frame of the burst, including frames that couldn't be read. Open it in a spreadsheet to see why a frame lost, or to tune thresholds from evidence. It is overwritten by the next run, but each run's copy is also kept as `assisted_culling/reports/YYYYMMDD-HHMMSS.csv` (newest 20), so two runs can be compared.
+Each scoring run also writes `assisted_culling/last-run.csv` in darktable's config folder (the folder holding `assisted_culling.log`): one row per scored frame with its burst, rank in the burst, score, stars, keeper yes/no, flags, diagnostic tags, a `why` line ("kept: rank 1 of 4, 2 allowed", "not kept: rank 3 of 4, only 2 allowed or not eligible; flagged blur"), the file's folder and a `reason` column (the frame's `Why` tag: Keeper, Keeper by margin, Outranked, Graded, Not shortlisted, No vehicle, Blank, Close call, Spread, Number clearer or Subject clearer) and a `car` column: the frame's child tag under each tag node that cut the groups, joined by `/` (e.g. `37/left`), blank when no node cut or the frame had no child (frames carrying several children of a node stay in their shared pool). A node that forms the groups (checkbox off, first filled node) is not listed. A `direction` column holds the burst's travel direction (left, right or unknown) in motorsport mode with the vehicle detector, blank otherwise. Then `id` (darktable's image id, which follows capture order) and, in *motion_aware* mode, the score parts `eval_culling.py --set` rebuilds from: `subject` (subject sharpness at the burst's shared size), `motion` (pan, missed_pan, motion_blur or ordinary), `straightness`, `crop` (the crop's size and the size it was compared at) and `subject_own` (subject sharpness at the crop's own size); blank in other modes. Last, `reads`: the car numbers tagging read on the frame as `number:confidence`, best first, joined by `|`, only when *Break close calls on the number read* is on. Then `judge`: the sharpness judge's score for the frame, only for frames it judged with *Break close calls with the sharpness judge* on. Then `view` (which view of the car the frame shows, a number per burst; blank with no detector or no car) and `motion_look` (`yes` when the frame shows enough of the car to keep for its motion look), which let `eval_culling.py` replay the other-angle and motion-look keepers. The allowance counts every frame of the burst, including frames that couldn't be read. Open it in a spreadsheet to see why a frame lost, or to tune thresholds from evidence. It is overwritten by the next run, but each run's copy is also kept as `assisted_culling/reports/YYYYMMDD-HHMMSS.csv` (newest 20), so two runs can be compared.
 
 While a run is going, **Clear culling marks**, **Restore previous ratings**, **Reset ratings to 0** and the culling shortcut queue behind it instead of refusing. Each queued job keeps the selection and settings from when you clicked, and starts when the run before it finishes. Cancelling drops the queue. (The panel button turns into **Cancel culling** during a run, so a second culling run can only be queued with the shortcut.)
 
@@ -385,9 +385,8 @@ Flags still cost a star each. **Star strictness** scales these steps too: strict
 
 ### 2 bursts
 
-- **grouping support** (Native groups, Grouping tags, None; default Native groups). What groups photos before keepers are picked, see [Grouping support](#grouping-support).
-- **Grouping tag node (blank = latest run per photo)**. The tag node whose children are the groups in Grouping tags mode.
-- **Car tag node (blank = off)**. The tag node whose children are car numbers, e.g. the collection prefix from [Assisted Tagging](../darktable-assisted-tagging/README.md). Each group is split by car before keepers are picked; frames with no car tag share one pool per group.
+- **Cull by native groups** (checkbox, default on). darktable's own image groups form the groups keepers are picked in, see [Grouping support](#grouping-support).
+- **tag node 1**, **tag node 2**, **tag node 3** (blank = not used). Tag nodes whose children cut the groups further, in that order, e.g. the collection prefix from [Assisted Tagging](../darktable-assisted-tagging/README.md) for one keeper per number. With the checkbox off, the first filled node forms the groups. Type `Assisted Grouping` for each photo's latest Assisted Grouping run.
 
 ### 3 penalties & speed
 
@@ -440,7 +439,7 @@ All under **preferences → lua options**. Everything else is a panel setting sa
 you select images in lighttable
         |
         v
-assisted_culling.lua groups the selection by Grouping support (native, tags or none)
+assisted_culling.lua groups the selection by native groups and tag nodes
         |
         v
 assisted_culling.lua writes manifest.csv (id, filepath, burst_id, …, shutter, aperture) and runs score_images.py
@@ -462,17 +461,22 @@ Sharpness is the variance of the Laplacian of a downscaled grayscale copy, a sta
 
 ### Grouping support
 
-Culling no longer clusters photos by capture time. Keepers are picked within groups that something else already made, and the panel's **grouping support** combobox picks which:
+Culling no longer clusters photos by capture time. Keepers are picked within groups that something else already made. The panel's **2 bursts** page has a **Cull by native groups** checkbox and three **tag node** boxes:
 
-- **Native groups** (default): darktable's own image groups. A photo's group is its group leader; members share one group even when the leader isn't in the selection.
-- **Grouping tags**: the children of an [Assisted Grouping](../darktable-assisted-grouping/README.md) tag node, e.g. `Assisted Grouping|2026-01-01 12:00:00|Group|NNNN`. The **Grouping tag node (blank = latest run per photo)** entry names the node; blank uses each photo's own latest Assisted Grouping run, so after regrouping part of a shoot the regrouped photos use the new run and the rest keep the old one. Assisted Grouping must have **Write group tags** on, or there is nothing to find. With a typed node, a photo with several children under it takes the first by name (the log lists them) and a photo without one is alone. In Native groups mode, if no photo is in a group but grouping tags are present, the log and a notice say to switch to Grouping tags.
-- **None**: every photo is its own group and is judged alone.
+- **Cull by native groups** (default on): darktable's own image groups form the groups. A photo's group is its group leader; members share one group even when the leader isn't in the selection.
+- **tag node 1 to 3** (blank = not used): each filled node cuts the groups further, in order 1, 2, 3. Photos in a group that carry different children of the node go to separate pools, each with its own keepers. A photo without a child of the node stays in the group's shared pool, and so does a photo with several children (the log lists those ids).
+- **Checkbox off**: the first filled node forms the groups instead. A photo without a child of that node is judged alone, and a photo with several takes the first by name. The later nodes cut as above.
+- **Checkbox off and every box blank**: every photo is its own group and is judged alone.
 
-The car tag node splits per car only for start-list entries tagged `<node>|<number>`; entries tagged `<node>|<team>|<name>` (imported start lists with teams) split per team until ticket 15 keys on the car.
+A node is a tag path such as `Rally|2026`; its children are the tags one level below it, e.g. `Rally|2026|37`. Typing `Assisted Grouping` uses each photo's own latest [Assisted Grouping](../darktable-assisted-grouping/README.md) run (`Assisted Grouping|2026-01-01 12:00:00|Group|NNNN`), so after regrouping part of a shoot the regrouped photos use the new run and the rest keep the old one. Assisted Grouping must have **Write group tags** on, or there is nothing to find. With the checkbox on and every box blank, if no photo is in a native group but grouping tags are present, the log and a notice say to type `Assisted Grouping` in a tag node box.
+
+A node holding start-list entries splits per number only for entries tagged `<node>|<number>`; entries tagged `<node>|<team>|<name>` (imported start lists with teams) split per team until ticket 15 keys on the number.
+
+Presets saved with the earlier **grouping support** dropdown load into the new controls and are saved back in the new form; the log names the filled settings. *Native groups* becomes the checkbox on, *Grouping tags* becomes the checkbox off with the old grouping node (or `Assisted Grouping` when it was blank) in tag node 1, *None* becomes the checkbox off, and the old car tag node moves to the next free box (with *None* it is dropped: it split nothing).
 
 The rally setup reads group tags; see [WORKFLOW.md](../darktable-assisted-grouping/WORKFLOW.md).
 
-A photo with no group is its own group, and a selection with no groups at all still runs. Groups are not size-checked: a coarse group (Assisted Grouping's burst gap set high, or its Camera or Parent layers joining different cars) makes culling pick one keeper across all of them. That is your grouping settings at work: tighten the grouping, switch to **None**, or fix the group. The log records the mechanism, how many photos landed in groups of 2 or more, and in Grouping tags mode the node used (or that it matched no selected photo).
+A photo with no group is its own group, and a selection with no groups at all still runs. Groups are not size-checked: a coarse group (Assisted Grouping's burst gap set high, or its Camera or Parent layers joining different cars) makes culling pick one keeper across all of them. That is your grouping settings at work: tighten the grouping, add a tag node, or fix the group. The log's `grouping:` line records whether native groups were on, how many photos landed in groups of 2 or more, and for each node how many grouped photos it tagged and how many groups it split (or that it matched no selected photo).
 
 ### How the SAM mode fits together
 
@@ -493,7 +497,7 @@ A cached score is only reused when everything that produced it is the same:
 | the file itself (path, modified time, size) | ranking mode, star strictness, keeper margin |
 | sharpness mode, as adjusted by [shooting intent](#shooting-intent-from-exif) | keepers, non-keepers |
 | motorsport mode: the vehicle detector file, the frame's shutter speed and focal length | |
-| exposure mode | grouping support |
+| exposure mode | native groups, tag nodes |
 | fast JPEG decode | the per-flag *… lowers stars* options |
 | SAM mode: the mask model, the vehicle detector file, the prompt, and your last darktable edit of the frame | |
 
@@ -510,7 +514,7 @@ EXIF can't supply the prompt instead: darktable exposes focus *distance*, not th
 Everything you'd change per shoot is a panel option or a preference. What's left is a named constant at the top of the file that uses it:
 
 - `assisted_culling.lua`: `PROGRESS_ANALYSIS` (0.75) is the share of the progress bar for analysis; applying ratings fills the rest. In SAM mode, `PROGRESS_SUBJECTS` (0.15) and `PROGRESS_SAM` (0.45) mark where finding subjects and segmenting end.
-- `assisted_culling.lua`: `STAGE2_BATCH_WRITE_BUDGET` (60 tag writes) and `STAGE2_BATCH_LINES` (200 results) size each slice of the final apply step before it yields to the GUI. Lower them if darktable stutters while ratings apply.
+- `assisted_culling.lua`: `STAGE2_BATCH_WRITE_BUDGET` (60 tag and rating writes) and `STAGE2_BATCH_LINES` (200 results) size each slice of the final apply step before it yields to the GUI. Lower them if darktable stutters while ratings apply.
 - `rating.py` (the keeper and star rules; `score_images.py` applies them during a run and `eval_culling.py --suggest` replays them):
   - `TIER_THRESHOLDS` (universal mode, variance scale), `PEAK_TIER_THRESHOLDS`, `UNIFORMITY_TIER_THRESHOLDS` and `MOTION_TIER_THRESHOLDS` (the other scales, mapped in `TIER_THRESHOLDS_BY_MODE`) and `STAR_THRESHOLDS` (binary and relative mode, as a percentage) turn sharpness into stars. The peak and uniformity tables are first guesses: set them from the `score` column of a real run's `last-run.csv` and check with [the eval script](#scoring-a-run-against-your-own-picks).
   - `RELATIVE_REFERENCE_PERCENTILE` sets which frame marks 5 stars in relative mode; `RELATIVE_MIN_FRAMES` (5) is the smallest scale that gets one.
@@ -564,10 +568,10 @@ The grouping-support changes have not run in darktable yet. Work through these s
 
 Use a selection with at least two bursts of 3+ frames each.
 
-4. **Native groups.** Group each burst in darktable (ctrl+g), set **grouping support** to *Native groups*, and click **Cull selection**. *Expect:* one `Keeper` per burst (more if *keepers* allows), the rest `Rejected` or rated per *non-keepers*. The log at `%LOCALAPPDATA%\darktable\assisted_culling.log` shows `run started`, the `settings:` line, `group support native: N of M photos in groups of 2+` and `run finished`.
-5. **Grouping tags, blank node.** Run Assisted Grouping with **Write group tags** on, then set **grouping support** to *Grouping tags*, leave the node blank, and cull. *Expect:* the same per-burst keepers as step 4. The `group support tags:` log line ends with `latest run per photo (1 runs)`.
-6. **Grouping tags, wrong node.** Type a node that doesn't exist on these photos and cull. *Expect:* every photo is judged alone, and the `group support tags:` log line ends with `(matches no selected photo)`.
-7. **None.** Set **grouping support** to *None* and cull. *Expect:* every photo is judged alone; each frame can be a keeper.
+4. **Native groups.** Group each burst in darktable (ctrl+g), tick **Cull by native groups**, leave the tag node boxes blank, and click **Cull selection**. *Expect:* one `Keeper` per burst (more if *keepers* allows), the rest `Rejected` or rated per *non-keepers*. The log at `%LOCALAPPDATA%\darktable\assisted_culling.log` shows `run started`, the `settings:` line, `grouping: native groups on, N of M photos in groups of 2+` and `run finished`.
+5. **Tag node cuts the groups.** Tag two frames of one burst with different children of a node (e.g. `Rally|2026|37` and `Rally|2026|86`), type the node in **tag node 1**, and cull. *Expect:* that burst keeps a frame of each child; untagged frames in it share one pool. The `grouping:` log line ends with `tag node Rally|2026: N grouped photos tagged, 1 groups split`.
+6. **Tag node forms the groups.** Run Assisted Grouping with **Write group tags** on, untick **Cull by native groups**, type `Assisted Grouping` in **tag node 1**, and cull. *Expect:* the same per-burst keepers as step 4. The log line reads `grouping: native groups off, … tag node Assisted Grouping forms the groups`. Then type a node that doesn't exist on these photos and cull again. *Expect:* every photo is judged alone, and the log line ends with `(matches no selected photo)`.
+7. **Nothing set.** Untick **Cull by native groups**, blank all three boxes, and cull. *Expect:* every photo is judged alone; each frame can be a keeper, and no "No groups found" notice shows.
 
 **Panel**
 
@@ -705,7 +709,7 @@ Things that cost time to find out, recorded so they don't again:
 - **`dt.control.execute` releases the Lua lock** while the child runs. That keeps the GUI responsive, but headless it lets `darktable-cli` tear Lua down mid-run once its export finishes, so without a GUI the plugin uses plain `os.execute` and holds the lock.
 - **`group_with` first removes the image from its current group**, and removing a *leader* hands its group to another member. The plugin no longer stacks bursts with darktable's image grouping (bursts are a scoring concept only, read from the groups you made), but if that's ever added back: on a re-run over already-grouped images, attaching to a leader that still sits in an old group scatters the burst, so detach each keeper into a fresh group before attaching its burst-mates.
 - **Windows shell-outs go through a `.bat` file**, following `lib/dtutils/system.lua` in darktable's lua-scripts: cmd.exe mangles a command line with more than one quoted item. In that file, write the exit code with the redirect first (`> "f" echo %ERRORLEVEL%`): `echo 0> "f"` reads as "redirect handle 0" and leaves `f` empty.
-- **Setting `img.rating` from Lua reloads the whole collection, once per image** (`src/lua/image.c`); tags and darktable's own rating action don't. So the final apply step sets ratings in batches: for each star value it selects that batch and fires the `views/thumbtable/rating` action, then restores your selection. The action rates darktable's *act-on* images (the hovered thumbnail, or the images shown in preview or culling layout), so the plugin checks `dt.gui.action_images` equals the batch first and rates one by one when it doesn't. "Apply ratings while scoring" keeps per-image writes, since changing the selection while you're working would get in the way.
+- **Ratings are written one image at a time with `img.rating`**, a few per slice, and the plugin never changes your selection. Selecting a batch and firing darktable's `views/thumbtable/rating` action was slower: on Windows with 110 images selected, darktable took 9 to 12 seconds to answer `dt.gui.selection()` / `dt.gui.action_images` before each batch (17 to 24 seconds for a run), while per-image writes set 110 ratings in 2 seconds.
 
 ## License
 

@@ -48,6 +48,10 @@ for _, file in ipairs({ "/python/score_images.py", "/python/launch.py", "/.venv/
     "/.venv/Scripts/pythonw.exe", "/.venv/bin/python" }) do
     write_file(PLUGIN .. file, "")
 end
+-- a preset saved by the old grouping support dropdown, for the bursts page checks
+local DROPDOWN_PRESET = ROOT .. "/config/assisted_culling/presets/dropdown.json"
+make_dir(ROOT .. "/config/assisted_culling/presets")
+write_file(DROPDOWN_PRESET, '{"version": 1, "group_support": "tags", "group_node": "", "car_tag_node": "Rally|2026"}\n')
 
 -- score_images.py -----------------------------------------------------------------
 -- What the fake process writes, and what it was last asked. With `hang` it never reports done.
@@ -202,7 +206,7 @@ dt = {
             return before
         end,
         action_images = {},
-        -- the rating action does nothing here, so every rating falls back to a per-image write
+        -- the plugin rates image by image; darktable's rating action is never fired
         action = function() rating_actions = rating_actions + 1 end,
         current_view = function() return { id = "lighttable" } end,
         -- as darktable 5.6: closing a closed job frees it twice (a crash), and its percent can't be set
@@ -271,7 +275,7 @@ local function lua_errors()
 end
 
 -- Startup -------------------------------------------------------------------------
-require("assisted_culling")
+local CULLING = require("assisted_culling")
 check("the panel is installed at startup", panel ~= nil, true)
 check("startup has no Lua error", lua_errors(), nil)
 
@@ -445,8 +449,12 @@ check("cull, all locked: explains", last_print():find("every selected image is t
 -- a collapsed group: darktable reports only jpeg1 as selected, the act-on list also holds the hidden jpeg2
 jpeg1.rating, jpeg2.rating = 0, 0
 hidden_ids = { [jpeg2.id] = true }
+selection_sets, rating_actions = 0, 0
 click("Cull selection", { jpeg1, jpeg2 })
 check("cull, collapsed group: the hidden member is still selected at the end", #dt.gui.action_images, 2)
+check("cull: both frames are rated", jpeg1.rating .. " " .. jpeg2.rating, "3 1")
+check("cull: the selection is never changed", selection_sets, 0)
+check("cull: darktable's rating action is never fired", rating_actions, 0)
 hidden_ids = {}
 
 -- darktable raises while the selection's Locked tag is read, before the scorer starts: the panel is not left busy
@@ -488,6 +496,98 @@ check("cull, cancelled while scoring: the message names the way to undo what was
     "Assisted Culling: cancelled. 2 of 2 images were already rated and keep their changes. Run again to finish, or use Clear culling marks to remove the tags and Restore previous ratings to put the star ratings back."
     .. " / Assisted Culling: cancelled. 2 of 2 images were already rated and keep their changes. Run again to finish, or use Clear culling marks to remove the tags.")
 check("cull, cancelled while scoring: no Lua error", lua_errors(), nil)
+
+-- Bursts page: native groups and tag nodes ------------------------------------------
+local native_check = find_widget(panel, "check_button", "Cull by native groups")
+local node_entries = {}
+local function collect_node_entries(widget)
+    if widget.kind == "entry" and (widget.placeholder or ""):find("^tag node %d") then node_entries[#node_entries + 1] = widget end
+    for _, child in ipairs(widget) do
+        if type(child) == "table" then collect_node_entries(child) end
+    end
+end
+collect_node_entries(panel)
+local function bursts_page()
+    local texts = {}
+    for i, entry in ipairs(node_entries) do texts[i] = "[" .. entry.text .. "]" end
+    return tostring(native_check and native_check.value) .. " " .. table.concat(texts, " ")
+end
+check("bursts page: native groups on and three blank tag node boxes by default", bursts_page(), "true [] [] []")
+
+-- frames 11-14 are one darktable group, 15 is on its own
+local grouped = { image(11, "DSC00011.JPG"), image(12, "DSC00012.JPG"), image(13, "DSC00013.JPG"), image(14, "DSC00014.JPG"),
+    image(15, "DSC00015.JPG") }
+for i = 2, 4 do grouped[i].group_leader = grouped[1] end
+local function tag_frames(name, ...)
+    for _, i in ipairs({ ... }) do dt.tags.attach(dt.tags.create(name), grouped[i]) end
+end
+tag_frames("Rally|2026|37", 1, 3, 5)
+tag_frames("Rally|2026|86", 2)
+tag_frames("Side|left", 1, 3)
+tag_frames("Side|right", 5)
+tag_frames("Assisted Grouping|2026-01-01 12:00:00|Group|0001", 4, 5)
+local earlier_results = PYTHON.results
+PYTHON.results = "11,0.90,,,1,3,\n12,0.40,,,0,1,\n13,0.40,,,0,1,\n14,0.40,,,0,1,\n15,0.40,,,0,1,\n"
+-- Culls the five frames with the page set this way; each frame's group number, then ":" and
+-- manifest column 10 when it is filled.
+local function pools(native, node_1, node_2, node_3)
+    native_check.value = native
+    native_check.clicked_callback(native_check)
+    node_entries[1].text, node_entries[2].text, node_entries[3].text = node_1, node_2, node_3
+    click("Cull selection", grouped)
+    local out = {}
+    for line in (PYTHON.runs[1] and PYTHON.runs[1].manifest or ""):gmatch("[^\r\n]+") do
+        local fields = CULLING.parse_report_line(line)
+        out[#out + 1] = fields[3] .. (fields[10] ~= "" and ":" .. fields[10] or "")
+    end
+    return table.concat(out, " ")
+end
+check("bursts page: native groups alone", pools(true, "", "", ""), "1 1 1 1 2")
+check("bursts page: a tag node cuts the native groups, untagged frames share a pool, column 10 has the child",
+    pools(true, " Rally|2026 ", "", ""), "1:37 2:86 1:37 3 4:37")
+check("bursts page: a later node cuts further, children joined in column 10",
+    pools(true, "", "Rally|2026", "Side"), "1:37/left 2:86 1:37/left 3 4:37/right")
+check("bursts page: native off, node 1 forms the groups and a frame without its tag is alone",
+    pools(false, "Rally|2026", "", ""), "1 2 1 3 1")
+check("bursts page: native off, node 2 cuts node 1's groups",
+    pools(false, "Rally|2026", "Side", ""), "1:left 2 1:left 3 4:right")
+check("bursts page: native off, Assisted Grouping groups by each frame's latest run",
+    pools(false, "Assisted Grouping", "", ""), "1 2 3 4 4")
+check("bursts page: nothing set, every frame alone", pools(false, "", "", ""), "1 2 3 4 5")
+check("bursts page: nothing set, the end message has no grouping notice", last_print(), "Assisted Culling: done. 1 keepers, 4 not kept.")
+check("bursts page: a node that matches no frame leaves every frame alone", pools(false, "No|Such", "", ""), "1 2 3 4 5")
+check("bursts page: a node that matches no frame ends with the grouping notice", last_print(),
+    "Assisted Culling: done. 1 keepers, 4 not kept. No groups found: every frame judged alone (group first for keepers).")
+PYTHON.results = earlier_results
+
+-- the old dropdown preset is upgraded when it is picked, shown on the page and saved back
+local preset_picker = combo(panel, "preset")
+local function pick_preset(name)
+    for i, entry in ipairs(preset_picker) do
+        if entry == name then preset_picker.selected, preset_picker.value = i, name end
+    end
+    preset_picker.changed_callback(preset_picker)
+end
+pools(true, "", "", "")
+pick_preset("dropdown")
+check("bursts page: an old tags preset shows native off, the latest grouping run, then the car node",
+    bursts_page(), "false [Assisted Grouping] [Rally|2026] []")
+check("bursts page: the upgraded preset is saved back in today's keys",
+    tostring((read_file(DROPDOWN_PRESET) or ""):find('"group_tag_2": "Rally|2026"', 1, true) ~= nil) .. " "
+    .. tostring((read_file(DROPDOWN_PRESET) or ""):find("group_support", 1, true)), "true nil")
+check("bursts page: the upgrade is logged", (read_file(ROOT .. "/config/assisted_culling.log") or ""):find(
+    "preset dropdown: group_native, group_tag_1, group_tag_2 filled from the old preset's settings", 1, true) ~= nil, true)
+node_entries[3].text = " Side "
+local preset_actions = combo(panel, "actions")
+for i, entry in ipairs(preset_actions) do
+    if entry == 'update preset "dropdown"' then preset_actions.selected = i end
+end
+preset_actions.changed_callback(preset_actions)
+check("bursts page: updating the preset saves the typed node, trimmed",
+    (read_file(DROPDOWN_PRESET) or ""):find('"group_tag_3": "Side"', 1, true) ~= nil, true)
+pick_preset("template")
+check("bursts page: the template puts the defaults back", bursts_page(), "true [] [] []")
+check("bursts page: no Lua error", lua_errors(), nil)
 
 -- Clear culling marks ---------------------------------------------------------------
 click("Clear culling marks", {})
