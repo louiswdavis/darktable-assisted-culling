@@ -1411,7 +1411,10 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             local batch = rating_batch
             if next(batch) == nil then return end
             rating_batch = {}
+            -- the first call into darktable's GUI waits until it has handled the tag writes before it
+            trace("ratings: waiting for darktable")
             local in_lighttable = dt.gui.current_view().id == "lighttable"
+            trace("ratings: darktable answered")
             local saved = in_lighttable and dt.gui.selection() or nil
             if saved then
                 -- dt.gui.selection() leaves out the hidden members of collapsed groups; the act-on list has them
