@@ -1385,8 +1385,9 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         -- culling layout), so it only runs when those are exactly the batch; otherwise,
         -- and for any image the action missed, it falls back to per-image writes.
         local n_action_missed = 0
-        -- os.clock is wall time on Windows: seconds in tag writes, rating writes and pauses
-        local tag_s, rating_s, pause_s = 0, 0, 0
+        -- os.clock is wall time on Windows: seconds in tag writes, rating writes, pauses and the
+        -- final drain's progress updates (job bar, status label, toast), which wait for darktable's GUI
+        local tag_s, rating_s, pause_s, progress_s, drain_s = 0, 0, 0, 0, 0
         local function flush_ratings()
             local batch = rating_batch
             if next(batch) == nil then return end
@@ -1548,6 +1549,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                 trace(string.format("applying: results %d of %d", pending_idx, total_lines))
                 apply_slice()
 
+                local progress_start = os.clock()
                 local done = pending_idx - start_idx
                 local pct = done / remaining
                 if culling_job then
@@ -1562,7 +1564,9 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                     last_toast_pct = milestone
                     dt.print(string.format("Assisted Culling: ratings %d%% applied", milestone))
                 end
+                progress_s = progress_s + os.clock() - progress_start
             end
+            drain_s = os.time() - started
         end
 
         if culling_job then
@@ -1613,8 +1617,8 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             local notice = M.no_groups_notice(mechanism, n_primary, n_groups_before_split)
             if notice then msg = msg .. " " .. notice:gsub("^%l", string.upper) .. "." end
             say(msg)
-            log(string.format("apply: timing: %.1fs in tag and rating-per-image calls, %.1fs in rating batches, %.1fs paused",
-                tag_s, rating_s, pause_s))
+            log(string.format("apply: timing: %.1fs in tag and rating-per-image calls, %.1fs in rating batches, %.1fs paused, %.1fs in progress updates; final drain took %ds",
+                tag_s, rating_s, pause_s, progress_s, drain_s))
             if n_action_missed > 0 then
                 log(string.format("%d missed by darktable's rating action (rated one by one)", n_action_missed))
             end
