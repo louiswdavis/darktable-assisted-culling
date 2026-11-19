@@ -271,7 +271,7 @@ The **preset** picker at the top of the panel saves every panel setting (everyth
 
 ## Panel options
 
-Below the [preset](#presets) picker are the page buttons **1 scoring ▸** (genre to first picks, below), **2 bursts ▸**, **3 penalties & speed ▸**, **4 tags written ▸**, **5 run ▸** and **6 tools ▸**: clicking one opens its contents below it (its label ends in **▾**) and folds the others; clicking the open one folds it. The open page is remembered across restarts. darktable's reset button (↺ in the panel header) puts every setting back to the template defaults; nothing is saved until you update a preset.
+Below the [preset](#presets) picker are the page buttons **1 scoring ▸** (genre to first picks, below), **2 bursts ▸**, **3 penalties & speed ▸**, **4 tags written ▸**, **5 run ▸** and **6 tools ▸**: clicking one opens its contents below it (its label ends in **▾**) and folds the others; clicking the open one folds it. The open page is remembered across restarts. Below the pages sit the [To check](#to-check) box and the progress line. darktable's reset button (↺ in the panel header) puts every setting back to the template defaults; nothing is saved until you update a preset.
 
 Page 1 has four headings: **how frames are scored** (genre, ranking mode, sharpness, exposure), **keepers per burst** (keepers, keeper margin, spread keepers, keep the other angles, keep a motion-blur frame), **close calls** (the number-read and sharpness-judge tie-breaks) and **ratings** (non-keepers, rejects per burst, star strictness, rate keepers against each other, first picks).
 
@@ -450,6 +450,17 @@ Two headings: **explain the last run (changes nothing)** over the first two butt
 - **Clear culling marks.** Removes the plugin's tags from the selected images (see [Re-running and clearing](#re-running-and-clearing)).
 - **Restore previous ratings.** Sets the selected images back to the star rating they had before the last run that changed a rating (same section).
 - **Reset ratings to 0.** Sets the selected images to 0 stars one after the other, with progress and a cancellable job bar (same section).
+
+### To check
+
+A box above the progress line lists what a run leaves for you to look at, so a toast that went by unseen isn't lost. It shows only when it has items. Each line reads `<action>: <what happened>`:
+
+- **Cull**: errors, subject tracking that outlined only some frames, a cancel after some images were rated, photos with a guessed subject, photos in close calls, images that couldn't be updated or read, detail tags that failed or were stopped.
+- **Clear**, **Restore ratings**, **Reset ratings**: a cancel that left photos not reached, and images that couldn't be changed.
+
+- **Select** beside a line selects its photos in the lighttable. Photos removed from the library since are skipped, and a toast counts them. Lines about photos darktable couldn't read or update have no **Select**: those photos may be gone.
+- The next run of the same action replaces that action's lines; other actions' lines stay. **Clear** empties the box.
+- Six lines show; more add `and N more (see the log)`. The list is saved to `assisted_culling.checks.txt` in darktable's config folder, so it survives a restart.
 
 ## Preferences
 
