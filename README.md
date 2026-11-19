@@ -153,7 +153,7 @@ Each frame gets a star rating, which ranks it against the rest of the batch, plu
 | `Assisted Culling\|Overexposed` | Blown highlights |
 | `Assisted Culling\|Underexposed` | Crushed shadows |
 | `Assisted Culling\|Eyes Closed` | *face & eyes* mode only: a face big enough to judge, with no open eyes found. Dark sunglasses trigger it too. |
-| `Assisted Culling\|Cut Off` | *motorsport* mode with the vehicle detector only: the car touches the frame edge it is driving towards, or more than a tenth of it runs past another edge. The direction comes from the car's box moving across the burst (unknown when it moves under 5% of the frame width or fewer than 3 frames have a car; then both side edges count as leading). A car filling 60% of the frame or more is a tight crop and never flagged. |
+| `Assisted Culling\|Cut Off` | *motorsport* mode with the vehicle detector only: the car touches the frame edge it is driving towards, or more than a tenth of it runs past another edge. The direction comes from the car's box moving across the burst (unknown when it moves under 5% of the frame width or fewer than 3 frames have a car; then both side edges count as leading). A car filling 60% of the frame or more is a tight crop and never flagged. A frame with no car before the burst's first frame with a car, or after its last, is cut off too: the car is not in yet, or has gone. One with no car between two car frames is a missed detection and not flagged. |
 | `Assisted Culling\|Blocked` | *motorsport* mode with the vehicle detector only: a larger (nearer) vehicle box covers more than a quarter of the car. The car is the box closest in size to the burst's typical car, so a car passing close in front isn't taken for it. |
 | `Assisted Culling\|Blank` | At least 95% of the frame is one flat colour (lens cap, black barrier, blown sky, fog), set by **blank frames**. Rejected (rating -1) in every mode and never a keeper, even when the whole burst is blank. A dark frame with lit headlights is not blank. |
 
@@ -322,7 +322,7 @@ How each frame's focus is measured. Every mode except *motorsport* scores a copy
   - background streaked along lines running out from the frame centre (zoom ring turned during the exposure) → `Technique|Zoom Burst`, score ×1
   - anything else → no tag, scored on sharpness alone (camera shake and missed focus already score low)
 - **Shutter × focal length** makes the streak test easier at slow shutter speeds (1/125 s at 100 mm or longer) and harder at 1/1000 s or faster. It never decides the class on its own.
-- **A creative burst is not rejected.** When 80% of a burst's scored frames are zoom bursts, or motion blur at a median shutter of 1/8 s or slower, every frame gets `Technique|Creative Burst`. Its cut-off frames can keep, and no frame is rejected as `Far behind`. The burst's log line ends `creative burst`.
+- **A creative burst is not rejected.** When 80% of a burst's scored frames are zoom bursts, or motion blur at a median shutter of 1/8 s or slower, every frame gets `Technique|Creative Burst`. Its cut-off frames can keep, except frames with no car before the first car frame or after the last, and no frame is rejected as `Far behind`. The burst's log line ends `creative burst`.
 - Each frame's class, streak share and crop size go in the log as a `motion …` line.
 
 #### Shooting intent from EXIF

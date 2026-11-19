@@ -396,6 +396,12 @@ def run_tests():
           R.rate_burst(trio, {k: ("cut_off",) for k in trio}, 3, single)[1], ["a"])
     check("cut off: a creative burst keeps its cut-off frame",
           R.rate_burst(trio, {"a": ("cut_off",), "b": (), "c": ()}, 3, single, creative=True)[1], ["a"])
+    check("cut off: a creative burst keeps no frame the car has left",
+          R.rate_burst(trio, {"a": ("cut_off",), "b": (), "c": ()}, 3, single, views={"a": None, "b": 0, "c": 0},
+                       creative=True)[1], ["b"])
+    check("cut off: a creative burst keeps a cut-off frame showing the car",
+          R.rate_burst(trio, {"a": ("cut_off",), "b": (), "c": ()}, 3, single, views={"a": 0, "b": 0, "c": 0},
+                       creative=True)[1], ["a"])
     check("cut off: tag-only setting does not change eligibility",
           R.rate_burst(trio, {"a": ("cut_off",), "b": (), "c": ()}, 3,
                        Namespace(**{**vars(single), "tag_only_flags": frozenset({"cut_off"})}))[1], ["b"])
@@ -1166,6 +1172,10 @@ def run_tests():
     blocked = crossing[:1] + [S.frame_boxes(det((300, 200, 500, 300), (380, 150, 700, 400)))] + crossing[2:3]
     check("framing: a larger box over the target is blocked", S.framing_flags(blocked)[1], [(), ("blocked",), ()])
     check("framing: no detections, no flags", S.framing_flags([[], []]), ("unknown", [(), ()]))
+    # burst 943: the car in frames 2 and 4 only; frame 3 is a detector miss between them
+    car = S.frame_boxes(det((400, 200, 600, 300)))
+    check("framing: no car before the first car frame or after the last is cut off",
+          S.framing_flags([[], car, [], car, [], []])[1], [("cut_off",), (), (), (), ("cut_off",), ("cut_off",)])
 
     def shaped(aspects):
         return [None if a is None else (0.1, 0.1, 0.1 + 0.1 * a, 0.2, 0.9) for a in aspects]

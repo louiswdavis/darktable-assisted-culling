@@ -61,6 +61,22 @@ touch an edge. Research: `docs/superpowers/research/2026-11-19-framing-occlusion
 5. **Name the occluder.** Grounding DINO or OWLv2 (both Apache-2.0) for person, fence, pole.
    Heavy on CPU; only if 2–3 fall short. Effort L.
 
+## Track the car across a burst
+
+From the user's review of burst 943 (DSC01829–37, a night motion-blur burst). Only DSC01830 and
+DSC01831 had a car box, yet DSC01837 kept: with no box, the scorer falls back to the centre third,
+and light trails there score as sharp. Best first:
+1. **Car not yet in, or gone.** In time order, a frame with no car box before the burst's first
+   car frame or after its last is cut off (`cut_off`, so `Why|Cut off` as today). It never keeps
+   unless every eligible frame is cut off, even in a creative burst. A frame with no box between
+   two car frames is a detector miss and is not flagged. Effort S.
+   **Built (2026-11-19), awaiting a Windows cull.**
+2. **Weak boxes on the car's track.** Accept a box under `DETECTOR_MIN_SCORE` when it sits where
+   the car's travel between neighbouring frames puts it. Fills detector misses in blurred
+   frames. Effort S–M. Not approved.
+3. **Headlight colour.** In a blurred burst, follow the colour of the headlight or tail-light
+   trails seen in the car frames, to tell the car's trails from other lights. Effort M–L. Not approved.
+
 ## Why a frame is soft, and dirty lenses
 
 Research: `docs/superpowers/research/2026-11-19-new-signals-across-plugins.md` (sections 1–2).

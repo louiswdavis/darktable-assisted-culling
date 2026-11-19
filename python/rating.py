@@ -242,7 +242,9 @@ def rate_burst(burst_sharpness: dict, burst_flags: dict, burst_size: int, settin
     nk_mode leave still leaves its rating alone. nk_mode reject rejects only those and
     leaves the other non-keepers. A creative burst (zoom bursts or slow motion blur,
     score_images.finish_burst) is soft and cut off by design: cut_off frames keep like the
-    others and no frame is Far behind."""
+    others and no frame is Far behind, except a cut_off frame with no view (the car is not
+    in yet or has gone, score_images.framing_flags), which keeps in no burst unless every
+    eligible frame is cut off."""
     if not burst_sharpness:
         return [], [], {}, {}
 
@@ -252,7 +254,10 @@ def rate_burst(burst_sharpness: dict, burst_flags: dict, burst_size: int, settin
         eligible = set(burst_sharpness)
     eligible = set(eligible) - set(no_vehicle) - blank
     cut_off = {i for i in eligible if "cut_off" in burst_flags.get(i, ())}
-    cut_off = cut_off if cut_off != eligible and not creative else set()  # an all-cut-off burst still keeps
+    # cut off with no view of the car: the car is not in yet or has gone, creative or not
+    gone = {i for i in cut_off if views is not None and views.get(i) is None}
+    cut_off = cut_off if not creative else gone
+    cut_off = cut_off if cut_off != eligible else set()  # an all-cut-off burst still keeps
     eligible -= cut_off
     # counted on the frames that can keep, not burst_size: 3 frames of the car in a
     # 7-frame burst keep like a 3-frame burst

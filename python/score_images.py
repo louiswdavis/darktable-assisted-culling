@@ -413,16 +413,21 @@ def is_blocked(target, boxes: list) -> bool:
 
 def framing_flags(boxes_of: list) -> tuple:
     """(travel direction, per frame the framing flags it earns) for one burst's frames in time
-    order; boxes_of holds each frame's frame_boxes. A flag every frame shares costs nothing
-    (rating.penalised_flags), so a burst framed tight or shot through traffic is unaffected."""
+    order; boxes_of holds each frame's frame_boxes. A frame with no target before the first
+    target frame or after the last is cut off: the car is not in yet, or has gone. One between
+    two target frames is a detector miss and is not flagged. A flag every frame shares costs
+    nothing (rating.penalised_flags), so a burst framed tight or shot through traffic is unaffected."""
     targets = burst_targets(boxes_of)
     direction = travel_direction(targets)
+    seen = [at for at, target in enumerate(targets) if target is not None]
     flags = []
-    for target, boxes in zip(targets, boxes_of):
+    for at, (target, boxes) in enumerate(zip(targets, boxes_of)):
         own = ()
         if target is not None:
             own = (("cut_off",) if is_cut_off(target, direction) else ()) + \
                   (("blocked",) if is_blocked(target, boxes) else ())
+        elif seen and not seen[0] < at < seen[-1]:
+            own = ("cut_off",)
         flags.append(own)
     return direction, flags
 
