@@ -860,11 +860,24 @@ end
 local alerts = C.alerts_box(new_widget, dt.configuration.config_dir .. "/assisted_culling.checks.txt", log)
 
 -- dt.print_error only writes to darktable's log (-d lua); users never see it. Errors also go to To check.
-local function notify_error(msg)
+-- `to_check` is the To check line when the toast's text doesn't read well there.
+local function notify_error(msg, to_check)
     dt.print(msg)
     dt.print_error(msg)
     log(msg)
-    alerts.add((msg:gsub("^Assisted Culling: ", "")))
+    alerts.add(to_check or (msg:gsub("^Assisted Culling: ", "")))
+end
+
+-- The To check line for a failed scorer run: `lead`, then the scorer's last log line (a crash's
+-- last line names the error), not the cut log tail the toast carries. A tail read_log_tail cut
+-- starts mid-line, so its first line is skipped.
+local function scorer_failure(lead, tail)
+    local last, whole = nil, #tail < 800
+    for line in tail:gmatch("[^\r\n]+") do
+        if whole and not line:find(" lua: ", 1, true) then last = line end
+        whole = true
+    end
+    return lead .. (last and ": " .. last:gsub("^%d%d:%d%d:%d%d py: ", "") or "") .. " (see the log)"
 end
 
 local function pretty(s)
@@ -1638,18 +1651,20 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             end
         elseif done_code ~= 0 then
             local tail = read_log_tail()
+            local to_check = scorer_failure("failed", tail)
             if #tail > 300 then tail = tail:sub(#tail - 299) end
             if tail ~= "" then
-                notify_error(_("Assisted Culling: failed. ") .. tail)
+                notify_error(_("Assisted Culling: failed. ") .. tail, to_check)
             else
                 notify_error(string.format("Assisted Culling: the scorer stopped with exit code %s. Details are in assisted_culling.log in darktable's config folder.",
                     tostring(done_code or "?")))
             end
         elseif applied_total == 0 then
             local tail = read_log_tail()
+            local to_check = tail ~= "" and scorer_failure("no ratings came back from the scorer", tail) or nil
             if #tail > 300 then tail = tail:sub(#tail - 299) end
             notify_error(_("Assisted Culling: no ratings came back from the scorer. ")
-                .. (tail ~= "" and tail or _("Check the plugins folder in preferences → Lua options, and that darktable-assisted-culling/.venv has python/requirements.txt installed.")))
+                .. (tail ~= "" and tail or _("Check the plugins folder in preferences → Lua options, and that darktable-assisted-culling/.venv has python/requirements.txt installed.")), to_check)
         else
             local msg = string.format("Assisted Culling: done. %d keepers, %d not kept", stats.keepers, stats.others)
             if stats.rejected > 0 then msg = msg .. string.format(" (%d rejected)", stats.rejected) end

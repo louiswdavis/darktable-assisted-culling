@@ -81,6 +81,11 @@ os.execute = function(cmd)
     local finds_subjects = false
     for _, arg in ipairs(argv) do finds_subjects = finds_subjects or arg == "--emit-saliency-points" end
     write_file(argv[3], finds_subjects and PYTHON.points or PYTHON.results)
+    if PYTHON.log then
+        local f = assert(io.open(ROOT .. "/config/assisted_culling.log", "a"))
+        f:write(PYTHON.log)
+        f:close()
+    end
     if not PYTHON.hang then write_file(done_path, PYTHON.exit .. "\n") end
     return true
 end
@@ -456,6 +461,19 @@ check("cull, scorer fails: says so", printed("Assisted Culling: the scorer stopp
     or printed("Assisted Culling: failed. "), true)
 check("cull, scorer fails: the panel line is cleared", status_label.label, "")
 check("cull, scorer fails: the job bar is closed", jobs[1] and jobs[1].valid, false)
+-- a crash: the log ends in a traceback, cut to its tail in the toast
+PYTHON.log = "10:00:01 py: scoring: failed after 3s, peak memory 812 MB\nTraceback (most recent call last):\n  File \"score_images.py\", line 2063, in main\n"
+    .. string.rep("    frame = load(path)  # padding past the toast's 300 characters\n", 6)
+    .. "ValueError: cannot reshape array of size 0\n"
+click("Cull selection", { jpeg1, jpeg2 })
+local cull_row
+for i = 2, #panel[#panel - 1] do
+    local row = panel[#panel - 1][i]
+    if row.visible and row[1] and (row[1].label or ""):find("^Cull: ") then cull_row = row[1].label end
+end
+check("cull, scorer crashes: To check names the error, not a cut log tail", cull_row,
+    "Cull: failed: ValueError: cannot reshape array of size 0 (see the log)")
+PYTHON.log = nil
 PYTHON.exit = 0
 
 click("Cull selection", { jpeg4 })
@@ -662,6 +680,8 @@ local function clear_row()
     return { {}, {} }
 end
 check("To check: the cancelled clear shows in the box", to_check.visible, true)
+check("To check: no ratings back, the line names no log fragment",
+    (read_file(CHECKS_FILE) or ""):find("Cull\tno ratings came back from the scorer (see the log)\t\n", 1, true) ~= nil, true)
 check("To check: the row names the action and the count",
     clear_row()[1].label, "Clear: clear cancelled: 2 photos not reached keep their tags")
 check("To check: the item is saved for a restart",

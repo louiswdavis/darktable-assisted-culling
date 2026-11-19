@@ -45,6 +45,7 @@ ok   cull, subject tracking: no Lua error
 ok   cull, scorer fails: says so
 ok   cull, scorer fails: the panel line is cleared
 ok   cull, scorer fails: the job bar is closed
+ok   cull, scorer crashes: To check names the error, not a cut log tail
 ok   cull, all locked: explains
 ok   cull, collapsed group: the hidden member is still selected at the end
 ok   cull: both frames are rated
@@ -91,6 +92,7 @@ ok   clear, cancelled: the message counts both
 ok   clear, cancelled: the panel line is cleared
 ok   To check sits above the progress line, outside the folding pages
 ok   To check: the cancelled clear shows in the box
+ok   To check: no ratings back, the line names no log fragment
 ok   To check: the row names the action and the count
 ok   To check: the item is saved for a restart
 ok   To check: Select selects the photos not reached
