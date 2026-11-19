@@ -78,6 +78,7 @@ with tempfile.TemporaryDirectory() as tmp:
         f"B,b2.jpg,2,3,600,2,no,,Why|Graded,not kept,{shoot},Graded",
         f"B,b3.jpg,3,3,500,1,no,,Why|Graded,not kept,{shoot},Graded",
         f"C,c1.jpg,1,1,500,3,yes,,Why|Keeper,kept,{os.path.join(tmp, 'elsewhere')},Keeper",
+        f"C,c2.jpg,,1,,leave,no,,,left alone: couldn't read the file (boom),{os.path.join(tmp, 'elsewhere')},",
     ]) + "\n")
 
     frames = E.read_report(report, "subject_focus")

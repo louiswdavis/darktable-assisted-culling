@@ -277,7 +277,8 @@ def read_report(path: str, sharp_mode: str, suggest: bool = False) -> list:
                    if c not in (reader.fieldnames or [])]
         if missing:
             sys.exit(f"{path} lacks the columns {missing}: pass culling's last-run.csv")
-        return [frame_of(row, sharp_mode) for row in reader if row.get("file")]
+        # a frame the run couldn't read has a blank score: there is nothing to replay
+        return [frame_of(row, sharp_mode) for row in reader if row.get("file") and row.get("score", "x") != ""]
 
 
 def settings_of(choice: dict) -> Namespace:

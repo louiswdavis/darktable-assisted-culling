@@ -205,7 +205,7 @@ No published CPU timings exist for the newer models, so measure first.
 ## Smaller known gaps
 
 From the audits:
-- **N1:** report "N allowed" from the manifest's burst size, not from the setting
-- **N2:** match frames by folder + file stem, so two folders with the same file name don't collide
-- **P2:** a frame whose prescore failed gets its own row in the report, not a silent skip
+- **N1 (built):** `report_rows` takes "N allowed" from the manifest's burst size
+- **N2 (built):** the Lua report lookup and `eval_culling.py` match frames by folder + file stem
+- **P2 (built):** a frame stage A or stage C couldn't decode gets its own report row ("left alone: couldn't read the file (…)", rank and score blank); `eval_culling.py` skips those rows
 - **Tag rename parity:** culling's tag rename should go through `plugin_common.lua` like the others

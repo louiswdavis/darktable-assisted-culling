@@ -1807,47 +1807,71 @@ function M.clear_marks(images)
         return
     end
 
-    local total, cleared, failed = #images, 0, 0
+    local total, cleared, failed, writes = #images, 0, 0, 0
+    local write_s, wait_s, pause_s = 0, 0, 0
     local diag_tags = {}
+    local job = dt.gui.create_job(_("Assisted Culling: clear culling marks"), true,
+        function(cancelled_job) cancelled_job.valid = false end)
+    local started = os.time()
     local i = 1
+    -- Each tag write makes darktable rebuild its tagging lists (about 100ms). An image with
+    -- writes ends its slice; the panel line waits for darktable to catch up, then the pause
+    -- leaves it as long again, so the backlog can't grow over thousands of images.
     local ok, err = pcall(function()
-        while i <= total do
+        while i <= total and job.valid do
             local budget = STAGE2_WRITE_BUDGET
             local slice_start = os.clock()
             while i <= total and budget > 0 do
                 local img = images[i]
                 local ok_one, res = pcall(function()
                     local have = tags_of(img)
-                    local writes = 0
+                    local img_writes = 0
                     for _, ft in ipairs(found) do
-                        if have[ft.name] then tags.detach(ft.tag, img); writes = writes + 1 end
+                        if have[ft.name] then tags.detach(ft.tag, img); img_writes = img_writes + 1 end
                     end
                     local _, detach = M.diag_tag_changes(have, "")
                     for _, name in ipairs(detach) do
                         diag_tags[name] = diag_tags[name] or tags.find(name)
-                        tags.detach(diag_tags[name], img); writes = writes + 1
+                        tags.detach(diag_tags[name], img); img_writes = img_writes + 1
                     end
-                    return writes
+                    return img_writes
                 end)
-                if ok_one then
-                    if res > 0 then cleared = cleared + 1 end
-                    budget = budget - math.max(1, res)
-                else
+                if not ok_one then
                     failed = failed + 1
                     budget = budget - 1
                     log(C.image_label(img) .. ": clearing marks failed: " .. tostring(res))
+                elseif res > 0 then
+                    cleared, writes, budget = cleared + 1, writes + res, 0
+                else
+                    budget = budget - 1
                 end
                 i = i + 1
             end
-            show_status(string.format("clearing marks %d / %d", i - 1, total))
-            dt.control.sleep(math.max(STAGE2_SLEEP_MIN_MS,
-                math.min(STAGE2_SLEEP_MAX_MS, math.floor((os.clock() - slice_start) * 1000))))
+            write_s = write_s + os.clock() - slice_start
+            job.percent = (i - 1) / total
+            local wait_start = os.clock()
+            show_status(string.format("clearing marks %d / %d%s", i - 1, total, fmt_eta(os.time() - started, i - 1, total)))
+            local waited_s = os.clock() - wait_start
+            local pause_ms = math.max(STAGE2_SLEEP_MIN_MS, math.min(STAGE2_SLEEP_MAX_MS, math.floor(waited_s * 1000)))
+            dt.control.sleep(pause_ms)
+            wait_s, pause_s = wait_s + waited_s, pause_s + pause_ms / 1000
         end
     end)
+    local cancelled = ok and i <= total
+    pcall(function() if job.valid then job.valid = false end end)
     show_status("")
     if not ok then notify_error("Assisted Culling: clearing marks failed: " .. tostring(err)); return end
-    dt.print(string.format("Assisted Culling: removed culling tags from %d of %d images%s. Star ratings were not changed.",
-        cleared, total, failed > 0 and (", " .. failed .. " couldn't be updated") or ""))
+    log(string.format("clear: timing: %d of %d images in %ds; %.1fs in tag writes, %.1fs waiting for darktable, %.1fs paused; %d tag writes%s",
+        i - 1, total, os.time() - started, write_s, wait_s, pause_s, writes, cancelled and ", stopped at the job bar" or ""))
+    local counts = failed > 0 and (", " .. failed .. " couldn't be updated") or ""
+    if cancelled then
+        say(string.format("Assisted Culling: clear cancelled. Removed culling tags from %d of %d images%s; %d not reached keep their tags.",
+            cleared, total, counts, total - i + 1))
+    else
+        say(string.format("Assisted Culling: removed culling tags from %d of %d images%s. Star ratings were not changed.",
+            cleared, total, counts))
+    end
+    flush_log()
 end
 
 -- Sets each image back to the rating it had before the first run that changed it
@@ -2224,7 +2248,7 @@ local function install_panel()
 
     clear_button = new_widget("button") {
         label = _("Clear culling marks"),
-        tooltip = _("Remove the Assisted Culling tags from the selected images. Star ratings and colour labels are not changed."),
+        tooltip = _("Remove the Assisted Culling tags from the selected images, with progress in the panel and a job bar you can cancel. Star ratings and colour labels are not changed."),
     }
 
     clear_button.clicked_callback = C.guarded_callback(guard, "button clear", function()

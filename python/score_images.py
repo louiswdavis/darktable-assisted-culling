@@ -1463,8 +1463,8 @@ REPORT_HEADER = ["burst", "file", "rank", "of", "score", "stars", "keeper", "fla
 
 
 def report_rows(manifest, result_rows, keepers_per_burst, direction_of=None, parts_of=None, reads_of=None,
-                judged_of=None, views_of=None, look_of=None) -> list:
-    """One row per scored frame, bursts in manifest order and frames best first, saying why it
+                judged_of=None, views_of=None, look_of=None, unread_of=None) -> list:
+    """One row per frame, bursts in manifest order and frames best first, saying why it
     was kept or not. stars is "leave" for a non-keeper the run left alone. reason is the
     frame's Why tag (WHY_REASONS); car is the car number the frame was pooled under, "" if none;
     direction is the burst's travel direction (left, right, unknown), "" without a detector.
@@ -1480,7 +1480,9 @@ def report_rows(manifest, result_rows, keepers_per_burst, direction_of=None, par
     eval_culling.py can replay --keep-angles and --motion-look. score, subject, subject_own,
     straightness, the read confidences and judge are not rounded: the replay compares them with
     the tiers, CLOSE_CALL_SHARE, NUMBER_READ_MIN_GAP, JUDGE_MIN_GAP and MOTION_LOOK_STRAIGHT as
-    the run did. The columns after direction are last so older readers of the columns keep working."""
+    the run did. The columns after direction are last so older readers of the columns keep working.
+    A frame whose file couldn't be read (unread_of, id → error) follows its burst's scored frames
+    with rank and score blank and stars "leave"."""
     file_of = {row[0]: row[1] for row in manifest}
     car_of = {row[0]: row[9] for row in manifest}
     by_burst = {}
@@ -1529,6 +1531,12 @@ def report_rows(manifest, result_rows, keepers_per_burst, direction_of=None, par
                         "" if img_id not in (judged_of or {}) else float(judged_of[img_id]),
                         "" if (views_of or {}).get(img_id) is None else views_of[img_id],
                         "yes" if img_id in (look_of or ()) else ""])
+        for img_id, path, row_burst, *_ in manifest:
+            if row_burst == burst_id and img_id in (unread_of or {}):
+                out.append([burst_id, os.path.basename(path), "", len(rows), "", "leave", "no", "", "",
+                            f"left alone: couldn't read the file ({unread_of[img_id]})", os.path.dirname(path), "",
+                            car_of.get(img_id, ""), (direction_of or {}).get(burst_id, ""), img_id]
+                           + [""] * (len(REPORT_HEADER) - 15))
     return out
 
 
@@ -1550,7 +1558,8 @@ def archive_report(report_path, archive_dir, keep):
         log(f"couldn't archive the report: {e}")
 
 
-def write_report(manifest, args, direction_of=None, parts_of=None, judged_of=None, views_of=None, look_of=None):
+def write_report(manifest, args, direction_of=None, parts_of=None, judged_of=None, views_of=None, look_of=None,
+                 unread_of=None):
     """Writes args.report (CSV, REPORT_HEADER) from the finished results file, then archives it
     when args.report_archive_dir is set; a failure is logged, never fatal, since the scores are
     already on their way back to darktable."""
@@ -1563,7 +1572,7 @@ def write_report(manifest, args, direction_of=None, parts_of=None, judged_of=Non
             w.writerows(report_rows(manifest, result_rows, lambda n: keepers_allowed(args.keep_mode, n),
                                     direction_of, parts_of,
                                     read_number_reads(getattr(args, "number_reads", ""), manifest)[0], judged_of,
-                                    views_of, look_of))
+                                    views_of, look_of, unread_of))
     except OSError as e:
         log(f"couldn't write the report {args.report}: {e}")
         return
@@ -1589,7 +1598,8 @@ def main(args):
             picks = getattr(args, "first_picks", 0)
             # with first picks darktable reads nothing until the picks are chosen from the whole run
             scoring = argparse.Namespace(**{**vars(args), "results": args.results + ".all"}) if picks else args
-            direction_of, parts_of, judged_of, views_of, look_of = score_manifest(manifest, scoring, cache, detections)
+            direction_of, parts_of, judged_of, views_of, look_of, unread_of = score_manifest(manifest, scoring, cache,
+                                                                                             detections)
             if picks:
                 with open(scoring.results, newline="", encoding="utf-8") as f:
                     result_rows = [row for row in csv.reader(f) if row]
@@ -1600,7 +1610,7 @@ def main(args):
                 log(f"first picks: {sum(row[4] == '1' for row in picked)} of "
                     f"{sum(row[4] == '1' for row in result_rows)} keepers rated (at most {picks}, one per burst)")
             if getattr(args, "report", ""):
-                write_report(manifest, args, direction_of, parts_of, judged_of, views_of, look_of)
+                write_report(manifest, args, direction_of, parts_of, judged_of, views_of, look_of, unread_of)
     finally:
         cache.close()
         detections.close()
@@ -1788,6 +1798,7 @@ def score_manifest(manifest, args, cache, detections):
     views_of = {}  # id → view of the car (burst_views), with a detector only, for the report
     look_of = set()  # ids that can keep for their motion look (finish_burst), with a detector only, for the report
     parts_of = {}  # id → (subject sharpness, class, straightness, crop[, own-size subject]), motion_aware only, for the report
+    unread_of = {}  # id → why the file couldn't be read; the frame has no result row, only a report row
     ladder_of = {}  # id → scale_ladder until its burst is finished, motion_aware only
     tiles_of = {}  # id → car_tiles from the frame's worker until its burst is finished, with the judge only
     det_hits = det_fresh = 0
@@ -1844,6 +1855,7 @@ def score_manifest(manifest, args, cache, detections):
                 known = None
                 if sam and not mask_path and image_id in stage_a_failed:
                     # stage A couldn't decode it (logged there); a second decode would fail too
+                    unread_of[image_id] = "stage A couldn't decode it"
                     processed_count += 1
                     burst_completion[burst_id] += 1
                     continue
@@ -1900,6 +1912,7 @@ def score_manifest(manifest, args, cache, detections):
 
             if err:
                 log(f"skip {image_id} ({filepath}): {err}")
+                unread_of[image_id] = err
             else:
                 store(filepath, sharp, flags, image_id, mask_path, edited, burst_id)
                 if motion:
@@ -1957,7 +1970,7 @@ def score_manifest(manifest, args, cache, detections):
                                       motion_look=straightness_of, slope=slope, creative=creative)
         log(f"{note}, keepers {', '.join(keepers) or 'none'}"
             + (f", {len(no_vehicle)} left alone (no vehicle)" if no_vehicle else ""))
-    return direction_of, parts_of, judged_of, views_of, look_of
+    return direction_of, parts_of, judged_of, views_of, look_of, unread_of
 
 
 if __name__ == "__main__":

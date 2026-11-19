@@ -623,12 +623,31 @@ check("clear: no culling tags left", #jpeg1.tags + #jpeg2.tags, 0)
 check("clear: the end message", last_print(),
     "Assisted Culling: removed culling tags from 1 of 3 images. Star ratings were not changed.")
 check("clear: the hinter is never used", hinter_calls, 0)
+check("clear: one job bar, closed at the end", #jobs .. " " .. tostring(jobs[1] and jobs[1].valid), "1 false")
+check("clear: the log has the timing line",
+    (read_file(ROOT .. "/config/assisted_culling.log") or ""):find(
+        "clear: timing: 3 of 3 images in %d+s; [%d.]+s in tag writes, [%d.]+s waiting for darktable, [%d.]+s paused; %d+ tag writes\n") ~= nil, true)
 check("clear: no Lua error", lua_errors(), nil)
 
 dt.tags.attach(dt.tags.create("Assisted Culling|Keeper"), jpeg1)
 selection_sets = 0
 click("Clear culling marks", { jpeg1, jpeg2 })
 check("clear: the selection is never changed", selection_sets, 0)
+
+-- an image with tags ends its slice, so the job bar's x stops the run after it
+local keeper_tag = dt.tags.create("Assisted Culling|Keeper")
+dt.tags.attach(keeper_tag, jpeg1)
+dt.tags.attach(keeper_tag, jpeg2)
+on_sleep = function() if jobs[1] and jobs[1].valid then jobs[1].valid = false end end
+click("Clear culling marks", { jpeg1, jpeg2, jpeg3 })
+on_sleep = nil
+check("clear, cancelled: the first image is cleared, the next keeps its tag",
+    tostring(has_tag(jpeg1, "Assisted Culling|Keeper")) .. " " .. tostring(has_tag(jpeg2, "Assisted Culling|Keeper")), "false true")
+check("clear, cancelled: the message counts both", last_print(),
+    "Assisted Culling: clear cancelled. Removed culling tags from 1 of 3 images; 2 not reached keep their tags.")
+check("clear, cancelled: the panel line is cleared", status_label.label, "")
+click("Clear culling marks", { jpeg2 })
+check("clear, after a cancel: the next clear runs", has_tag(jpeg2, "Assisted Culling|Keeper"), false)
 
 -- Restore previous ratings ----------------------------------------------------------
 local PREVIOUS_RATINGS = ROOT .. "/config/assisted_culling.previous-ratings.csv"

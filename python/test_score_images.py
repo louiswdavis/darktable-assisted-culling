@@ -695,6 +695,14 @@ def run_tests():
           [r[0] for r in res_rows if r[4] == "1"][0] in shortlisted_ids, True)
     check("stage C: no masks and no detector tags only the fallback (plus the Why reason)",
           {t for r in res_rows for t in r[6].split(";") if not t.startswith("Why|")}, {"Scored|Subject bias"})
+    bad_report = os.path.join(tmp, "bad_report.csv")
+    S.main(Namespace(manifest=man_bad, results=os.path.join(tmp, "res_bad.csv"), progress="",
+                     emit_saliency_points=False, rank_mode="universal", sharp_mode="sam_subject",
+                     exp_mode="whole_frame", keep_mode="single_best", nk_mode="leave", fast_jpeg=False,
+                     prescores=pre_bad, report=bad_report))
+    check("stage C: a frame stage A couldn't decode gets a report row saying so",
+          [(r[14], r[1], r[9]) for r in list(_csv.reader(open(bad_report)))[1:] if r[14] == "7"],
+          [("7", "gone.jpg", "left alone: couldn't read the file (stage A couldn't decode it)")])
 
     # score cache: plain modes ------------------------------------------------
     import sqlite3 as _sq
@@ -744,6 +752,16 @@ def run_tests():
     check("report: a real run writes the header and one cell per column, view and motion look blank without a detector",
           (written[0], written[0][-2:], [(len(r), r[-2:]) for r in written[1:]]),
           (S.REPORT_HEADER, ["view", "motion_look"], [(len(S.REPORT_HEADER), ["", ""])] * 2))
+    man_gone = os.path.join(tmp, "plain_gone.csv")
+    with open(man_gone, "w", newline="") as f:
+        _csv.writer(f).writerows([["0", frames[0], "0"], ["9", os.path.join(tmp, "gone.jpg"), "0"]])
+    gone_report = os.path.join(tmp, "gone_report.csv")
+    plain_run(manifest=man_gone, results=os.path.join(tmp, "gone_res.csv"), report=gone_report)
+    gone_rows = list(_csv.reader(open(gone_report)))[1:]
+    check("report: a frame whose decode failed gets a row after the scored frame, rank and score blank",
+          [(r[14], r[2], r[4], r[5], r[9].split(" (")[0]) for r in gone_rows],
+          [("0", "1", gone_rows[0][4], gone_rows[0][5], gone_rows[0][9].split(" (")[0]),
+           ("9", "", "", "leave", "left alone: couldn't read the file")])
 
     # ticket 77: the judge reads the tiles its worker cut; the parent decodes only for a cached score
     judge_p, judge_cache, judge_rep = (os.path.join(tmp, n) for n in ("judge.onnx", "judge.sqlite", "judge_report.csv"))
@@ -1189,6 +1207,11 @@ def run_tests():
     unread_manifest = rep_manifest + [("5", "/p/e.jpg", "1", "", "", "", 0.0, 0.0, 0.0, "")]
     unread = S.report_rows(unread_manifest, rep_results, lambda n: n)
     check("report: the allowance counts unreadable frames", unread[2][9], "kept: rank 1 of 1, 2 allowed")
+    told = S.report_rows(unread_manifest, rep_results, lambda n: n, unread_of={"5": "boom"})
+    check("report: an unreadable frame gets its own row after its burst's scored frames",
+          [(r[14], r[1], r[2], r[3], r[4], r[5], r[6], r[9], len(r)) for r in told if r[0] == "1"],
+          [(told[2][14], told[2][1], 1, 1, told[2][4], told[2][5], "yes", told[2][9], len(S.REPORT_HEADER)),
+           ("5", "e.jpg", "", 1, "", "leave", "no", "left alone: couldn't read the file (boom)", len(S.REPORT_HEADER))])
 
     with tempfile.TemporaryDirectory() as arch_tmp:
         arch_src = os.path.join(arch_tmp, "last-run.csv")

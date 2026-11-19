@@ -82,8 +82,14 @@ ok   clear: the keeper tag is gone
 ok   clear: no culling tags left
 ok   clear: the end message
 ok   clear: the hinter is never used
+ok   clear: one job bar, closed at the end
+ok   clear: the log has the timing line
 ok   clear: no Lua error
 ok   clear: the selection is never changed
+ok   clear, cancelled: the first image is cleared, the next keeps its tag
+ok   clear, cancelled: the message counts both
+ok   clear, cancelled: the panel line is cleared
+ok   clear, after a cancel: the next clear runs
 ok   restore, nothing selected: asks for a selection
 ok   restore, no run yet: says so
 ok   restore: the run rated both scored frames
