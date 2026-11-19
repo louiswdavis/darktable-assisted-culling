@@ -40,6 +40,57 @@ Own ideas (round 5, not researched or tested), cheapest first:
   "spray / dust plume" → `Moment|…` tags and a tie-breaker inside a burst. Shares the SigLIP 2
   model with view-aware ranking. Unproven; effort M.
 
+## How much of the car is missing, and why
+
+Built: `cut_off` and `blocked` (`score_images.framing_flags`), both yes/no. `blocked` only
+counts a larger car box. Not measured: how much is missing, non-car occluders (people, posts,
+fences, dust, signs), and whether an edge or an object hides the car when the box does not
+touch an edge. Research: `docs/superpowers/research/2026-11-19-framing-occlusion.md`. Best first:
+1. **Cut-off share.** The burst's frames of the same view (`burst_views`) give the car's full
+   size; visible share = this frame's box / the expected box on the touching edge. A graded
+   penalty instead of the flag. No model. Effort S.
+2. **Non-car occluder from the SAM mask.** Mask area / box area against the burst's median for
+   the view; a drop away from any edge means something is in front. Masks exist only for the
+   subject-mode shortlist. Effort S–M.
+3. **Occluder share from depth.** Depth Anything V2 Small (Apache-2.0, ONNX; Base and larger
+   are non-commercial): share of box pixels clearly nearer than the car's median depth. Works on
+   every frame and any object. One paper finds depth less reliable than occlusion cues for
+   ordering, so trial it first. Windows CPU time unknown. Effort M.
+4. **Edge vs object as separate tags.** From 1 and 2: box on the edge and a larger expected size
+   → `Why|Cut off`; a gap inside the box → `Why|Blocked`. Each carries its share. Effort S after 1–2.
+5. **Name the occluder.** Grounding DINO or OWLv2 (both Apache-2.0) for person, fence, pole.
+   Heavy on CPU; only if 2–3 fall short. Effort L.
+
+## Why a frame is soft, and dirty lenses
+
+Research: `docs/superpowers/research/2026-11-19-new-signals-across-plugins.md` (sections 1–2).
+- **Blur type.** Today a soft frame gets one verdict. Split it: defocus (edges soft in every
+  direction) vs motion (soft along one direction) on the car box, from handcrafted features
+  (singular-value blur metric, gradient distribution; TikhoFormer reports these match deep models
+  on this task). Shake = the whole frame, car included, streaks one way at a slow shutter; a missed
+  pan = background sharp, car streaked. Tags `Why|Missed focus`, `Why|Motion blur`, `Why|Shake`.
+  Builds on `motion_tiles`. Effort M.
+- **Drops or mud on the lens.** No detector with released weights was found. Own idea: a blob
+  that stays in the same place across a burst while everything else moves (panning moves the
+  scene). Tag `Why|Dirty lens` on the burst, so the user knows to check every frame. Effort M;
+  needs a rainy shoot to test.
+
+## Deliberate styles are not mistakes
+
+Research: `docs/superpowers/research/2026-11-19-motorsport-styles.md`. Zoom bursts, intentional
+camera movement (ICM), light trails, tight detail crops and wide "small car in a landscape" frames
+are deliberate, but today read as soft, cut off or far behind. Best first:
+1. **Creative burst exemption.** When every frame in a burst is streaked across the whole frame
+   (zoom burst: radial; ICM: one direction at 1/8 s or slower) or has no box at a long shutter
+   (light trails), tag `Style|…` on the burst and skip the soft, cut-off and far-behind rejects
+   for it. Uses `motion_tiles` and EXIF shutter. Effort M.
+2. **Fast first picks.** A mode that rates only the first N keepers per session in time order,
+   for a "15 edited frames within 90 minutes" delivery; the full cull runs later. Effort S.
+3. **Frozen wheels on a flat pass.** A side-view frame with a sharp car and sharp background at
+   a fast shutter is a weaker action frame (guides: frozen wheels kill the sense of speed). Small
+   tie-break inside a burst only, never a reject; skipped for airborne or drifting cars (needs
+   the peak-moment tags). Effort S–M.
+
 ## Keep separate scores until the rating step
 
 Adobe's Assisted Culling reports focus, eyes, exposure and misfire as separate signals. Keep culling's scores (sharpness, exposure, subject size, number readable) as separate fields in the manifest and `Why|` tags, and combine them only when picking stars. That lets the strictness slider and a learned ranker weight them without re-scoring.
