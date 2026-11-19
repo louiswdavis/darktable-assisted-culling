@@ -469,7 +469,7 @@ click("Cull selection", { jpeg1, jpeg2 })
 local cull_row
 for i = 2, #panel[#panel - 1] do
     local row = panel[#panel - 1][i]
-    if row.visible and row[1] and (row[1].label or ""):find("^Cull: ") then cull_row = row[1].label end
+    if row.visible and row[1] and (row[1].label or ""):find("^Cull: ") then cull_row = row[1].label:gsub("\n", " ") end
 end
 check("cull, scorer crashes: To check names the error, not a cut log tail", cull_row,
     "Cull: failed: ValueError: cannot reshape array of size 0 (see the log)")
@@ -681,11 +681,11 @@ local function clear_row()
 end
 check("To check: the cancelled clear shows in the box", to_check.visible, true)
 check("To check: no ratings back, the line names no log fragment",
-    (read_file(CHECKS_FILE) or ""):find("Cull\tno ratings came back from the scorer (see the log)\t\n", 1, true) ~= nil, true)
+    (read_file(CHECKS_FILE) or ""):find("Cull\tno ratings came back from the scorer (see the log)\t\t\t\t", 1, true) ~= nil, true)
 check("To check: the row names the action and the count",
-    clear_row()[1].label, "Clear: clear cancelled: 2 photos not reached keep their tags")
+    (clear_row()[1].label or ""):gsub("\n", " "), "Clear: clear cancelled: 2 photos not reached keep their tags")
 check("To check: the item is saved for a restart",
-    (read_file(CHECKS_FILE) or ""):find("Clear\tclear cancelled: 2 photos not reached keep their tags\t2,3\n", 1, true) ~= nil, true)
+    (read_file(CHECKS_FILE) or ""):find("Clear\tclear cancelled: 2 photos not reached keep their tags\t2,3\t", 1, true) ~= nil, true)
 selection_sets = 0
 ;(button(clear_row(), "Select") or { clicked_callback = function() end }).clicked_callback()
 check("To check: Select selects the photos not reached", selection_sets .. " " .. #dt.gui.action_images, "1 2")

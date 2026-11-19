@@ -1395,19 +1395,27 @@ end
 -- To check ---------------------------------------------------------------------
 -- What runs leave for the user to look at (failures, photos a run flagged), in a box above the
 -- progress line, so a toast that went by unseen isn't lost. A run's items stay until the next run
--- of the same action or Clear. They are saved to `path`, one item per line
--- "action<TAB>text<TAB>image id,image id[<TAB>fix]", so a restart keeps them.
+-- of the same action or Clear. The newest run's items come first; older ones sit below an
+-- "Earlier runs" line, as they may not hold after it. They are saved to `path`, one item per line
+-- "action<TAB>text<TAB>image id,image id[<TAB>fix[<TAB>detail<US>detail[<TAB>run]]]" (US = \31,
+-- run = os.time() when its run began), so a restart keeps them.
 C.ALERT_ROWS = 6
+-- characters per line of an item: darktable's label has no word wrap, so show() breaks the lines
+C.ALERT_WRAP = 44
 
--- [{ action, text, ids, fix }] from the saved file's text; fix is "" on a line without one.
+-- [{ action, text, ids, fix, details, run }] from the saved file's text; fix is "", details {} and
+-- run 0 on a line without them.
 function C.alerts_parse(text)
     local items = {}
     for line in (text or ""):gmatch("[^\r\n]+") do
-        local action, item, ids_text, fix = line:match("^([^\t]*)\t([^\t]*)\t?([^\t]*)\t?([^\t]*)$")
+        local action, item, ids_text, fix, details_text, run =
+            line:match("^([^\t]*)\t([^\t]*)\t?([^\t]*)\t?([^\t]*)\t?([^\t]*)\t?([^\t]*)$")
         if action then
-            local ids = {}
+            local ids, details = {}, {}
             for id in ids_text:gmatch("%d+") do ids[#ids + 1] = tonumber(id) end
-            items[#items + 1] = { action = action, text = item, ids = ids, fix = fix }
+            for detail in details_text:gmatch("[^\31]+") do details[#details + 1] = detail end
+            items[#items + 1] = { action = action, text = item, ids = ids, fix = fix, details = details,
+                                  run = tonumber(run) or 0 }
         end
     end
     return items
@@ -1417,23 +1425,29 @@ function C.alerts_format(items)
     local lines = {}
     for _, item in ipairs(items) do
         local fields = {}
-        for i, field in ipairs({ item.action, item.text, item.fix or "" }) do fields[i] = field:gsub("[\t\r\n]+", " ") end
-        lines[#lines + 1] = fields[1] .. "\t" .. fields[2] .. "\t" .. table.concat(item.ids, ",")
-            .. (fields[3] ~= "" and "\t" .. fields[3] or "")
+        local details = table.concat(item.details or {}, "\31")
+        local run = (item.run or 0) > 0 and tostring(item.run) or ""
+        for i, field in ipairs({ item.action, item.text, table.concat(item.ids, ","), item.fix or "", details, run }) do
+            fields[i] = field:gsub("[\t\r\n]+", " ")
+        end
+        -- trailing empty fields are left off, so an item without them saves as an older line did
+        while #fields > 3 and fields[#fields] == "" do fields[#fields] = nil end
+        lines[#lines + 1] = table.concat(fields, "\t")
     end
     return #lines > 0 and table.concat(lines, "\n") .. "\n" or ""
 end
 
 -- alerts.widget is the box; alerts.begin(action) starts a run of `action`, dropping its earlier
--- items; alerts.add(text, ids, fix) adds an item to the run begun last, with a Select button when
--- `ids` (image ids) has any, and a Fix button when `fix` names a function in `fixes`. Fix removes
--- the item, then calls fixes[fix](images). `fixes` may be filled after this call. `new_widget` is
+-- items; its items go above every older run's; alerts.add(text, ids, fix, details) adds an item to the run begun last, with a Select button
+-- when `ids` (image ids) has any, and a Fix button when `fix` ("key" or "key:arg") names a function in `fixes`. `details`:
+-- one line per photo or burst, "<name>: <why it is listed>", shown read-only under the item's text. Fix removes
+-- the item, then calls fixes[key](images, arg). `fixes` may be filled after this call. `new_widget` is
 -- the plugin's widget maker; `log` gets save failures.
 function C.alerts_box(new_widget, path, log, fixes)
     fixes = fixes or {}
     local alerts = { items = C.alerts_parse(C.read_file_or_tmp(path)) }
-    local current = ""
-    local header = new_widget("label") { label = "To check", halign = "start" }
+    local current, current_run = "", alerts.items[1] and alerts.items[1].run or 0
+    local header = new_widget("section_label") { label = "To check" }
     local rows, more = {}, new_widget("label") { label = "", halign = "start", visible = false }
     local save
     local function images_of(ids)
@@ -1444,8 +1458,22 @@ function C.alerts_box(new_widget, path, log, fixes)
         end
         return images
     end
+    -- `text` broken into lines of C.ALERT_WRAP characters at most; lines after the first start with `indent`
+    local function wrap(text, indent)
+        local lines, line = {}, ""
+        for word in text:gmatch("%S+") do
+            if line ~= "" and #line + 1 + #word > C.ALERT_WRAP then
+                lines[#lines + 1], line = line, indent .. word
+            else
+                line = line == "" and word or line .. " " .. word
+            end
+        end
+        lines[#lines + 1] = line
+        return table.concat(lines, "\n")
+    end
     for i = 1, C.ALERT_ROWS do
-        local row = { label = new_widget("label") { label = "", halign = "start", ellipsize = "end" } }
+        local row = { label = new_widget("label") { label = "", halign = "start" },
+                      details = new_widget("text_view") { editable = false, text = "" } }
         row.button = new_widget("button") {
             label = "Select",
             tooltip = "Select these photos in the lighttable",
@@ -1460,23 +1488,35 @@ function C.alerts_box(new_widget, path, log, fixes)
                     if other == item then table.remove(alerts.items, k) break end
                 end
                 save()
-                fixes[item.fix](images_of(item.ids))
+                local key, arg = item.fix:match("^([^:]*):?(.*)$")
+                fixes[key](images_of(item.ids), arg)
             end,
         }
-        row.box = new_widget("box") { orientation = "horizontal", row.label, row.button, row.fix }
+        -- the whole text above its buttons, so a long item is read in full
+        -- under the newest run's last item when older items follow
+        row.earlier = new_widget("label") { label = "", halign = "start", visible = false }
+        row.box = new_widget("box") { orientation = "vertical", row.label, row.details,
+            new_widget("box") { orientation = "horizontal", row.button, row.fix }, row.earlier }
         rows[i] = row
     end
     local function show()
         local items = alerts.items
+        local newest = items[1] and items[1].run
         for i, row in ipairs(rows) do
             local item = items[i]
             row.box.visible = item ~= nil
             if item then
-                row.label.label = (item.action ~= "" and item.action .. ": " or "") .. item.text
-                row.label.tooltip = row.label.label
+                row.label.label = wrap((item.action ~= "" and item.action .. ": " or "") .. item.text, "")
+                local lines = {}
+                for _, detail in ipairs(item.details) do lines[#lines + 1] = wrap("• " .. detail, "    ") end
+                row.details.text = table.concat(lines, "\n")
+                row.details.visible = #lines > 0
                 row.item = item
                 row.button.visible = #item.ids > 0
-                row.fix.visible = #item.ids > 0 and fixes[item.fix] ~= nil
+                row.fix.visible = #item.ids > 0 and fixes[item.fix:match("^[^:]*")] ~= nil
+                local next_item = items[i + 1]
+                row.earlier.visible = item.run == newest and next_item ~= nil and next_item.run ~= newest
+                row.earlier.label = string.format("Earlier runs (before %s): may not hold any more", os.date("%H:%M", newest))
             end
         end
         more.visible = #items > #rows
@@ -1489,7 +1529,8 @@ function C.alerts_box(new_widget, path, log, fixes)
         show()
     end
     function alerts.begin(action)
-        current = action
+        -- one higher than the last at least, so two runs in one second stay apart
+        current, current_run = action, math.max(os.time(), current_run + 1)
         local kept = {}
         for _, item in ipairs(alerts.items) do
             if item.action ~= action then kept[#kept + 1] = item end
@@ -1497,8 +1538,12 @@ function C.alerts_box(new_widget, path, log, fixes)
         alerts.items = kept
         save()
     end
-    function alerts.add(text, ids, fix)
-        alerts.items[#alerts.items + 1] = { action = current, text = text, ids = ids or {}, fix = fix or "" }
+    function alerts.add(text, ids, fix, details)
+        -- after this run's items, above every older run's
+        local at = 1
+        while alerts.items[at] and alerts.items[at].run == current_run do at = at + 1 end
+        table.insert(alerts.items, at, { action = current, text = text, ids = ids or {}, fix = fix or "",
+                                         details = details or {}, run = current_run })
         save()
     end
     local clear = new_widget("button") {

@@ -453,7 +453,7 @@ Two headings: **explain the last run (changes nothing)** over the first two butt
 
 ### To check
 
-A box above the progress line lists what a run leaves for you to look at, so a toast that went by unseen isn't lost. It shows only when it has items. Each line reads `<action>: <what happened>`:
+A box headed **To check**, above the progress line, lists what a run leaves for you to look at, so a toast that went by unseen isn't lost. It shows only when it has items. Each item reads `<action>: <what happened>` in full, wrapped over as many lines as it needs, with its buttons below. The newest run's items sit on top. Older runs' items move below an *Earlier runs (before HH:MM): may not hold any more* line, since a later run can have settled them; they stay until you remove them, so a Fix still works. It lists:
 
 - **Cull**: errors, subject tracking that outlined only some frames, a cancel after some images were rated, photos with a guessed subject, photos in close calls, images that couldn't be updated or read, detail tags that failed or were stopped.
 - **Clear**, **Restore ratings**, **Reset ratings**: a cancel that left photos not reached, and images that couldn't be changed.
