@@ -901,6 +901,16 @@ function C.path_exists(path)
     return os.rename(path, path) and true or false
 end
 
+-- Copies folder `from` with everything under it to `to`, which must not exist yet.
+function C.copy_tree(from, to)
+    if C.IS_WINDOWS then
+        local _ok, _how, code = os.execute('robocopy ' .. C.shell_quote((from:gsub("/", "\\"))) .. ' '
+            .. C.shell_quote((to:gsub("/", "\\"))) .. ' /E /NFL /NDL /NJH /NJS /NP >nul')
+        return code ~= nil and code < 8 -- robocopy: 0-7 success, 8+ failure
+    end
+    return os.execute("cp -R " .. C.shell_quote(from) .. " " .. C.shell_quote(to)) and true or false
+end
+
 -- Presets as <dir>/<name>.json. The folder is made on first use.
 function C.preset_file_store(dir)
     local windows = C.IS_WINDOWS
@@ -936,9 +946,12 @@ end
 --       allow_store_new = bool }
 -- Optional store.copy_note(from, to) -> confirm text | nil, why and store.copy(from, to) -> ok, err:
 -- store new then asks first, and copies the selected preset's store (e.g. a folder) before writing.
--- Optional store.export_files(name) -> { { name, path }, ... } adds files to an exported bundle, and
--- store.import_files(name, bundle_dir, files) -> ok, err puts them in place before import writes
--- the preset.
+-- Optional store.export_files(name, picked) -> { { name, path | dir }, ... } adds files (path) or
+-- folders (dir, copied whole) to an exported bundle, and store.import_files(name, bundle_dir, files)
+-- -> ok, err puts them in place before import writes the preset. Optional store.export_options =
+-- { { key, label, tooltip }, ... } adds a tick box per key to the export box, unticked each time it
+-- opens; picked[key] is true for the ticked ones. Optional store.export_label(name, key) -> text
+-- relabels a box as the export box opens (e.g. with its size).
 -- Returns ctl: ctl.widget (the box to put first in the panel), ctl.widgets, ctl.select(name),
 -- ctl.refresh(), ctl.reload(), ctl.check_dirty(), ctl.name(), ctl.saved (settings last loaded or saved).
 function C.make_preset_controls(o)
@@ -948,6 +961,7 @@ function C.make_preset_controls(o)
     local picker, menu, name_entry, name_box, confirm_label, confirm_box, dirty_label
     local confirm_button, confirm_action, delete_clicked
     local export_box, export_chooser, import_box, import_chooser
+    local export_checks = {} -- key -> check_button, one per store.export_options entry
 
     local function say(msg) dt.print(o.prefix .. ": " .. msg) end
 
@@ -1046,7 +1060,14 @@ function C.make_preset_controls(o)
         if current ~= "template" then
             add("rename preset…", function() ask_name("rename") end)
             add("delete preset", ask_delete)
-            add("export preset…", function() hide_boxes(); export_box.visible = true end)
+            add("export preset…", function()
+                hide_boxes()
+                for _, opt in ipairs(o.store.export_options or {}) do
+                    export_checks[opt.key].value = false
+                    export_checks[opt.key].label = o.store.export_label and o.store.export_label(current, opt.key) or opt.label
+                end
+                export_box.visible = true
+            end)
         end
         if o.allow_store_new then add("import preset…", function() hide_boxes(); import_box.visible = true end) end
         set_entries(menu, items)
@@ -1169,16 +1190,25 @@ function C.make_preset_controls(o)
         local bundle = folder .. "/" .. current .. ".atpreset"
         if C.path_exists(bundle) then say(bundle .. " already exists: delete or rename it first"); return end
         C.make_dir(bundle)
+        local picked = {}
+        for key, check in pairs(export_checks) do picked[key] = check.value and true or nil end
         local files = { { name = "preset.json", text = text } }
-        for _, f in ipairs(o.store.export_files and o.store.export_files(current) or {}) do
-            local body = C.read_file(f.path)
-            if not body then say("couldn't read " .. f.path); return end
-            files[#files + 1] = { name = f.name, text = body }
+        for _, f in ipairs(o.store.export_files and o.store.export_files(current, picked) or {}) do
+            if f.dir then
+                files[#files + 1] = f
+            else
+                local body = C.read_file(f.path)
+                if not body then say("couldn't read " .. f.path); return end
+                files[#files + 1] = { name = f.name, text = body }
+            end
         end
         local names = {}
         for _, f in ipairs(files) do
             names[#names + 1] = f.name
-            if not C.write_file_atomic(bundle .. "/" .. f.name, f.text) then
+            local ok
+            if f.dir then ok = C.copy_tree(f.dir, bundle .. "/" .. f.name)
+            else ok = C.write_file_atomic(bundle .. "/" .. f.name, f.text) end
+            if not ok then
                 say("couldn't write " .. bundle .. "/" .. f.name)
                 return
             end
@@ -1282,17 +1312,22 @@ function C.make_preset_controls(o)
         is_directory = true,
         tooltip = "The preset is written to a <name>.atpreset folder inside this one.",
     }
-    export_box = dt.new_widget("box") {
+    local export_parts = {
         orientation = "vertical",
         visible = false,
         dt.new_widget("label") { label = "export into folder", halign = "start" },
         export_chooser,
-        dt.new_widget("box") {
-            orientation = "horizontal",
-            dt.new_widget("button") { label = "Export", clicked_callback = export_clicked },
-            dt.new_widget("button") { label = "Cancel", clicked_callback = function() export_box.visible = false end },
-        },
     }
+    for _, opt in ipairs(o.store.export_options or {}) do
+        export_checks[opt.key] = dt.new_widget("check_button") { label = opt.label, tooltip = opt.tooltip, value = false }
+        export_parts[#export_parts + 1] = export_checks[opt.key]
+    end
+    export_parts[#export_parts + 1] = dt.new_widget("box") {
+        orientation = "horizontal",
+        dt.new_widget("button") { label = "Export", clicked_callback = export_clicked },
+        dt.new_widget("button") { label = "Cancel", clicked_callback = function() export_box.visible = false end },
+    }
+    export_box = dt.new_widget("box")(export_parts)
     import_chooser = dt.new_widget("file_chooser_button") {
         title = "preset bundle (.atpreset folder)",
         is_directory = true,
