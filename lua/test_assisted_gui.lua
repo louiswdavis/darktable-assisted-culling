@@ -382,10 +382,17 @@ set_argument_checks(true)
 local sharp_combo = combo(panel, "sharpness")
 sharp_combo.selected = 7 -- motorsport (subject & motion)
 sharp_combo.changed_callback(sharp_combo)
+local first_picks_combo = combo(panel, "first picks")
+first_picks_combo.selected = 3 -- 15
+first_picks_combo.changed_callback(first_picks_combo)
 jpeg1.rating, jpeg2.rating = 0, 0
 click("Cull selection", { jpeg1, jpeg2 })
+first_picks_combo.selected = 1
+first_picks_combo.changed_callback(first_picks_combo)
 check("cull, detector installed: the scorer ran once", #PYTHON.runs, 1)
 local detector_run = PYTHON.runs[1] or { argv = {} }
+check("cull, first picks 15: passed to the scorer",
+    (table.concat(detector_run.argv, " "):match("%-%-first%-picks (%S+)")), "15")
 local detector_args = {}
 for i, arg in ipairs(detector_run.argv) do
     if arg == "--detector" or arg == "--detections" then detector_args[#detector_args + 1] = arg .. " " .. tostring(detector_run.argv[i + 1]) end
@@ -413,6 +420,8 @@ PYTHON.points = "1,0.500,0.500,,,0\n2,0.200,0.300,0.600,0.700,0\n"
 jpeg1.rating, jpeg2.rating = 0, 0
 click("Cull selection", { jpeg1, jpeg2 })
 check("cull, subject tracking: the scorer ran twice", #PYTHON.runs, 2)
+check("cull, first picks back off: not passed",
+    table.concat((PYTHON.runs[2] or { argv = {} }).argv, " "):find("--first-picks", 1, true), nil)
 local points_run, scoring_run = PYTHON.runs[1] or { argv = {} }, PYTHON.runs[2] or { argv = {} }
 local function options(argv, names)
     local found = {}

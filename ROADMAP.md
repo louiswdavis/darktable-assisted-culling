@@ -84,8 +84,14 @@ are deliberate, but today read as soft, cut off or far behind. Best first:
    (zoom burst: radial; ICM: one direction at 1/8 s or slower) or has no box at a long shutter
    (light trails), tag `Style|…` on the burst and skip the soft, cut-off and far-behind rejects
    for it. Uses `motion_tiles` and EXIF shutter. Effort M.
+   **Built (2026-11-19), awaiting a Windows cull:** `zoom_burst` motion class, and a burst that is
+   80% zoom burst or motion blur at a median 1/8 s or slower gets `Technique|Creative Burst` and
+   skips the cut-off and far-behind rejects. Not yet: light trails (no box at a long shutter).
 2. **Fast first picks.** A mode that rates only the first N keepers per session in time order,
    for a "15 edited frames within 90 minutes" delivery; the full cull runs later. Effort S.
+   **Built (2026-11-19), awaiting a Windows cull:** panel *first picks* (off/10/15/20/30). Picks the
+   N best keepers, one per burst, instead of time order; the rest are left alone with
+   `Why|Not a first pick`.
 3. **Frozen wheels on a flat pass.** A side-view frame with a sharp car and sharp background at
    a fast shutter is a weaker action frame (guides: frozen wheels kill the sense of speed). Small
    tie-break inside a burst only, never a reject; skipped for airborne or drifting cars (needs

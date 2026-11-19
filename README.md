@@ -317,8 +317,10 @@ How each frame's focus is measured. Every mode except *motorsport* scores a copy
   - car sharp, background streaked → `Technique|Panning`, score ×1.15
   - whole frame streaked in one straight line → `Technique|Motion Blur`; the frame is lifted to its burst's median, so an intentional blur is kept or left with its neighbours rather than rejected. A burst that is all motion blur ranks its straightest frame first.
   - background streaked, car blurred across it → `Technique|Missed Pan`, score ×0.7
+  - background streaked along lines running out from the frame centre (zoom ring turned during the exposure) → `Technique|Zoom Burst`, score ×1
   - anything else → no tag, scored on sharpness alone (camera shake and missed focus already score low)
 - **Shutter × focal length** makes the streak test easier at slow shutter speeds (1/125 s at 100 mm or longer) and harder at 1/1000 s or faster. It never decides the class on its own.
+- **A creative burst is not rejected.** When 80% of a burst's scored frames are zoom bursts, or motion blur at a median shutter of 1/8 s or slower, every frame gets `Technique|Creative Burst`. Its cut-off frames can keep, and no frame is rejected as `Far behind`. The burst's log line ends `creative burst`.
 - Each frame's class, streak share and crop size go in the log as a `motion …` line.
 
 #### Shooting intent from EXIF
@@ -385,6 +387,8 @@ How many frames per burst survive: *single best only*, *portrait (1 or 2)*, *dyn
 What happens to the frames that aren't kept: *leave alone*, *reject bad frames (-1)*, a fixed star count from 0 to 5, or *graded by burst*. A frame far behind its burst's best (under 30% of its sharpness, times the *star scale*) is rejected whatever is picked here: rating -1 and the `Rejected` tag (`Why|Far behind`). *leave alone* still leaves its rating and writes only the tags. *reject bad frames* rejects only those and leaves the other frames not kept alone; they get no `Rejected` tag.
 
 **rejects per burst** (off, 1, 2, 3, 5; default 2) caps the far-behind rejects in one burst to its worst frames. The other far-behind frames get the *non-keepers* rating as frames that lost (`Why|Outranked` or `Graded`). Blank frames are always rejected and never count toward it.
+
+**first picks** (off, 10, 15, 20, 30; default *off*) is for a quick delivery before the full cull. The whole selection is scored as usual, then only the N best keepers are rated, at most one per burst: each burst's best keeper, by stars then score. Every other frame is left alone, keeper or not: no rating change, no reject, and `Why|Not a first pick`. darktable shows nothing until the picks are chosen; the log line reads `first picks: X of Y keepers rated`. Run the cull again with it off for the full cull.
 
 *graded by burst* rates each non-keeper below the burst's lowest keeper, by how sharp it is next to the burst's best frame:
 

@@ -92,7 +92,8 @@ DEFAULT_REPORT = os.path.join(
 REPORT_COLUMNS = ("burst", "file", "stars", "keeper", "tags", "folder")
 # Mirrors MOTION_TAGS in score_images.py (checked by test_score_images.py), tag -> class.
 MOTION_CLASS = {"Technique|Panning": "pan", "Technique|Motion Blur": "motion_blur",
-                "Technique|Missed Pan": "missed_pan"}
+                "Technique|Missed Pan": "missed_pan", "Technique|Zoom Burst": "zoom_burst"}
+CREATIVE_TAG = "Technique|Creative Burst"  # mirrors score_images.CREATIVE_TAG
 # burst_sharp_mode switches these modes per burst and technique_tag marks the switch.
 MODE_SWITCH = {("subject_focus", "Technique|Panning"): "subject_peak",
                ("tiles_uniformity", "Technique|Shallow DoF"): "subject_focus"}
@@ -239,7 +240,8 @@ def frame_of(row: dict, sharp_mode: str) -> dict:
     score parts (subject None when the report has none: another mode or an older run) and
     the car-number reads ({number: confidence}, {} when the report has none), the
     sharpness judge's score (None when the run did not judge the frame), the view of the
-    car (None when the report has none) and whether the frame can keep for its motion look."""
+    car (None when the report has none), whether the frame can keep for its motion look and
+    whether its burst is creative (score_images.creative_burst)."""
     tags = [t for t in (row.get("tags") or "").split(";") if t]
     stars = (row.get("stars") or "").strip()
     mode = sharp_mode
@@ -258,7 +260,7 @@ def frame_of(row: dict, sharp_mode: str) -> dict:
              "reads": {n: float(c) for n, _, c in (r.rpartition(":") for r in (row.get("reads") or "").split("|") if r)},
              "judge": float(row["judge"]) if (row.get("judge") or "").strip() else None,
              "view": int(row["view"]) if (row.get("view") or "").strip() else None,
-             "look": (row.get("motion_look") or "").strip().lower() == "yes"}
+             "look": (row.get("motion_look") or "").strip().lower() == "yes", "creative": CREATIVE_TAG in tags}
     if "score" in row:  # what a --suggest replay needs
         frame.update({"score": float(row["score"] or 0.0),
                       "flags": tuple(f for f in (row.get("flags") or "").split(";") if f),
@@ -328,7 +330,8 @@ def replay(frames: list, settings, sharp_mode: str) -> list:
             {f["path"]: f["judge"] for f in burst_frames if f["judge"] is not None}
             if getattr(settings, "sharp_judge", False) else None,
             {f["path"]: f["view"] for f in burst_frames if f.get("view") is not None},
-            {f["path"]: f["straight"] for f in burst_frames if f.get("look")}, slope)
+            {f["path"]: f["straight"] for f in burst_frames if f.get("look")}, slope,
+            any(f.get("creative") for f in burst_frames))
 
     slope = None
     if getattr(settings, "star_slope", False) and settings.rank_mode == "universal":

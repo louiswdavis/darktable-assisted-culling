@@ -202,7 +202,7 @@ def spread_keepers(burst_sharpness: dict, in_order: list, by_score: list, allowe
 
 def rate_burst(burst_sharpness: dict, burst_flags: dict, burst_size: int, settings,
                eligible=None, reference=None, mode=None, no_vehicle=frozenset(), order=None,
-               reads=None, judged=None, views=None, motion_look=None, slope=None) -> tuple:
+               reads=None, judged=None, views=None, motion_look=None, slope=None, creative=False) -> tuple:
     """(members best first, keepers best first, id → stars, id → Why reason) for one
     burst. settings carries keep_mode, rank_mode and nk_mode, plus optional
     keep_margin (share of the burst's best a frame needs to keep as well, 0 = off),
@@ -240,7 +240,9 @@ def rate_burst(burst_sharpness: dict, burst_flags: dict, burst_size: int, settin
     the burst's best (times star_scale) is rejected (-1, Why|Far behind) in place of its
     nk_mode rating, the worst settings.reject_cap of them per burst (0 = no limit);
     nk_mode leave still leaves its rating alone. nk_mode reject rejects only those and
-    leaves the other non-keepers."""
+    leaves the other non-keepers. A creative burst (zoom bursts or slow motion blur,
+    score_images.finish_burst) is soft and cut off by design: cut_off frames keep like the
+    others and no frame is Far behind."""
     if not burst_sharpness:
         return [], [], {}, {}
 
@@ -250,7 +252,7 @@ def rate_burst(burst_sharpness: dict, burst_flags: dict, burst_size: int, settin
         eligible = set(burst_sharpness)
     eligible = set(eligible) - set(no_vehicle) - blank
     cut_off = {i for i in eligible if "cut_off" in burst_flags.get(i, ())}
-    cut_off = cut_off if cut_off != eligible else set()  # an all-cut-off burst still keeps
+    cut_off = cut_off if cut_off != eligible and not creative else set()  # an all-cut-off burst still keeps
     eligible -= cut_off
     # counted on the frames that can keep, not burst_size: 3 frames of the car in a
     # 7-frame burst keep like a 3-frame burst
@@ -348,7 +350,7 @@ def rate_burst(burst_sharpness: dict, burst_flags: dict, burst_size: int, settin
     far = sorted((i for i in (eligible | cut_off) - keepers
                   if burst_sharpness[i] < FAR_BEHIND_SHARE * star_scale * best), key=lambda i: burst_sharpness[i])
     reject_cap = getattr(settings, "reject_cap", 0)
-    far = set(far[:reject_cap] if reject_cap else far)
+    far = set() if creative else set(far[:reject_cap] if reject_cap else far)
     stars_of, reason_of = {}, {}
     for img_id in sorted_members:
         is_keeper = img_id in keepers

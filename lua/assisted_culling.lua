@@ -252,6 +252,8 @@ local keep_margin_opts = {"off", "95", "90", "85", "80", "75"}
 local star_scale_opts = {"0.5", "0.75", "1", "1.25", "1.5", "2"}
 -- a frame this % one flat colour is blank and rejected (the scorer's --blank-share)
 local blank_share_opts = {"off", "99", "97", "95", "90"}
+-- rate only this many of the run's best keepers, one per burst (the scorer's --first-picks)
+local first_picks_opts = {"off", "10", "15", "20", "30"}
 -- The panel's tag node boxes, in cut order.
 local GROUP_TAG_KEYS = { "group_tag_1", "group_tag_2", "group_tag_3" }
 -- Typed in a tag node box, it stands for each photo's own latest Assisted Grouping run.
@@ -259,7 +261,7 @@ M.LATEST_GROUPING_NODE = "Assisted Grouping"
 M.TAG_NODE_HINT = "grouping tags found but no native groups; type Assisted Grouping in a tag node box to use them"
 M.CHOICES = { genre = genre_opts, rank_mode = rank_opts, sharp_mode = sharp_opts, exp_mode = exp_opts,
     keep_mode = keep_opts, keep_margin = keep_margin_opts, non_keeper = nk_opts, reject_cap = reject_cap_opts,
-    star_scale = star_scale_opts, blank_share = blank_share_opts }
+    star_scale = star_scale_opts, blank_share = blank_share_opts, first_picks = first_picks_opts }
 
 -- The four modes each genre fills in. "custom" has none.
 M.GENRE_MODES = {
@@ -317,6 +319,7 @@ M.PRESET_SCHEMA = {
     { key = "non_keeper", kind = "choice", choices = nk_opts, default = "leave" },
     { key = "reject_cap", kind = "choice", choices = reject_cap_opts, default = "2" },
     { key = "star_scale", kind = "choice", choices = star_scale_opts, default = "1" },
+    { key = "first_picks", kind = "choice", choices = first_picks_opts, default = "off" },
     { key = "group_native", kind = "bool", default = true },
     { key = "group_tag_1", kind = "string", default = "" },
     { key = "group_tag_2", kind = "string", default = "" },
@@ -362,7 +365,7 @@ end
 M.PANEL_PAGES = {
     { number = 1, title = "scoring", keys = { "genre", "rank_mode", "sharp_mode", "exp_mode", "keep_mode",
         "keep_margin", "spread_keepers", "keep_angles", "motion_look", "number_reads", "sharp_judge", "non_keeper",
-        "reject_cap", "star_scale", "star_slope" } },
+        "reject_cap", "star_scale", "star_slope", "first_picks" } },
     { number = 2, title = "bursts", keys = { "group_native", "group_tag_1", "group_tag_2", "group_tag_3" } },
     { number = 3, title = "penalties & speed", keys = { "apply_while_scoring", "fast_jpeg_decode",
         "penalise_overexposed", "penalise_underexposed", "penalise_eyes_closed", "penalise_cut_off",
@@ -399,15 +402,15 @@ M.TAG_TOGGLES = {
       when = "subject tracking (SAM) only. The vehicle detector found nothing, so SAM got the guessed subject point: check these frames by hand." },
     { key = "subject", label = "Subject", kind = "diag", writes = { "Subject|Vehicle|Detected" },
       when = "subject tracking (SAM) only. Detected: the vehicle detector found the car SAM was pointed at." },
-    { key = "technique", label = "Technique", kind = "diag", writes = { "Technique|Panning", "Technique|Shallow DoF", "Technique|Motion Blur", "Technique|Missed Pan" },
-      when = "the burst's EXIF switched its sharpness mode: panning at 1/125 s or slower, shallow DoF at f/4 or wider. Motorsport mode tags each frame instead: Panning (car sharp, background streaked), Motion Blur (whole frame blurred in one line), Missed Pan (car blurred across the pan)." },
+    { key = "technique", label = "Technique", kind = "diag", writes = { "Technique|Panning", "Technique|Shallow DoF", "Technique|Motion Blur", "Technique|Missed Pan", "Technique|Zoom Burst", "Technique|Creative Burst" },
+      when = "the burst's EXIF switched its sharpness mode: panning at 1/125 s or slower, shallow DoF at f/4 or wider. Motorsport mode tags each frame instead: Panning (car sharp, background streaked), Motion Blur (whole frame blurred in one line), Missed Pan (car blurred across the pan), Zoom Burst (streaks run out from the frame centre). Creative Burst: most of the burst is zoom bursts or motion blur at 1/8 s or slower, so none of it is rejected as cut off or far behind." },
     { key = "scored", label = "Scored", kind = "diag", writes = { "Scored|Masked", "Scored|Subject bias" },
       when = "subject tracking (SAM) only. Masked: the burst was ranked on SAM masks. Subject bias: a shortlisted frame got no mask, so the burst fell back." },
     { key = "why", label = "Why", kind = "diag",
       writes = { "Why|Keeper", "Why|Keeper by margin", "Why|Outranked", "Why|Graded", "Why|Not shortlisted",
           "Why|No vehicle", "Why|Close call", "Why|Blank", "Why|Spread", "Why|Number clearer", "Why|Subject clearer",
-          "Why|Other angle", "Why|Motion look", "Why|Far behind" },
-      when = "every scored frame, saying how it was decided. Keeper: kept by rank. Keeper by margin: kept by the keeper margin. Outranked: lost to a sharper frame. Far behind: lost and scored under 30% of its burst's best, so it is rejected (at most rejects per burst, worst first). Graded: lost and rated by burst. Not shortlisted: subject tracking (SAM) left it out of the shortlist. No vehicle: the detector found no car, so the frame kept its rating (only with \"Leave frames with no vehicle\" on). Blank: the frame is one flat colour, so it was rejected. Close call: the last keeper and the best frame that lost scored within 5% of each other; the keeper is still kept, but check both. Spread: kept as its stretch of the burst's best frame over a sharper frame elsewhere (only with \"Spread keepers over the burst\" on). Number clearer: kept over the sharper frame of a close call because tagging read the car's number clearer in it (only with \"Break close calls on the number read\" on). Subject clearer: kept over the sharper frame of a close call because the sharpness judge scored its car clearer (only with \"Break close calls with the sharpness judge\" on). Other angle: the best frame of a view of the car the sharpest keeper does not show, kept one star below it (only with \"Keep the other angles\" on). Motion look: the burst's straightest motion blur with the car in view, kept as well as the sharp keepers (only with \"Keep a motion-blur frame\" on). Filter on one to step through, say, every frame that lost to the margin." },
+          "Why|Other angle", "Why|Motion look", "Why|Far behind", "Why|Not a first pick" },
+      when = "every scored frame, saying how it was decided. Keeper: kept by rank. Keeper by margin: kept by the keeper margin. Outranked: lost to a sharper frame. Far behind: lost and scored under 30% of its burst's best, so it is rejected (at most rejects per burst, worst first). Graded: lost and rated by burst. Not shortlisted: subject tracking (SAM) left it out of the shortlist. No vehicle: the detector found no car, so the frame kept its rating (only with \"Leave frames with no vehicle\" on). Blank: the frame is one flat colour, so it was rejected. Close call: the last keeper and the best frame that lost scored within 5% of each other; the keeper is still kept, but check both. Spread: kept as its stretch of the burst's best frame over a sharper frame elsewhere (only with \"Spread keepers over the burst\" on). Number clearer: kept over the sharper frame of a close call because tagging read the car's number clearer in it (only with \"Break close calls on the number read\" on). Subject clearer: kept over the sharper frame of a close call because the sharpness judge scored its car clearer (only with \"Break close calls with the sharpness judge\" on). Other angle: the best frame of a view of the car the sharpest keeper does not show, kept one star below it (only with \"Keep the other angles\" on). Motion look: the burst's straightest motion blur with the car in view, kept as well as the sharp keepers (only with \"Keep a motion-blur frame\" on). Not a first pick: left alone because it is not one of the run's first picks (only with first picks on). Filter on one to step through, say, every frame that lost to the margin." },
 }
 
 -- Headings of the tags-written page, in order; each TAG_TOGGLES row's `kind` is one of these.
@@ -925,8 +928,8 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         run_log.rotate(LOGS_KEPT)
         log(string.format("run started: darktable %s, %d images (%d locked left out)",
             tostring(dt.configuration.version), #images, n_locked))
-        log(string.format("settings: rank %s, sharpness %s, exposure %s, keepers %s, non-keepers %s, rejects per burst %s",
-            rank_mode, sharp_mode, exp_mode, keep_mode, nk_mode, tostring(settings.reject_cap)))
+        log(string.format("settings: rank %s, sharpness %s, exposure %s, keepers %s, non-keepers %s, rejects per burst %s, first picks %s",
+            rank_mode, sharp_mode, exp_mode, keep_mode, nk_mode, tostring(settings.reject_cap), tostring(settings.first_picks)))
 
         -- the job and the start message go up before the selection's tags and groups are read
         if dt.gui then
@@ -1052,6 +1055,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         pcall(os.remove, MANIFEST_PATH)
         pcall(os.remove, RESULTS_PATH)
         pcall(os.remove, RESULTS_PATH .. ".tmp")
+        pcall(os.remove, RESULTS_PATH .. ".all")
         pcall(os.remove, PROGRESS_PATH)
         pcall(os.remove, CANCEL_PATH)
         pcall(os.remove, DONE_PATH)
@@ -1252,6 +1256,9 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         if settings.keep_angles then argv[#argv + 1] = "--keep-angles" end
         if settings.motion_look then argv[#argv + 1] = "--motion-look" end
         if settings.star_slope then argv[#argv + 1] = "--star-slope" end
+        if tonumber(settings.first_picks) then
+            table.move({ "--first-picks", settings.first_picks }, 1, 2, #argv + 1, argv)
+        end
         if settings.number_reads then
             table.move({ "--number-reads", (M.car_boxes_path(dt.configuration.config_dir,
                 dt.preferences.read("assisted_tagging", "last_collection", "string"))) }, 1, 2, #argv + 1, argv)
@@ -1734,6 +1741,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
     pcall(os.remove, MANIFEST_PATH)
     pcall(os.remove, RESULTS_PATH)
     pcall(os.remove, RESULTS_PATH .. ".tmp")
+    pcall(os.remove, RESULTS_PATH .. ".all")
     pcall(os.remove, POINTS_PATH)
     pcall(os.remove, PRESCORE_PATH)
     for _, id in ipairs(sam_ids) do pcall(os.remove, mask_path_for(id)) end
@@ -2087,6 +2095,10 @@ local function install_panel()
         _("Scales the sharpness every star needs, in universal and relative ranking, and how fast graded non-keepers lose stars. Stricter: fewer stars for the same frame. More generous: more stars. The scores themselves don't change. With Rate keepers against each other on, keepers in a universal run of 10 or more take their stars from that instead; this still sets how fast graded non-keepers lose stars."),
         { _("much more generous (×0.5)"), _("more generous (×0.75)"), _("standard (×1)"), _("stricter (×1.25)"), _("much stricter (×1.5)"), _("strictest (×2)") })
 
+    local first_picks_combo = choice_combo("first_picks", _("first picks"),
+        _("For a quick delivery: rates only this many of the run's best keepers, at most one per burst (the burst's best keeper, most stars first, then sharpness). Every other frame keeps its rating and gets Why|Not a first pick; nothing is rejected. Run a normal cull later for the full set.\nDefault: off."),
+        { _("off"), _("10"), _("15"), _("20"), _("30") })
+
     action_button = new_widget("button") {
         label = _("Cull selection"),
         tooltip = _("Score the selected images in bursts and rate/tag them. Click again to cancel."),
@@ -2357,7 +2369,8 @@ local function install_panel()
           new_widget("section_label") { label = _("ratings") },
           non_keeper_combo, reject_cap_combo, star_scale_combo,
           check("star_slope", _("Rate keepers against each other"),
-              _("Rates the run's keepers against each other instead of against fixed score steps: ranked by sharpness and cut into five equal groups, the sharpest group 5 stars, the next 4, down to 1. Changes stars only, never which frames are kept. Star strictness does not move these keepers' stars. Other angle keepers stay one star below their burst's best, Motion look keepers keep their own rating, and a flag still costs its stars. Runs with fewer than 10 keepers, and the relative and binary ranking, use the fixed steps.\nDefault: on.")) },
+              _("Rates the run's keepers against each other instead of against fixed score steps: ranked by sharpness and cut into five equal groups, the sharpest group 5 stars, the next 4, down to 1. Changes stars only, never which frames are kept. Star strictness does not move these keepers' stars. Other angle keepers stay one star below their burst's best, Motion look keepers keep their own rating, and a flag still costs its stars. Runs with fewer than 10 keepers, and the relative and binary ranking, use the fixed steps.\nDefault: on.")),
+          first_picks_combo },
         group_widgets,
         option_checks,
         tag_checks,

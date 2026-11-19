@@ -751,7 +751,7 @@ CACHE_INPUTS = (
     "BLINK_MIN_FACE_PX", "EYE_SEARCH_TOP", "MASK_ASPECT_TOLERANCE", "UNIFORMITY_MIN_CONTRAST", "EXIF_SLACK",
     "SUBJECT_PAD", "SUBJECT_CROP_MAX", "SUBJECT_SCALES", "NORM_MIN_CONTRAST", "MOTION_GRID", "STREAK_COHERENCE", "STREAK_ANGLE_TOL",
     "SUBJECT_STREAK_MAX", "STREAK_SHARE", "STREAK_SHARE_SLOW", "STREAK_SHARE_FAST", "PAN_REACH", "FAST_SHUTTER",
-    "PAN_BONUS", "MISSED_PAN_FACTOR", "CENTRE_BOX",
+    "ZOOM_SHARE", "PAN_BONUS", "MISSED_PAN_FACTOR", "CENTRE_BOX",
 )
 # Constants that only use cached numbers (ranking, stars, keepers, shortlist, report) or
 # pick a mode that is already in the key. Changing one re-applies without re-scoring.
@@ -760,7 +760,7 @@ CACHE_NEUTRAL = (
     "TIER_THRESHOLDS", "PEAK_TIER_THRESHOLDS", "UNIFORMITY_TIER_THRESHOLDS", "TIER_THRESHOLDS_BY_MODE",
     "FLAG_PENALTIES", "SHORTLIST_MIN", "PANNING_SHUTTER", "SHALLOW_DOF_APERTURE",
     "SCORE_CACHE_MAX_AGE_DAYS", "SCORE_CACHE_COMMIT_EVERY", "CACHE_INPUTS", "CACHE_NEUTRAL", "JUDGE_THREADS",
-    "MOTION_TIER_THRESHOLDS", "MOTION_TAGS", "PRESCORE_FAILED", "REPORT_HEADER", "REPORT_ARCHIVE_KEEP", "WHY_REASONS",
+    "MOTION_TIER_THRESHOLDS", "MOTION_TAGS", "CREATIVE_TAG", "CREATIVE_BURST_SHARE", "CREATIVE_SHUTTER", "PRESCORE_FAILED", "REPORT_HEADER", "REPORT_ARCHIVE_KEEP", "WHY_REASONS",
     # framing is judged across the burst and never cached; NO_VEHICLE_SUBJECT matches a cached subject
     "DIRECTION_MIN_SHIFT", "EDGE_TOUCH", "CUT_TRAILING_SHARE", "TIGHT_CROP_SHARE", "BLOCKED_SHARE", "NO_VEHICLE_SUBJECT",
     "VIEW_ASPECT_STEP",
@@ -908,12 +908,16 @@ STREAK_SHARE = 0.5           # share of background tiles streaked in one directi
 STREAK_SHARE_SLOW = 0.4      # ... when shutter × focal length says blur is likely
 STREAK_SHARE_FAST = 0.7      # ... when the shutter is fast enough to freeze most pans
 PAN_REACH = 0.8              # shutter (s) × focal length (mm): 1/125 at 100 mm
+ZOOM_SHARE = 0.6             # share of background tiles streaked along lines through the frame centre
 FAST_SHUTTER = 1 / 1000
 PAN_BONUS = 1.15
 MISSED_PAN_FACTOR = 0.7
 CENTRE_BOX = (1 / 3, 1 / 3, 2 / 3, 2 / 3)
 MOTION_TAGS = {"pan": "Technique|Panning", "motion_blur": "Technique|Motion Blur",
-               "missed_pan": "Technique|Missed Pan"}
+               "missed_pan": "Technique|Missed Pan", "zoom_burst": "Technique|Zoom Burst"}
+CREATIVE_TAG = "Technique|Creative Burst"
+CREATIVE_BURST_SHARE = 0.8   # share of a burst's scored frames that must be zoom bursts or slow motion blur
+CREATIVE_SHUTTER = 1 / 8     # median burst shutter (s) from which a motion-blur burst is deliberate
 
 
 def subject_crop(full: np.ndarray, box) -> np.ndarray:
@@ -1026,8 +1030,11 @@ def streak_share_needed(exposure: float, focal: float) -> float:
     return STREAK_SHARE
 
 
-def classify_motion(tiles: list, box, share_needed: float) -> tuple:
+def classify_motion(tiles: list, box, share_needed: float, aspect: float) -> tuple:
     """(class, straightness). Background = tiles centred outside the box.
+    zoom_burst: ZOOM_SHARE of the background streaked along lines through the frame
+    centre (the zoom ring turned during the exposure); aspect is the frame's width over
+    height, so those lines are measured in pixels.
     pan: background streaked one way, subject tiles mostly not streaked.
     motion_blur: subject streaked the same way as the background (the whole
     frame blurred in a straight line). missed_pan: background streaked,
@@ -1037,6 +1044,11 @@ def classify_motion(tiles: list, box, share_needed: float) -> tuple:
     inside = [x0 <= t[0] <= x1 and y0 <= t[1] <= y1 for t in tiles]
     bg = [t for t, i in zip(tiles, inside) if not i]
     subj = [t for t, i in zip(tiles, inside) if i]
+    # a radial streak's gradient runs across the line to the centre: doubled, 2φ + π
+    radial = [t for t in bg if t[2] >= STREAK_COHERENCE
+              and _angle_gap(t[3], 2 * np.arctan2(t[1] - 0.5, (t[0] - 0.5) * aspect) + np.pi) <= STREAK_ANGLE_TOL]
+    if bg and len(radial) / len(bg) >= ZOOM_SHARE:
+        return "zoom_burst", float(np.mean([t[2] for t in radial]))
     streaked_bg = [t for t in bg if t[2] >= STREAK_COHERENCE]
     if not streaked_bg:
         return "ordinary", 0.0
@@ -1075,7 +1087,7 @@ def motion_aware_score(filepath: str, rgb: np.ndarray, entry, exposure: float, f
     ladder = scale_ladder(crop)
     subject = ladder[-1][1]
     cls, straight = classify_motion(motion_tiles(cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)), region,
-                                    streak_share_needed(exposure, focal))
+                                    streak_share_needed(exposure, focal), rgb.shape[1] / rgb.shape[0])
     score = subject * class_factor(cls)
     detail = (f"{cls}, straightness {straight:.2f}, subject {subject:.0f}, crop {crop.shape[1]}x{crop.shape[0]}"
               + ("" if box else f", centre third ({note})"))
@@ -1103,6 +1115,17 @@ def lift_motion_blur(scores: dict, motion: dict) -> dict:
         return scores
     shift = max(0.0, float(np.median(rest)) - float(np.median([scores[i] for i in blur])))
     return {i: v + shift if i in blur else v for i, v in scores.items()}
+
+
+def creative_burst(classes: list, exposures: list) -> bool:
+    """True when CREATIVE_BURST_SHARE of a burst's scored frames (classes, one motion class
+    each) are zoom bursts, or motion blur at a median shutter of CREATIVE_SHUTTER or slower
+    (exposures in seconds, 0 = unknown and not counted). Such a burst is soft by design, so
+    rate_burst neither drops its cut-off frames nor rejects any as Far behind."""
+    known = [e for e in exposures if e > 0]
+    slow = bool(known) and float(np.median(known)) >= CREATIVE_SHUTTER
+    styled = sum(c == "zoom_burst" or (c == "motion_blur" and slow) for c in classes)
+    return bool(classes) and styled / len(classes) >= CREATIVE_BURST_SHARE
 
 
 # --sharp-judge: a no-reference image quality model (ONNX, CPU) scores the car crop of the frames
@@ -1369,14 +1392,15 @@ def emit_saliency_points(manifest, args, cache, detections):
 # it was decided. Kept to a handful: a tag per score bucket floods darktable's tag list.
 WHY_REASONS = ("Keeper", "Keeper by margin", "Outranked", "Graded", "Not shortlisted",
                "No vehicle", "Close call", "Blank", "Spread", "Number clearer", "Subject clearer",
-               "Other angle", "Motion look", "Far behind")
+               "Other angle", "Motion look", "Far behind", "Not a first pick")
 # the subject tag of a sam_subject frame whose detector found no car
 NO_VEHICLE_SUBJECT = "Subject|Vehicle|Guessed"
 
 
 def process_burst_logic(burst_id, burst_sharpness, burst_flags, burst_size, args, results_path,
                         eligible=None, diag_tags=None, reference=None, mode=None,
-                        no_vehicle=frozenset(), reads=None, judged=None, views=None, motion_look=None, slope=None) -> list:
+                        no_vehicle=frozenset(), reads=None, judged=None, views=None, motion_look=None, slope=None,
+                        creative=False) -> list:
     """Appends the burst's result rows and returns its keepers, best first.
     diag_tags maps an id to its diagnostic tags (under "Assisted Culling|"),
     written ";"-joined in the 7th column after the frame's Why|<reason> tag
@@ -1388,12 +1412,12 @@ def process_burst_logic(burst_id, burst_sharpness, burst_flags, burst_size, args
     lets a clearer number read settle a close call, and judged ({id: judge score}) a clearer
     subject (rate_burst). views ({id: view index}, burst_views) lets another view of the car
     keep with --keep-angles, and motion_look ({id: blur straightness}) a straight blur with
-    --motion-look, and slope ({id: stars}) puts the run's keepers on the star slope
-    (rate_burst)."""
+    --motion-look, and slope ({id: stars}) puts the run's keepers on the star slope, and
+    creative (creative_burst) spares the burst cut-off and far-behind rejects (rate_burst)."""
     sorted_members, burst_keepers, stars_of, reason_of = rate_burst(
         burst_sharpness, burst_flags, burst_size, args, eligible, reference, mode, no_vehicle,
         sorted(burst_sharpness, key=int) if getattr(args, "spread_keepers", False) else None, reads, judged, views,
-        motion_look, slope)
+        motion_look, slope, creative)
     keepers = set(burst_keepers)
     burst_rows = [[
         img_id,
@@ -1408,6 +1432,24 @@ def process_burst_logic(burst_id, burst_sharpness, burst_flags, burst_size, args
     with open(results_path, "a", newline="", encoding="utf-8") as f:
         csv.writer(f).writerows(burst_rows)
     return burst_keepers
+
+
+def first_picks(result_rows: list, n: int) -> list:
+    """The result rows with only the n best keepers rated: each burst's best keeper (most stars,
+    then score) competes, and the n best across the run keep their row. Every other frame is
+    left alone (keeper 0, stars "leave") with Why|Not a first pick in place of its Why tag, so
+    no frame is rejected."""
+    best_of = {}
+    for row in result_rows:
+        if row[4] == "1":
+            rank = (int(row[5]), float(row[1]))
+            if row[3] not in best_of or rank > best_of[row[3]][0]:
+                best_of[row[3]] = (rank, row[0])
+    picks = {img_id for _rank, img_id in sorted(best_of.values(), reverse=True)[:n]}
+    return [row if row[0] in picks else
+            [*row[:4], "0", "leave",
+             ";".join([t for t in row[6].split(";") if t and not t.startswith("Why|")] + ["Why|Not a first pick"])]
+            for row in result_rows]
 
 
 REPORT_HEADER = ["burst", "file", "rank", "of", "score", "stars", "keeper", "flags", "tags", "why", "folder", "reason", "car",
@@ -1452,6 +1494,8 @@ def report_rows(manifest, result_rows, keepers_per_burst, direction_of=None, par
             tags = rest[0] if rest else ""
             reason = next((t[4:] for t in tags.split(";") if t.startswith("Why|")), "")
             why = ("left alone: no vehicle found" if reason == "No vehicle"
+                   else f"left alone: rank {rank} of {len(rows)}, not one of the run's first picks"
+                   if reason == "Not a first pick"
                    else f"kept: rank {rank} of {len(rows)}, the best of its stretch of the burst" if reason == "Spread"
                    else f"kept: rank {rank} of {len(rows)}, a close call its car number reads clearer in"
                    if reason == "Number clearer"
@@ -1537,7 +1581,19 @@ def main(args):
         if getattr(args, "emit_saliency_points", False):
             emit_saliency_points(manifest, args, cache, detections)
         else:
-            direction_of, parts_of, judged_of, views_of, look_of = score_manifest(manifest, args, cache, detections)
+            picks = getattr(args, "first_picks", 0)
+            # with first picks darktable reads nothing until the picks are chosen from the whole run
+            scoring = argparse.Namespace(**{**vars(args), "results": args.results + ".all"}) if picks else args
+            direction_of, parts_of, judged_of, views_of, look_of = score_manifest(manifest, scoring, cache, detections)
+            if picks:
+                with open(scoring.results, newline="", encoding="utf-8") as f:
+                    result_rows = [row for row in csv.reader(f) if row]
+                picked = first_picks(result_rows, picks)
+                with atomic_write(args.results, newline="") as f:
+                    csv.writer(f).writerows(picked)
+                os.remove(scoring.results)
+                log(f"first picks: {sum(row[4] == '1' for row in picked)} of "
+                    f"{sum(row[4] == '1' for row in result_rows)} keepers rated (at most {picks}, one per burst)")
             if getattr(args, "report", ""):
                 write_report(manifest, args, direction_of, parts_of, judged_of, views_of, look_of)
     finally:
@@ -1648,6 +1704,10 @@ def score_manifest(manifest, args, cache, detections):
         eligible = set(eligible) - blank_frames(burst_flags[burst_id], getattr(args, "tag_only_flags", frozenset()))
         burst_tags = []
         note = f"burst {burst_id}: {len(raw)} of {len(burst_groups[burst_id])} frames scored, mode {mode_of[burst_id]}"
+        creative = creative_burst([burst_motion.get(i, ("ordinary",))[0] for i in raw], exif_of[burst_id][0])
+        if creative:
+            burst_tags.append(CREATIVE_TAG)
+            note += ", creative burst (no cut-off or far-behind rejects)"
         if judge:
             # only frames that can be a close call: the judge is the slow part of a run
             short = judge_shortlist(scores, eligible)
@@ -1676,12 +1736,12 @@ def score_manifest(manifest, args, cache, detections):
             relative_scores.setdefault(group, []).extend(scores[i] for i in eligible if i in scores)
         if args.rank_mode == "relative" or sloped:
             deferred.append((burst_id, scores, burst_flags[burst_id], eligible, diag, note, group, no_vehicle, views,
-                             straightness_of))
+                             straightness_of, creative))
         else:
             keepers = process_burst_logic(burst_id, scores, burst_flags[burst_id], len(burst_groups[burst_id]),
                                           args, args.results, eligible, diag, mode=mode_of[burst_id],
                                           no_vehicle=no_vehicle, reads=reads_of, judged=judged_of, views=views,
-                                          motion_look=straightness_of)
+                                          motion_look=straightness_of, creative=creative)
             log(f"{note}, keepers {', '.join(keepers) or 'none'}"
                 + (f", {len(no_vehicle)} left alone (no vehicle)" if no_vehicle else ""))
         del burst_sharpness[burst_id]
@@ -1874,21 +1934,22 @@ def score_manifest(manifest, args, cache, detections):
     if sloped:
         # the slope runs over the keepers of the whole run, so every burst is rated once to find them
         keeper_sharpness = {}
-        for _burst_id, scores, flags, eligible, _diag, _note, group, no_vehicle, views, straightness_of in deferred:
+        for _burst_id, scores, flags, eligible, _diag, _note, group, no_vehicle, views, straightness_of, creative \
+                in deferred:
             _members, burst_keepers, _stars, reason_of = rate_burst(
                 scores, flags, len(scores), args, eligible, None, group[0], no_vehicle,
                 sorted(scores, key=int) if getattr(args, "spread_keepers", False) else None, reads_of, judged_of,
-                views, straightness_of)
+                views, straightness_of, creative=creative)
             keeper_sharpness.update({i: scores[i] for i in burst_keepers
                                      if reason_of[i] not in ("Other angle", "Motion look")})
         slope = slope_stars(keeper_sharpness)
         log(f"star slope: {len(keeper_sharpness)} keepers"
             + ("" if slope else f", under {SLOPE_MIN_KEEPERS}, so the tier tables rate them"))
-    for burst_id, scores, flags, eligible, diag, note, group, no_vehicle, views, straightness_of in deferred:
+    for burst_id, scores, flags, eligible, diag, note, group, no_vehicle, views, straightness_of, creative in deferred:
         keepers = process_burst_logic(burst_id, scores, flags, len(burst_groups[burst_id]),
                                       args, args.results, eligible, diag, references.get(group), mode=group[0],
                                       no_vehicle=no_vehicle, reads=reads_of, judged=judged_of, views=views,
-                                      motion_look=straightness_of, slope=slope)
+                                      motion_look=straightness_of, slope=slope, creative=creative)
         log(f"{note}, keepers {', '.join(keepers) or 'none'}"
             + (f", {len(no_vehicle)} left alone (no vehicle)" if no_vehicle else ""))
     return direction_of, parts_of, judged_of, views_of, look_of
@@ -1908,6 +1969,8 @@ if __name__ == "__main__":
     parser.add_argument("--nk-mode", default="leave", help="Handling for non-keepers")
     parser.add_argument("--reject-cap", default=0, type=int,
                         help="Reject at most this many far-behind frames per burst, worst first (0 = no limit)")
+    parser.add_argument("--first-picks", default=0, type=int,
+                        help="Rate only the N best keepers of the run, one per burst; leave every other frame (0 = off)")
     parser.add_argument("--fast-jpeg", action="store_true",
                         help="Decode JPEGs at reduced scale (faster; scores shift slightly)")
     parser.add_argument("--emit-saliency-points", action="store_true",
