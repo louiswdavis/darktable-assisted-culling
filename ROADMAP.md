@@ -225,6 +225,11 @@ No published CPU timings exist for the newer models, so measure first.
 
 ## Export and import presets
 
+**Status (2026-11-19):** layer 1 built, awaiting the Windows run (README acceptance step 16).
+**export preset…** and **import preset…** in the actions menu write and read a `<name>.atpreset`
+folder (`manifest.json` + `preset.json`); a taken name imports as `<name> (2)`. The rally set and
+zip bundles are not built.
+
 Asked for 2026-11-19. Full design in tagging's ROADMAP ("Export and import presets"): an
 **Export preset…** dialog with tick boxes per layer, a folder bundle with a `manifest.json`,
 import through culling's existing key upgrade. For culling only layer 1 applies: the preset JSON

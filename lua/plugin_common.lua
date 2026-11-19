@@ -802,6 +802,52 @@ function C.preset_order(names)
     return rest
 end
 
+-- Preset bundles: export writes <folder>/<name>.atpreset/ holding manifest.json, preset.json
+-- and any files the plugin's store adds (tagging: entries.json). BUNDLE_VERSION goes up when
+-- the layout changes in a way an older plugin can't read.
+C.PRESET_BUNDLE_VERSION = 1
+
+-- `files`: the bundle's file names (none holds a comma), `date`: "YYYY-MM-DD".
+function C.preset_manifest(plugin, name, files, date)
+    return "{\n" .. table.concat({
+        '  "version": ' .. C.PRESET_BUNDLE_VERSION,
+        '  "plugin": ' .. json_string(plugin),
+        '  "preset": ' .. json_string(name),
+        '  "files": ' .. json_string(table.concat(files, ",")),
+        '  "exported": ' .. json_string(date),
+    }, ",\n") .. "\n}\n"
+end
+
+-- The manifest's preset name and file list, or nil and why it can't be imported here.
+function C.preset_bundle_check(text, plugin)
+    local m, err = C.preset_decode(text)
+    if not m then return nil, "manifest.json: " .. err end
+    if type(m.plugin) ~= "string" or type(m.preset) ~= "string" or type(m.files) ~= "string"
+        or type(m.version) ~= "number" then
+        return nil, "manifest.json isn't a preset bundle manifest"
+    end
+    if m.plugin ~= plugin then return nil, string.format("the bundle is for %s, not this plugin", m.plugin) end
+    if m.version > C.PRESET_BUNDLE_VERSION then
+        return nil, string.format("the bundle is version %d; this plugin reads up to %d, update it first",
+            m.version, C.PRESET_BUNDLE_VERSION)
+    end
+    local files = {}
+    for f in m.files:gmatch("[^,]+") do files[#files + 1] = f end
+    return { preset = m.preset, files = files }
+end
+
+-- `name`, or `name (2)`, `name (3)`… when `taken` holds it (any case); "template" counts as taken.
+function C.preset_free_name(name, taken)
+    local have = { template = true }
+    for _, n in ipairs(taken) do have[n:lower()] = true end
+    local out, i = name, 1
+    while have[out:lower()] do
+        i = i + 1
+        out = string.format("%s (%d)", name, i)
+    end
+    return out
+end
+
 -- A page table is { title = string, keys = { string, ... } }: one panel page and the preset keys its
 -- widgets edit. The stored page number is used when it is in 1..count, else the first page.
 function C.page_index(stored, count)
@@ -843,14 +889,22 @@ local PRESET_WHY = {
     ["bad character"] = 'a name can\'t hold / \\ : * ? " < > |',
 }
 
+-- Makes `dir` and any missing parents; quiet when it exists.
+function C.make_dir(dir)
+    local windows = C.IS_WINDOWS
+    local quoted = windows and ('"' .. dir:gsub("/", "\\") .. '"') or ("'" .. dir:gsub("'", "'\\''") .. "'")
+    os.execute((windows and "mkdir " or "mkdir -p ") .. quoted .. (windows and " 2>nul" or " 2>/dev/null"))
+end
+
+-- True when `path` (file or folder) exists.
+function C.path_exists(path)
+    return os.rename(path, path) and true or false
+end
+
 -- Presets as <dir>/<name>.json. The folder is made on first use.
 function C.preset_file_store(dir)
     local windows = C.IS_WINDOWS
-    local function quote(s)
-        if windows then return '"' .. s:gsub("/", "\\") .. '"' end
-        return "'" .. s:gsub("'", "'\\''") .. "'"
-    end
-    os.execute((windows and "mkdir " or "mkdir -p ") .. quote(dir) .. (windows and " 2>nul" or " 2>/dev/null"))
+    C.make_dir(dir)
     local store = {}
     function store.path(name) return dir .. "/" .. name .. ".json" end
     function store.list()
@@ -875,12 +929,16 @@ function C.preset_file_store(dir)
     return store
 end
 
--- o = { prefix, schema, store, read_panel = fn() -> settings | nil, why,
+-- o = { prefix, plugin (bundle id, e.g. "assisted_grouping"), schema, store,
+--       read_panel = fn() -> settings | nil, why,
 --       show = fn(settings), remember = fn(name), initial = name, log = fn(msg),
 --       on_change = fn(name, is_template) | nil, can_switch = fn() -> ok, why | nil,
 --       allow_store_new = bool }
 -- Optional store.copy_note(from, to) -> confirm text | nil, why and store.copy(from, to) -> ok, err:
 -- store new then asks first, and copies the selected preset's store (e.g. a folder) before writing.
+-- Optional store.export_files(name) -> { { name, path }, ... } adds files to an exported bundle, and
+-- store.import_files(name, bundle_dir, files) -> ok, err puts them in place before import writes
+-- the preset.
 -- Returns ctl: ctl.widget (the box to put first in the panel), ctl.widgets, ctl.select(name),
 -- ctl.refresh(), ctl.reload(), ctl.check_dirty(), ctl.name(), ctl.saved (settings last loaded or saved).
 function C.make_preset_controls(o)
@@ -889,6 +947,7 @@ function C.make_preset_controls(o)
     local name_mode
     local picker, menu, name_entry, name_box, confirm_label, confirm_box, dirty_label
     local confirm_button, confirm_action, delete_clicked
+    local export_box, export_chooser, import_box, import_chooser
 
     local function say(msg) dt.print(o.prefix .. ": " .. msg) end
 
@@ -940,12 +999,14 @@ function C.make_preset_controls(o)
     local function hide_boxes()
         name_box.visible = false
         confirm_box.visible = false
+        export_box.visible = false
+        import_box.visible = false
     end
 
     local function ask_name(mode)
         name_mode = mode
         name_entry.text = mode == "rename" and current or ""
-        confirm_box.visible = false
+        hide_boxes()
         name_box.visible = true
     end
 
@@ -965,7 +1026,7 @@ function C.make_preset_controls(o)
         confirm_label.label = text
         confirm_button.label = button
         confirm_action = action
-        name_box.visible = false
+        hide_boxes()
         confirm_box.visible = true
     end
 
@@ -985,7 +1046,9 @@ function C.make_preset_controls(o)
         if current ~= "template" then
             add("rename preset…", function() ask_name("rename") end)
             add("delete preset", ask_delete)
+            add("export preset…", function() hide_boxes(); export_box.visible = true end)
         end
+        if o.allow_store_new then add("import preset…", function() hide_boxes(); import_box.visible = true end) end
         set_entries(menu, items)
         menu.selected = 1
     end
@@ -1097,6 +1160,68 @@ function C.make_preset_controls(o)
         ctl.refresh()
     end
 
+    -- The saved preset, not the panel: unsaved changes stay out and the message says so.
+    local function export_clicked()
+        local folder = export_chooser.value
+        if not folder or folder == "" then say("pick a folder to export into first"); return end
+        local text = o.store.read(current)
+        if not text then say("couldn't read " .. o.store.path(current)); return end
+        local bundle = folder .. "/" .. current .. ".atpreset"
+        if C.path_exists(bundle) then say(bundle .. " already exists: delete or rename it first"); return end
+        C.make_dir(bundle)
+        local files = { { name = "preset.json", text = text } }
+        for _, f in ipairs(o.store.export_files and o.store.export_files(current) or {}) do
+            local body = C.read_file(f.path)
+            if not body then say("couldn't read " .. f.path); return end
+            files[#files + 1] = { name = f.name, text = body }
+        end
+        local names = {}
+        for _, f in ipairs(files) do
+            names[#names + 1] = f.name
+            if not C.write_file_atomic(bundle .. "/" .. f.name, f.text) then
+                say("couldn't write " .. bundle .. "/" .. f.name)
+                return
+            end
+        end
+        local manifest = C.preset_manifest(o.plugin, current, names, os.date("%Y-%m-%d"))
+        if not C.write_file_atomic(bundle .. "/manifest.json", manifest) then
+            say("couldn't write " .. bundle .. "/manifest.json")
+            return
+        end
+        export_box.visible = false
+        local msg = string.format('preset "%s" exported to %s', current, bundle)
+        o.log(msg .. " (" .. table.concat(names, ", ") .. ")")
+        say(msg .. (ctl.check_dirty() and "; unsaved panel changes aren't in it" or ""))
+    end
+
+    -- Adds the bundle as a new preset (renamed when the name is taken) without switching to it,
+    -- so unsaved panel changes stay.
+    local function import_clicked()
+        local bundle = import_chooser.value
+        if not bundle or bundle == "" then say("pick the .atpreset folder first"); return end
+        local manifest_text = C.read_file(bundle .. "/manifest.json")
+        if not manifest_text then say(bundle .. " has no manifest.json: pick the .atpreset folder"); return end
+        local m, why = C.preset_bundle_check(manifest_text, o.plugin)
+        if not m then say(why); return end
+        local text = C.read_file(bundle .. "/preset.json")
+        local decoded, err
+        if text then decoded, err = C.preset_decode(text) else err = "is missing" end
+        if not decoded then say(bundle .. "/preset.json " .. err); return end
+        local name, bad = C.preset_name_ok(m.preset)
+        if not name then say("the bundle's preset name: " .. PRESET_WHY[bad]); return end
+        name = C.preset_free_name(name, o.store.list())
+        if o.store.import_files then
+            local ok, ierr = o.store.import_files(name, bundle, m.files)
+            if not ok then say(string.format('couldn\'t import "%s": %s', m.preset, tostring(ierr))); return end
+        end
+        if not o.store.write(name, text) then say("couldn't write " .. o.store.path(name)); return end
+        import_box.visible = false
+        ctl.refresh()
+        local msg = string.format('imported "%s" from %s', name, bundle)
+        o.log(msg)
+        say(msg .. (name ~= m.preset and string.format(' ("%s" was taken)', m.preset) or "") .. "; pick it in the preset list")
+    end
+
     picker = dt.new_widget("combobox") {
         label = "preset",
         tooltip = "Pick a saved set of panel settings. template = the defaults. With unsaved changes, switching asks first: Switch drops them. Save with actions → update preset.",
@@ -1115,7 +1240,7 @@ function C.make_preset_controls(o)
     }
     menu = dt.new_widget("combobox") {
         label = "actions",
-        tooltip = "Preset actions: update the selected preset with the panel's values, store the panel as a new preset, rename or delete.",
+        tooltip = "Preset actions: update the selected preset with the panel's values, store the panel as a new preset, rename, delete, export to a folder or import one.",
         changed_callback = function(self)
             local i = self.selected
             if not i or i <= 1 then return end
@@ -1152,13 +1277,48 @@ function C.make_preset_controls(o)
             dt.new_widget("button") { label = "Cancel", clicked_callback = function() confirm_box.visible = false end },
         },
     }
-    ctl.widgets = { picker = picker, menu = menu, dirty_label = dirty_label, name_box = name_box, confirm_box = confirm_box }
+    export_chooser = dt.new_widget("file_chooser_button") {
+        title = "folder to export the preset into",
+        is_directory = true,
+        tooltip = "The preset is written to a <name>.atpreset folder inside this one.",
+    }
+    export_box = dt.new_widget("box") {
+        orientation = "vertical",
+        visible = false,
+        dt.new_widget("label") { label = "export into folder", halign = "start" },
+        export_chooser,
+        dt.new_widget("box") {
+            orientation = "horizontal",
+            dt.new_widget("button") { label = "Export", clicked_callback = export_clicked },
+            dt.new_widget("button") { label = "Cancel", clicked_callback = function() export_box.visible = false end },
+        },
+    }
+    import_chooser = dt.new_widget("file_chooser_button") {
+        title = "preset bundle (.atpreset folder)",
+        is_directory = true,
+        tooltip = "A <name>.atpreset folder made by export preset. A preset with the same name is kept: the import gets (2) added.",
+    }
+    import_box = dt.new_widget("box") {
+        orientation = "vertical",
+        visible = false,
+        dt.new_widget("label") { label = "import .atpreset folder", halign = "start" },
+        import_chooser,
+        dt.new_widget("box") {
+            orientation = "horizontal",
+            dt.new_widget("button") { label = "Import", clicked_callback = import_clicked },
+            dt.new_widget("button") { label = "Cancel", clicked_callback = function() import_box.visible = false end },
+        },
+    }
+    ctl.widgets = { picker = picker, menu = menu, dirty_label = dirty_label, name_box = name_box, confirm_box = confirm_box,
+        export_box = export_box, export_chooser = export_chooser, import_box = import_box, import_chooser = import_chooser }
     ctl.widget = dt.new_widget("box") {
         orientation = "vertical",
         dt.new_widget("box") { orientation = "horizontal", picker, menu },
         dirty_label,
         name_box,
         confirm_box,
+        export_box,
+        import_box,
     }
 
     ctl.refresh()

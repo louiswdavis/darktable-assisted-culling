@@ -155,6 +155,15 @@ ok   preset name colon
 ok   preset name quote
 ok   preset order
 ok   preset order empty
+ok   bundle manifest round trip name
+ok   bundle manifest round trip files
+ok   bundle from another plugin
+ok   bundle newer version refused
+ok   bundle not a manifest
+ok   bundle bad json
+ok   free name unused
+ok   free name taken any case
+ok   free name template
 ok   preset schema: mode defaults
 ok   preset schema: grouping defaults to native groups and no tag nodes
 ok   preset schema: switch defaults

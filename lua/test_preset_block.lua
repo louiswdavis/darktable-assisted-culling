@@ -88,4 +88,20 @@ return function(P, check)
     -- order --------------------------------------------------
     check("preset order", table.concat(P.preset_order({ "b", "A", "template", "b", "TEMPLATE" }), ","), "template,A,b")
     check("preset order empty", table.concat(P.preset_order({}), ","), "template")
+
+    -- bundles ------------------------------------------------
+    local manifest = P.preset_manifest("assisted_x", 'Rally "A"', { "preset.json", "entries.json" }, "2026-11-19")
+    local m = P.preset_bundle_check(manifest, "assisted_x")
+    check("bundle manifest round trip name", m and m.preset, 'Rally "A"')
+    check("bundle manifest round trip files", m and table.concat(m.files, "|"), "preset.json|entries.json")
+    check("bundle from another plugin", select(2, P.preset_bundle_check(manifest, "assisted_y")),
+        "the bundle is for assisted_x, not this plugin")
+    check("bundle newer version refused", (select(2, P.preset_bundle_check(
+        '{"version": 99, "plugin": "assisted_x", "preset": "a", "files": "preset.json"}', "assisted_x")) or ""):find("version 99") ~= nil, true)
+    check("bundle not a manifest", select(2, P.preset_bundle_check('{"version": 1}', "assisted_x")),
+        "manifest.json isn't a preset bundle manifest")
+    check("bundle bad json", (select(2, P.preset_bundle_check("nope", "assisted_x")) or ""):find("^manifest.json: ") ~= nil, true)
+    check("free name unused", P.preset_free_name("Rally", { "Hill" }), "Rally")
+    check("free name taken any case", P.preset_free_name("Rally", { "rally", "Rally (2)" }), "Rally (3)")
+    check("free name template", P.preset_free_name("Template", {}), "Template (2)")
 end
