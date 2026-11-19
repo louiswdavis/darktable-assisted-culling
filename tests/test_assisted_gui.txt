@@ -29,12 +29,14 @@ ok   cull: the end message
 ok   cull: the button is back to its label
 ok   cull: no Lua error
 ok   cull, detector installed: the scorer ran once
+ok   cull, first picks 15: passed to the scorer
 ok   cull, detector installed: the detector and the detection cache are passed
 ok   cull, detector installed: the argument after the cache path is an option
 ok   cull, every argument option on: each one reaches the scorer
 ok   cull, detector installed: the keeper is rated
 ok   cull, detector installed: no Lua error
 ok   cull, subject tracking: the scorer ran twice
+ok   cull, first picks back off: not passed
 ok   cull, subject tracking: the first run finds subjects with the detector and the mask model
 ok   cull, subject tracking: both frames are outlined and the models are closed
 ok   cull, subject tracking: the scoring run gets the mask model and each frame's mask
@@ -100,6 +102,11 @@ ok   restore, another library's file: left alone
 ok   restore, comma and line break in the file name: the frame is back
 ok   restore, an image removed from the library: the others are back
 ok   restore: no Lua error
+ok   reject mode, keeper dropped: the run's stars go to 0, hand ratings stay
+ok   reject mode: the log counts the frames set to 0
+ok   reject mode: the saved ratings keep the rating from before the first run
+ok   reject mode, restore after two runs: back to the ratings from before the first
+ok   reject mode: no Lua error
 ok   detail tags: a tag attached to two images is looked up once in the run
 ok   detail tags: every Keeper / Rejected tag is attached before the first detail tag
 ok   detail tags: a second job bar, both closed at the end

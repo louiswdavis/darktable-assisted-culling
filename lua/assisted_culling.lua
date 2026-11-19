@@ -886,6 +886,17 @@ local function sync_tag(img, have, name, wanted, tally, tag_named)
     return 0
 end
 
+-- image id → { previous, written, path } from PREVIOUS_RATINGS_PATH: the rating the image had
+-- before a run first changed it, and the last rating a run wrote.
+local function read_saved_ratings()
+    local record_of = {}
+    for id, previous, written, path in (read_file(PREVIOUS_RATINGS_PATH) or "")
+            :gmatch("(%d+),(%-?%d+),(%-?%d+),([^\r\n]*)") do
+        record_of[tonumber(id)] = { previous = tonumber(previous), written = tonumber(written), path = path }
+    end
+    return record_of
+end
+
 function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_mode)
     rank_mode = rank_mode or "universal"
     sharp_mode = sharp_mode or "subject_focus"
@@ -903,6 +914,8 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
     local run_began = os.time()
     -- image id → { path, previous, written }: the rating each image had when the run first met it
     local previous_ratings = {}
+    -- earlier runs' records; an image still at its written rating has plugin stars, not the user's
+    local saved_ratings = read_saved_ratings()
 
     local success, run_err = C.logged_call(log, "cull", function()
         local lock_tag = images and tags.find(TAG_LOCKED)
@@ -1325,6 +1338,8 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         -- The rating and Keeper / Rejected are written here; every other tag change is queued
         -- in detail_queue and written after the end message.
         local rating_writes, all_writes, tag_tally = 0, 0, {}
+        -- first picks leaves every rating alone, keeper or not
+        local demote_plugin_stars, demoted = nk_mode == "reject" and not tonumber(settings.first_picks), 0
         local detail_queue, detail_total = {}, 0
         -- one lookup per tag name per run
         local tag_objs = {}
@@ -1335,10 +1350,20 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         local function apply_to_image(img, want_rating, is_keeper, flags, diag, rejected)
             local writes = 0
             local have = tags_of(img)
+            local path = (img.path .. "/" .. img.filename):gsub("[\r\n]", " ")
+            local saved = saved_ratings[img.id]
+            local plugin_rated = saved ~= nil and saved.path == path and img.rating == saved.written
+
+            -- reject mode leaves a non-keeper's own rating alone; stars a run wrote go back to 0
+            if want_rating == nil and demote_plugin_stars and not is_keeper and plugin_rated and img.rating ~= 0 then
+                want_rating = 0
+                demoted = demoted + 1
+            end
 
             if want_rating ~= nil and img.rating ~= want_rating then
                 local record = previous_ratings[img.id]
-                    or { path = (img.path .. "/" .. img.filename):gsub("[\r\n]", " "), previous = img.rating }
+                    or (plugin_rated and saved)
+                    or { path = path, previous = img.rating }
                 record.written = want_rating
                 previous_ratings[img.id] = record
                 img.rating = want_rating; writes = writes + 1
@@ -1637,6 +1662,9 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             say(msg)
             log(string.format("apply: timing: %.1fs in tag and rating writes, %.1fs paused, %.1fs in progress updates (job bar %.1fs, panel line %.1fs, toast %.1fs); %d rating writes, %d Keeper / Rejected tag writes; final drain took %ds",
                 write_s, pause_s, bar_s + label_s + toast_s, bar_s, label_s, toast_s, rating_writes, all_writes - rating_writes, drain_s))
+            if demote_plugin_stars then
+                log(string.format("apply: %d non-keepers set to 0 (stars an earlier run wrote); others kept their rating", demoted))
+            end
             -- Each tag write makes darktable rebuild its tagging lists (about 100ms). The panel
             -- line waits for darktable to catch up, then the pause leaves it as long again for the user.
             if detail_total > 0 then
@@ -1716,11 +1744,12 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         return
     end
 
-    -- a run that changed no rating leaves the earlier run's file in place
+    -- merged into the earlier runs' records; a run that changed no rating leaves the file in place
     if next(previous_ratings) then
+        for id, record in pairs(previous_ratings) do saved_ratings[id] = record end
         local saved, save_err = pcall(function()
             local lines = {}
-            for id, record in pairs(previous_ratings) do
+            for id, record in pairs(saved_ratings) do
                 lines[#lines + 1] = string.format("%d,%d,%d,%s", id, record.previous, record.written, record.path)
             end
             table.sort(lines)
@@ -1821,22 +1850,18 @@ function M.clear_marks(images)
         cleared, total, failed > 0 and (", " .. failed .. " couldn't be updated") or ""))
 end
 
--- Sets each image back to the rating it had before the last run that changed a rating
--- (PREVIOUS_RATINGS_PATH). An image whose rating is no longer what that run wrote was rated
+-- Sets each image back to the rating it had before the first run that changed it
+-- (PREVIOUS_RATINGS_PATH). An image whose rating is no longer what the last run wrote was rated
 -- since and is left alone. Tags are not changed.
 function M.restore_ratings(images)
     if not images or #images == 0 then
         dt.print(_("Assisted Culling: select some images first"))
         return
     end
-    local text = read_file(PREVIOUS_RATINGS_PATH)
-    if not text then
+    local record_of = read_saved_ratings()
+    if not next(record_of) then
         dt.print(_("Assisted Culling: no run has changed a rating yet, so there is nothing to restore."))
         return
-    end
-    local record_of = {}
-    for id, previous, written, path in text:gmatch("(%d+),(%-?%d+),(%-?%d+),([^\r\n]*)") do
-        record_of[tonumber(id)] = { previous = tonumber(previous), written = tonumber(written), path = path }
     end
 
     local total, restored, rated_since, failed = #images, 0, 0, 0
@@ -2084,7 +2109,7 @@ local function install_panel()
         { _("off"), _("within 95% of best"), _("within 90% of best"), _("within 85% of best"), _("within 80% of best"), _("within 75% of best") })
 
     local non_keeper_combo = choice_combo("non_keeper", _("non-keepers"),
-        _("The rating of frames that are not kept.\nleave alone: keeps their rating and writes only the tags.\nreject bad frames: rejects only the far-behind frames and leaves the rest alone.\n0 to 5 stars: that rating.\ngraded: stars below the burst's lowest keeper by how close each frame is to the burst's best: 90%+ one star less, 75%+ two, 60%+ three, 45%+ four, else 0.\nWhatever is picked, a frame under 30% of its burst's best (times star strictness) is far behind and rejected (-1, Rejected tag), up to rejects per burst: with the best at 400, a frame at 100 is far behind."),
+        _("The rating of frames that are not kept.\nleave alone: keeps their rating and writes only the tags.\nreject bad frames: rejects only the far-behind frames and leaves the rest alone, except stars an earlier run wrote, which go to 0.\n0 to 5 stars: that rating.\ngraded: stars below the burst's lowest keeper by how close each frame is to the burst's best: 90%+ one star less, 75%+ two, 60%+ three, 45%+ four, else 0.\nWhatever is picked, a frame under 30% of its burst's best (times star strictness) is far behind and rejected (-1, Rejected tag), up to rejects per burst: with the best at 400, a frame at 100 is far behind."),
         { _("leave alone"), _("reject bad frames (-1)"), _("0 stars"), _("1 star"), _("2 stars"), _("3 stars"), _("4 stars"), _("5 stars"), _("graded by burst") })
 
     local reject_cap_combo = choice_combo("reject_cap", _("rejects per burst"),

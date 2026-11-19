@@ -174,11 +174,13 @@ ok   preset schema: keeper margin defaults off
 ok   preset schema: spread keepers defaults off
 ok   preset schema: number reads defaults off
 ok   preset schema: other angle, motion look and star slope default on
-ok   TAG_TOGGLES: Why writes fourteen reasons, ending with the two new keepers and far behind
+ok   TAG_TOGGLES: Why writes fifteen reasons, ending with far behind and not a first pick
 ok   preset schema: sharpness judge defaults off
 ok   preset schema: graded non-keepers can be picked
 ok   preset schema: star strictness defaults to standard
 ok   preset schema: blank frames default to 95%
+ok   preset schema: rejects per burst default to 2
+ok   preset schema: first picks default off
 ok   preset schema: an unknown star strictness falls back
 ok   sharp modes: motorsport is offered
 ok   genre modes: sport uses motorsport sharpness

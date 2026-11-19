@@ -219,7 +219,7 @@ Two safeguards keep deliberate shots from being punished:
 
 ### Re-running and clearing
 
-Re-running is safe: every tag is re-synced to the new result, so a frame that was a keeper last pass and isn't now loses its `Keeper` tag. It does overwrite star ratings, including ones you set by hand, except on non-keepers when *non-keepers* is *leave alone*.
+Re-running is safe: every tag is re-synced to the new result, so a frame that was a keeper last pass and isn't now loses its `Keeper` tag. It does overwrite star ratings, including ones you set by hand, except on non-keepers when *non-keepers* is *leave alone* or *reject*. With *reject* (and *first picks* off), a frame an earlier run rated that is no longer a keeper goes to 0 stars; a rating you set by hand stays.
 
 A few things a re-run doesn't touch:
 
@@ -239,12 +239,12 @@ To protect a frame, tag it `Assisted Culling|Locked` yourself (create the tag in
 
 **Clear culling marks** removes all the plugin's tags from the selection without touching star ratings. It still clears `Keeper`/`Rejected`/flag tags on locked frames, but never removes `Locked` itself. Colour labels are never read or written, so any you apply by hand are yours.
 
-**Restore previous ratings** undoes the star ratings of the last run that changed one. Select the images and click it:
+**Restore previous ratings** undoes the star ratings the plugin wrote. Select the images and click it:
 
-- each image goes back to the rating it had before that run
-- an image you rated again since the run is left alone
+- each image goes back to the rating it had before the first run that changed it, even after several runs
+- an image you rated again since the last run that changed it is left alone
 - tags are not changed; use **Clear culling marks** for those
-- only one run back: each run that changes a rating replaces the saved ratings (`assisted_culling.previous-ratings.csv` in darktable's config folder), so restore before re-running. A cancelled or failed run saves what it had changed. A run that changes no rating keeps the earlier run's file.
+- the saved ratings are in `assisted_culling.previous-ratings.csv` in darktable's config folder; each run adds the images it changed. A cancelled or failed run saves what it had changed. Delete the file to start the history again.
 
 **Reset ratings to 0** sets the selected images to 0 stars. Select the images and click it:
 

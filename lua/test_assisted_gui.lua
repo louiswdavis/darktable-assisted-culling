@@ -691,6 +691,32 @@ check("restore, an image removed from the library: the others are back", jpeg1.r
     "5 4; Assisted Culling: restored the previous rating of 2 of 3 images, 1 couldn't be updated. Tags were not changed.")
 check("restore: no Lua error", lua_errors(), nil)
 
+-- Reject mode: a frame that is no longer a keeper loses the stars a run wrote, not the user's own
+local non_keeper_combo = combo(panel, "non-keepers")
+non_keeper_combo.selected = 2 -- reject
+non_keeper_combo.changed_callback(non_keeper_combo)
+os.remove(PREVIOUS_RATINGS)
+local was_kept, kept_twice, hand_rated, rerated = image(11, "DSC00011.JPG"), image(12, "DSC00012.JPG"),
+    image(13, "DSC00013.JPG"), image(14, "DSC00014.JPG")
+was_kept.rating, hand_rated.rating = 4, 2
+PYTHON.results = "11,0.90,,,1,3,\n12,0.90,,,1,5,\n13,0.40,,,0,leave,\n14,0.90,,,1,3,\n"
+click("Cull selection", { was_kept, kept_twice, hand_rated, rerated })
+rerated.rating = 4
+PYTHON.results = "11,0.40,,,0,leave,\n12,0.90,,,1,2,\n13,0.40,,,0,leave,\n14,0.40,,,0,leave,\n"
+click("Cull selection", { was_kept, kept_twice, hand_rated, rerated })
+check("reject mode, keeper dropped: the run's stars go to 0, hand ratings stay",
+    was_kept.rating .. " " .. kept_twice.rating .. " " .. hand_rated.rating .. " " .. rerated.rating, "0 2 2 4")
+check("reject mode: the log counts the frames set to 0",
+    (read_file(ROOT .. "/config/assisted_culling.log") or ""):find("apply: 1 non-keepers set to 0", 1, true) ~= nil, true)
+check("reject mode: the saved ratings keep the rating from before the first run", read_file(PREVIOUS_RATINGS),
+    "11,4,0,/photos/DSC00011.JPG\n12,0,2,/photos/DSC00012.JPG\n14,0,3,/photos/DSC00014.JPG\n")
+click("Restore previous ratings", { was_kept, kept_twice, hand_rated, rerated })
+check("reject mode, restore after two runs: back to the ratings from before the first",
+    was_kept.rating .. " " .. kept_twice.rating .. " " .. hand_rated.rating .. " " .. rerated.rating, "4 0 2 4")
+non_keeper_combo.selected = 1 -- leave
+non_keeper_combo.changed_callback(non_keeper_combo)
+check("reject mode: no Lua error", lua_errors(), nil)
+
 -- Detail tags --------------------------------------------------------------------------
 -- Ratings and Keeper / Rejected are written first; the Why and flag tags follow under their own job bar.
 local detail1, detail2, detail3 = image(201, "DSC00201.JPG"), image(202, "DSC00202.JPG"), image(203, "DSC00203.JPG")

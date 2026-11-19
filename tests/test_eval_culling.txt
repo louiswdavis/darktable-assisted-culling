@@ -58,6 +58,8 @@ ok   replay: leave non-keepers
 ok   replay: keeper stars from the universal tiers
 ok   replay: same stars as rate_burst on the burst
 ok   replay: a margin keeps a2 as well and grades a3
+ok   frame_of: zoom burst class and creative burst from the tags
+ok   replay: a creative burst rejects no far-behind frame
 ok   suggest: top 3
 ok   suggest: every choice names every panel setting
 ok   suggest: best first
