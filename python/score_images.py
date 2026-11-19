@@ -1369,7 +1369,7 @@ def emit_saliency_points(manifest, args, cache, detections):
 # it was decided. Kept to a handful: a tag per score bucket floods darktable's tag list.
 WHY_REASONS = ("Keeper", "Keeper by margin", "Outranked", "Graded", "Not shortlisted",
                "No vehicle", "Close call", "Blank", "Spread", "Number clearer", "Subject clearer",
-               "Other angle", "Motion look")
+               "Other angle", "Motion look", "Far behind")
 # the subject tag of a sam_subject frame whose detector found no car
 NO_VEHICLE_SUBJECT = "Subject|Vehicle|Guessed"
 
@@ -1461,6 +1461,7 @@ def report_rows(manifest, result_rows, keepers_per_burst, direction_of=None, par
                    else f"kept: rank {rank} of {len(rows)}, the straightest motion blur of the burst" if reason == "Motion look"
                    else f"kept: rank {rank} of {len(rows)}, {allowed} allowed" if keeper == "1" and rank <= allowed
                    else f"kept: rank {rank} of {len(rows)}, within the keeper margin of the best" if keeper == "1"
+                   else f"not kept: rank {rank} of {len(rows)}, far behind the burst's best" if reason == "Far behind"
                    else f"not kept: rank {rank} of {len(rows)}, only {allowed} allowed or not eligible")
             if reason == "Close call":
                 why += "; close call with the next frame"

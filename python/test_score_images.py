@@ -282,15 +282,31 @@ def run_tests():
         rows = [line.strip().split(",") for line in open(res_path)]
         return {r[0]: [t for t in r[6].split(";") if t.startswith("Why|")][0][4:] for r in rows}
 
-    check("why: keeper by rank, the rest outranked", why_of(), {"a": "Keeper", "b": "Outranked", "c": "Outranked"})
+    check("why: keeper by rank, the rest outranked or far behind", why_of(), {"a": "Keeper", "b": "Outranked", "c": "Far behind"})
     check("why: the margin keeper says so", why_of(ns={"keep_margin": 0.6}),
-          {"a": "Keeper", "b": "Keeper by margin", "c": "Outranked"})
-    check("why: graded non-keepers", why_of(ns={"nk_mode": "graded"}), {"a": "Keeper", "b": "Graded", "c": "Graded"})
+          {"a": "Keeper", "b": "Keeper by margin", "c": "Far behind"})
+    check("why: graded non-keepers", why_of(ns={"nk_mode": "graded"}), {"a": "Keeper", "b": "Graded", "c": "Far behind"})
     check("why: a frame outside the shortlist", why_of(eligible={"a", "b"}),
           {"a": "Keeper", "b": "Outranked", "c": "Not shortlisted"})
     check("why: a no-vehicle frame is left alone, the next frame keeps", why_of(no_vehicle={"a"}),
-          {"a": "No vehicle", "b": "Keeper", "c": "Outranked"})
+          {"a": "No vehicle", "b": "Keeper", "c": "Far behind"})
     check("why: an all-no-vehicle burst is left alone", set(why_of(no_vehicle={"a", "b", "c"}).values()), {"No vehicle"})
+
+    def far_of(**ns):
+        """id -> (stars, Why reason) for the 9/6/1 burst: c is under 45% of the best."""
+        why = why_of(ns=ns)
+        return {r[0]: (r[5], why[r[0]]) for r in (line.strip().split(",") for line in open(res_path))}
+
+    check("far behind: only the frame under 45% of the burst's best is rejected, the other loser takes the non-keeper stars",
+          far_of(nk_mode="0"), {"a": (far_of(nk_mode="0")["a"][0], "Keeper"), "b": ("0", "Outranked"), "c": ("-1", "Far behind")})
+    check("far behind: graded non-keepers, the far frame is rejected in place of 0 stars",
+          {k: v for k, v in far_of(nk_mode="graded").items() if k != "a"}, {"b": ("0", "Graded"), "c": ("-1", "Far behind")})
+    check("far behind: non-keepers left alone keep their rating, the far frame still says so",
+          {k: v for k, v in far_of(nk_mode="leave").items() if k != "a"}, {"b": ("leave", "Outranked"), "c": ("leave", "Far behind")})
+    check("far behind: a frame outside the shortlist is not judged",
+          why_of(eligible={"a", "b"})["c"], "Not shortlisted")
+    check("far behind: a keeper is never far behind",
+          why_of(ns={"keep_mode": "keep_all"}), {"a": "Keeper", "b": "Keeper", "c": "Keeper"})
     open(res_path, "w").close()
     S.process_burst_logic("1", {"a": 9.0, "b": 8.8}, {"a": (), "b": ()}, 2, Namespace(
         keep_mode="single_best", rank_mode="universal", nk_mode="leave"), res_path)
@@ -508,7 +524,7 @@ def run_tests():
           {k: ("0", "-1", "Why|Blank") for k in "abc"})
     check("blank: the sharpest frame is blank, a good frame keeps",
           blank_rows({"a": ("blank",), "b": (), "c": ()}),
-          {"a": ("0", "-1", "Why|Blank"), "b": ("1", "0", "Why|Keeper"), "c": ("0", "leave", "Why|Outranked")})
+          {"a": ("0", "-1", "Why|Blank"), "b": ("1", "0", "Why|Keeper"), "c": ("0", "leave", "Why|Far behind")})
     check("blank: Blank is a listed Why reason", "Blank" in S.WHY_REASONS, True)
 
     def keeper_row(flags, rank_mode, sharp=5000.0, reference=None):
@@ -958,10 +974,10 @@ def run_tests():
         return {r[0]: (int(r[4]), int(r[5])) for r in rows}
 
     check("keeper margin: frames within 95% of the best are kept too", graded(0.95),
-          {"a": (1, 5), "b": (1, 4), "c": (0, 2), "d": (0, 1), "e": (0, 0)})
+          {"a": (1, 5), "b": (1, 4), "c": (0, 2), "d": (0, 1), "e": (0, -1)})
     check("keeper margin off: graded non-keepers step down from the keeper", graded(0.0),
-          {"a": (1, 5), "b": (0, 4), "c": (0, 3), "d": (0, 2), "e": (0, 0)})
-    check("graded: a stricter star scale drops non-keepers faster", graded(0.0, 2.0)["c"], (0, 0))
+          {"a": (1, 5), "b": (0, 4), "c": (0, 3), "d": (0, 2), "e": (0, -1)})
+    check("graded: a stricter star scale drops non-keepers faster, here to a reject", graded(0.0, 2.0)["c"], (0, -1))
 
     # report_rows --------------------------------------------------------------
     rep_manifest = [("1", "/p/a.jpg", "0", "", "", "", 0.0, 0.0, 0.0, "37"), ("2", "/p/b.jpg", "0", "", "", "", 0.0, 0.0, 0.0, ""),

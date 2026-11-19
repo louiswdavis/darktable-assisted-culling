@@ -111,7 +111,7 @@ ok   detail tags: the log has the stage's line
 ok   detail tags: the timing line counts only the Keeper / Rejected tags
 ok   detail tags: the tally has them
 ok   detail tags, same images again: nothing to write, no second job bar
-ok   detail tags, stopped: the first image has its tag, the others have rating and Rejected only
+ok   detail tags, stopped: the first image has its tag, an outranked frame has its rating and no Rejected tag, the far-behind frame has Rejected
 ok   detail tags, stopped: the message says what is left
 ok   detail tags, stopped: the panel line is cleared
 ok   detail tags, culled again after a stop: the rest are written

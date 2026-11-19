@@ -403,8 +403,8 @@ M.TAG_TOGGLES = {
     { key = "why", label = "Why", kind = "diag",
       writes = { "Why|Keeper", "Why|Keeper by margin", "Why|Outranked", "Why|Graded", "Why|Not shortlisted",
           "Why|No vehicle", "Why|Close call", "Why|Blank", "Why|Spread", "Why|Number clearer", "Why|Subject clearer",
-          "Why|Other angle", "Why|Motion look" },
-      when = "every scored frame, saying how it was decided. Keeper: kept by rank. Keeper by margin: kept by the keeper margin. Outranked: lost to a sharper frame (left or rejected). Graded: lost and rated by burst. Not shortlisted: subject tracking (SAM) left it out of the shortlist. No vehicle: the detector found no car, so the frame kept its rating (only with \"Leave frames with no vehicle\" on). Blank: the frame is one flat colour, so it was rejected. Close call: the last keeper and the best frame that lost scored within 5% of each other; the keeper is still kept, but check both. Spread: kept as its stretch of the burst's best frame over a sharper frame elsewhere (only with \"Spread keepers over the burst\" on). Number clearer: kept over the sharper frame of a close call because tagging read the car's number clearer in it (only with \"Break close calls on the number read\" on). Subject clearer: kept over the sharper frame of a close call because the sharpness judge scored its car clearer (only with \"Break close calls with the sharpness judge\" on). Other angle: the best frame of a view of the car the sharpest keeper does not show, kept one star below it (only with \"Keep the other angles\" on). Motion look: the burst's straightest motion blur with the car in view, kept as well as the sharp keepers (only with \"Keep a motion-blur frame\" on). Filter on one to step through, say, every frame that lost to the margin." },
+          "Why|Other angle", "Why|Motion look", "Why|Far behind" },
+      when = "every scored frame, saying how it was decided. Keeper: kept by rank. Keeper by margin: kept by the keeper margin. Outranked: lost to a sharper frame. Far behind: lost and scored under 45% of its burst's best, so it is rejected. Graded: lost and rated by burst. Not shortlisted: subject tracking (SAM) left it out of the shortlist. No vehicle: the detector found no car, so the frame kept its rating (only with \"Leave frames with no vehicle\" on). Blank: the frame is one flat colour, so it was rejected. Close call: the last keeper and the best frame that lost scored within 5% of each other; the keeper is still kept, but check both. Spread: kept as its stretch of the burst's best frame over a sharper frame elsewhere (only with \"Spread keepers over the burst\" on). Number clearer: kept over the sharper frame of a close call because tagging read the car's number clearer in it (only with \"Break close calls on the number read\" on). Subject clearer: kept over the sharper frame of a close call because the sharpness judge scored its car clearer (only with \"Break close calls with the sharpness judge\" on). Other angle: the best frame of a view of the car the sharpest keeper does not show, kept one star below it (only with \"Keep the other angles\" on). Motion look: the burst's straightest motion blur with the car in view, kept as well as the sharp keepers (only with \"Keep a motion-blur frame\" on). Filter on one to step through, say, every frame that lost to the margin." },
 }
 
 -- Headings of the tags-written page, in order; each TAG_TOGGLES row's `kind` is one of these.
@@ -1292,7 +1292,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         local stage1_start = os.time()
 
         local applied_total, failed_total, first_error, n_skipped = 0, 0, nil, 0
-        local stats = { keepers = 0, others = 0, flagged = {}, guessed = 0, subject_bias = 0 }
+        local stats = { keepers = 0, others = 0, rejected = 0, flagged = {}, guessed = 0, subject_bias = 0 }
         for _, f in ipairs(FLAGS) do stats.flagged[f.name] = 0 end
 
         -- ---- result application (shared by "while scoring" and the final drain) ----
@@ -1309,7 +1309,8 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         local tag_on = {}
         for _, t in ipairs(M.TAG_TOGGLES) do tag_on[t.key] = tag_enabled(t.key) end
         local diag_off = M.diag_off(tag_on)
-        -- left_alone: a frame left alone for no vehicle is neither keeper nor rejected.
+        -- rejected: a frame the scorer rejected (far behind its burst's best, or blank), or any
+        -- frame not kept when non-keepers is reject. A frame left alone for no vehicle is neither.
         -- The rating and Keeper / Rejected are written here; every other tag change is queued
         -- in detail_queue and written after the end message.
         local rating_writes, all_writes, tag_tally = 0, 0, {}
@@ -1320,7 +1321,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             tag_objs[name] = tag_objs[name] or tags.create(name)
             return tag_objs[name]
         end
-        local function apply_to_image(img, want_rating, is_keeper, flags, diag, left_alone)
+        local function apply_to_image(img, want_rating, is_keeper, flags, diag, rejected)
             local writes = 0
             local have = tags_of(img)
 
@@ -1334,7 +1335,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             end
 
             writes = writes + sync_tag(img, have, TAG_KEEPER, is_keeper and tag_on.keeper, tag_tally, tag_named)
-            writes = writes + sync_tag(img, have, TAG_REJECT, not is_keeper and not left_alone and tag_on.rejected, tag_tally, tag_named)
+            writes = writes + sync_tag(img, have, TAG_REJECT, rejected and tag_on.rejected, tag_tally, tag_named)
 
             local attach, detach = M.diag_tag_changes(have, diag)
             for _, f in ipairs(FLAGS) do
@@ -1373,6 +1374,10 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                 if stats.flagged[name] then stats.flagged[name] = stats.flagged[name] + 1 end
             end
             local diag = ";" .. parts[7] .. ";"
+            local rejected = not is_keeper and not diag:find(";Why|No vehicle;", 1, true)
+                and (nk_mode == "reject" or diag:find(";Why|Far behind;", 1, true) ~= nil
+                    or diag:find(";Why|Blank;", 1, true) ~= nil)
+            if rejected then stats.rejected = stats.rejected + 1 end
             if diag:find(";Subject|Vehicle|Guessed;", 1, true) then stats.guessed = stats.guessed + 1 end
             if diag:find(";Scored|Subject bias;", 1, true) then stats.subject_bias = stats.subject_bias + 1 end
             local want_rating = nil
@@ -1381,7 +1386,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             local writes = 0
             for _, img in ipairs(group) do
                 local ok_apply, res = pcall(apply_to_image, img, want_rating, is_keeper, flags,
-                    M.filter_diag(parts[7], diag_off), diag:find(";Why|No vehicle;", 1, true) ~= nil)
+                    M.filter_diag(parts[7], diag_off), rejected)
                 if ok_apply then
                     applied_total = applied_total + 1
                     writes = writes + res
@@ -1598,6 +1603,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                 .. (tail ~= "" and tail or _("Check the plugins folder in preferences → Lua options, and that darktable-assisted-culling/.venv has python/requirements.txt installed.")))
         else
             local msg = string.format("Assisted Culling: done. %d keepers, %d not kept", stats.keepers, stats.others)
+            if stats.rejected > 0 then msg = msg .. string.format(" (%d rejected)", stats.rejected) end
             for _, f in ipairs(FLAGS) do
                 local n = stats.flagged[f.name]
                 if n > 0 then msg = msg .. string.format(", %d %s", n, f.summary) end
@@ -2066,7 +2072,7 @@ local function install_panel()
         { _("off"), _("within 95% of best"), _("within 90% of best"), _("within 85% of best"), _("within 80% of best"), _("within 75% of best") })
 
     local non_keeper_combo = choice_combo("non_keeper", _("non-keepers"),
-        _("What to do with images that are not kept. They get the Rejected tag unless tags written → Rejected is off.\ngraded: stars below the burst's lowest keeper by how close each frame is to the burst's best: 90%+ one star less, 75%+ two, 60%+ three, 45%+ four, else 0."),
+        _("The rating of images that are not kept. A frame under 45% of its burst's best sharpness is far behind: it is rejected (-1, Rejected tag) whatever is picked here, e.g. best 400, frame 150. Leave alone keeps its rating and writes only the tag. Reject (-1) rejects and tags them all.\ngraded: stars below the burst's lowest keeper by how close each frame is to the burst's best: 90%+ one star less, 75%+ two, 60%+ three, 45%+ four, else 0."),
         { _("leave alone"), _("reject (-1)"), _("0 stars"), _("1 star"), _("2 stars"), _("3 stars"), _("4 stars"), _("5 stars"), _("graded by burst") })
 
     local star_scale_combo = choice_combo("star_scale", _("star strictness"),

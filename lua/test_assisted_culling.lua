@@ -425,8 +425,8 @@ check("preset schema: other angle, motion look and star slope default on",
     tostring(cd.keep_angles) .. "|" .. tostring(cd.motion_look) .. "|" .. tostring(cd.star_slope), "true|true|true")
 for _, t in ipairs(C.TAG_TOGGLES) do
     if t.key == "why" then
-        check("TAG_TOGGLES: Why writes thirteen reasons, ending with the two new keepers",
-            #t.writes .. "|" .. t.writes[12] .. "|" .. t.writes[13], "13|Why|Other angle|Why|Motion look")
+        check("TAG_TOGGLES: Why writes fourteen reasons, ending with the two new keepers and far behind",
+            #t.writes .. "|" .. t.writes[12] .. "|" .. t.writes[13] .. "|" .. t.writes[14], "14|Why|Other angle|Why|Motion look|Why|Far behind")
     end
 end
 check("preset schema: sharpness judge defaults off", cd.sharp_judge, false)
