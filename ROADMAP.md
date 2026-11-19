@@ -2,7 +2,7 @@
 
 Ideas worth doing deliberately later, not bolted onto whatever's being fixed today.
 
-Background for the items below came from desk research in November 2026: unbuilt ideas found in old specs and audits; what Aftershoot, Narrative Select, Lightroom Assisted Culling and others do; models that run under cv2.dnn or onnxruntime; and how those tools score focus, pick keepers and learn from the user (patents, papers, vendor docs). What matters is written out in each item.
+Background for the items below came from desk research in November 2026: unbuilt ideas found in old specs and audits; what Aftershoot, Narrative Select, Lightroom Assisted Culling and others do; models that run under cv2.dnn or onnxruntime; and how those tools score focus, pick keepers and learn from the user (patents, papers, vendor docs). What matters is written out in each item. A second pass on 2026-11-19 added sports-culling vendor claims (FilterPixel, Aftershoot's 2026 roadmap), open blink models and the photo-series triage paper.
 
 Competitor figures are vendor claims and have not been checked. No tool publishes its algorithm, and no independent motorsport test exists.
 
@@ -90,6 +90,11 @@ Research: `docs/superpowers/research/2026-11-19-new-signals-across-plugins.md` (
   that stays in the same place across a burst while everything else moves (panning moves the
   scene). Tag `Why|Dirty lens` on the burst, so the user knows to check every frame. Effort M;
   needs a rainy shoot to test.
+- **Noise isn't sharpness.** Laplacian variance rises with sensor noise, so a soft high-ISO frame
+  can outscore a sharp clean one. Today every frame gets the same `bilateralFilter(5, 50, 50)`
+  before scoring (`score_images.py`). Scale the denoise strength by ISO from EXIF, or estimate
+  noise from a flat patch and subtract it. FilterPixel says it scores noise apart from focus, so a
+  sharp noisy frame beats a clean soft one (vendor claim). Effort S; test on a dusk or night shoot.
 
 ## Deliberate styles are not mistakes
 
@@ -144,6 +149,14 @@ A run that writes scores (and the `Why` reason tags) but no stars or rejects. Le
 
 Keep margin, star strictness and the per-mode star tier tables behind one slider from "keep more" to "keep fewer", with the separate settings still in the settings file. `eval_culling.py --suggest` (next section, still open) could pick the slider's points from past hand ratings.
 
+## Keep a set number
+
+Aftershoot's 2026 roadmap lists "cull to target": the user says how many photos to keep and the
+tool picks that many (vendor roadmap). For culling: type N, and the top N keepers across the
+selection get stars, ranked by the score already used inside bursts; the rest are left as they
+are, not rejected. Differs from the strictness slider, which sets a bar rather than a count.
+Effort S.
+
 ## Learn from hand ratings
 
 Still open: `eval_culling.py` exists, `--suggest` does not. Search a small grid of settings against the ratings changed by hand on past shoots and print the best few. Second stage: a small ranker trained on "kept frame beats dropped frame" pairs inside a burst.
@@ -172,7 +185,15 @@ Best first:
 1. **CLIP-IQA+ (ONNX) on the subject crop** as a second sharpness/quality judge beside the Laplacian score. Its weights are non-commercial: local use only.
 2. **SigLIP 2 zero-shot view** (front, side, rear) for view-aware ranking: prefer the view the shooter usually keeps. Run a throwaway test of colour and view prompts on real frames first.
 3. **Self-trained keeper classifier**, once eval data built from the user's own picks exists.
-4. **RF-DETR nano/small** beside D-FINE in `compare_detectors` (Apache-2.0), as a candidate upgrade for the detector both plugins share.
+4. **BlinkLinMulT (ONNX, MIT)** for closed eyes in face mode. Today a blink is the absence of a
+   Haar eye detection (`_detect_eyes`), which misses at small faces and profiles. BlinkLinMulT
+   scores an eye crop, so it needs eye landmarks first (YuNet, which tagging already ships, gives
+   them). Weaker on strong profiles, per its model card.
+5. **A pairwise "which frame is better" model.** Chang et al. 2016 ("Automatic triage for a
+   photo series", SIGGRAPH) trained a Siamese network on 15,545 photos in 5,953 series and matched
+   human picks 73% of the time. Their data is general photos, not motorsport; useful as a
+   starting point for the second stage of "Learn from hand ratings". Check the dataset licence.
+6. **RF-DETR nano/small** beside D-FINE in `compare_detectors` (Apache-2.0), as a candidate upgrade for the detector both plugins share.
 
 Rejected for licence: YOLO11/26 and YOLO-seg (AGPL).
 
@@ -201,6 +222,15 @@ No published CPU timings exist for the newer models, so measure first.
   plugin selects the burst's images, then sets the layout. Previous/next burst buttons step
   through bursts the same way. ~0.5 day. The grouping plugin could share it ("open group").
 - **Second pass on leftovers**: re-run only on frames still unrated or "needs review"
+
+## Export and import presets
+
+Asked for 2026-11-19. Full design in tagging's ROADMAP ("Export and import presets"): an
+**Export preset…** dialog with tick boxes per layer, a folder bundle with a `manifest.json`,
+import through culling's existing key upgrade. For culling only layer 1 applies: the preset JSON
+from `<config dir>/assisted_culling/presets/`. Score caches and run logs stay out (tied to image
+ids and model versions). Shared code in `plugin_common.lua`, so all three repos and COMMON_HASH
+change together. Effort S here once the shared part exists.
 
 ## Smaller known gaps
 
