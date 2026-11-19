@@ -44,8 +44,8 @@ the mean top-1, the median Spearman and the 5 worst bursts with their first fram
 --set PAN_BONUS=1.1 (or MISSED_PAN_FACTOR, CLOSE_CALL_SHARE; repeatable) rebuilds each
 motion_aware score from the report's score parts (subject × class factor, motion blur lifted
 as score_images does) and rates the run again with the panel settings given by --rank-mode,
---keep-mode, --keep-margin, --keep-angles, --motion-look, --star-slope, --non-keeper and
---star-scale (the plugin's defaults unless
+--keep-mode, --keep-margin, --keep-angles, --motion-look, --star-slope, --non-keeper,
+--reject-cap and --star-scale (the plugin's defaults unless
 passed). No photo is decoded. It says how many bursts the rebuild ranks as the live run did
 and, with no change, keeps the same frames: a mismatch means the settings differ from the run's."""
 
@@ -79,6 +79,7 @@ SUGGEST_GRID = {
     "motion_look": ["on", "off"],
     "star_slope": ["on", "off"],
     "non_keeper": ["leave", "graded"],
+    "reject_cap": ["2"],  # the cap never changes a keeper, so one value; --reject-cap takes the panel's others
     "star_scale": ["1", "0.5", "0.75", "1.25", "1.5", "2"],
 }
 SUGGEST_COLUMNS = ("score", "flags", "of")  # the report columns a replay needs on top of REPORT_COLUMNS
@@ -287,6 +288,7 @@ def settings_of(choice: dict) -> Namespace:
                      keep_angles=choice["keep_angles"] == "on",
                      motion_look=choice["motion_look"] == "on",
                      star_slope=choice["star_slope"] == "on",
+                     reject_cap=0 if choice["reject_cap"] == "off" else int(choice["reject_cap"]),
                      star_scale=float(choice["star_scale"]))
 
 
@@ -565,7 +567,8 @@ def preset_json(choice: dict, sharp_mode: str) -> str:
                        "keep_angles": choice["keep_angles"] == "on",
                        "motion_look": choice["motion_look"] == "on",
                        "star_slope": choice["star_slope"] == "on",
-                       "non_keeper": choice["non_keeper"], "star_scale": choice["star_scale"]}, indent=2)
+                       "non_keeper": choice["non_keeper"], "reject_cap": choice["reject_cap"],
+                       "star_scale": choice["star_scale"]}, indent=2)
 
 
 def render_suggestions(ranked: list, shoots: int, frames: int, sharp_mode: str, pick_stars: int, fixed: dict = None) -> str:
@@ -741,6 +744,8 @@ def main():
                        ("non_keeper", "--non-keeper"), ("star_scale", "--star-scale")):
         ap.add_argument(flag, dest=name, choices=SUGGEST_GRID[name], default=SUGGEST_GRID[name][0],
                         help=f"the run's panel setting, for --set (default {SUGGEST_GRID[name][0]})")
+    ap.add_argument("--reject-cap", dest="reject_cap", choices=["off", "1", "2", "3", "5"], default="2",
+                    help="the run's panel setting, for --set (default 2)")
     a = ap.parse_args()
     sets = parse_sets(a.set)
     if (a.suggest or sets) and a.sharp_mode == "run":

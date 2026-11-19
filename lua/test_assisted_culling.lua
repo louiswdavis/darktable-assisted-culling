@@ -434,6 +434,7 @@ check("preset schema: graded non-keepers can be picked",
     C.preset_merge(C.PRESET_SCHEMA, { non_keeper = "graded" }).non_keeper, "graded")
 check("preset schema: star strictness defaults to standard", cd.star_scale, "1")
 check("preset schema: blank frames default to 95%", cd.blank_share, "95")
+check("preset schema: rejects per burst default to 2", cd.reject_cap, "2")
 check("preset schema: an unknown star strictness falls back",
     C.preset_merge(C.PRESET_SCHEMA, { star_scale = "3" }).star_scale, "1")
 local has_motion = false

@@ -9,8 +9,11 @@ RELATIVE_REFERENCE_PERCENTILE = 95
 # "5 stars"; its bursts use the universal tiers of their mode instead (logged)
 RELATIVE_MIN_FRAMES = 5
 # graded non-keepers: (share of the burst's best score, stars below the burst's lowest keeper);
-# a frame under the last share is far behind: rejected (-1) when it could have kept, else 0 stars
+# a frame under the last share gets 0 stars
 GRADED_STEPS = [(0.90, 1), (0.75, 2), (0.60, 3), (0.45, 4)]
+# a frame that could have kept but scores under this share of the burst's best is far
+# behind: rejected (-1), at most settings.reject_cap of them per burst, worst first
+FAR_BEHIND_SHARE = 0.30
 # the last frame kept by rank and the best frame that wasn't kept are a close call
 # when the dropped one scores at least this share of the kept one
 CLOSE_CALL_SHARE = 0.95
@@ -233,9 +236,11 @@ def rate_burst(burst_sharpness: dict, burst_flags: dict, burst_size: int, settin
     Why|Motion look and the stars of MOTION_LOOK_TIERS less its flag penalties. slope
     ({id: stars}, slope_stars over the run's keepers) replaces the tier stars of the keepers
     it names, less their flag penalties and without the top-40% drop; relative and binary
-    ranking ignore it. A frame that could have kept but scores under the last GRADED_STEPS
-    share of the burst's best (times star_scale) is rejected (-1, Why|Far behind) in place
-    of its nk_mode rating; nk_mode leave still leaves its rating alone."""
+    ranking ignore it. A frame that could have kept but scores under FAR_BEHIND_SHARE of
+    the burst's best (times star_scale) is rejected (-1, Why|Far behind) in place of its
+    nk_mode rating, the worst settings.reject_cap of them per burst (0 = no limit);
+    nk_mode leave still leaves its rating alone. nk_mode reject rejects only those and
+    leaves the other non-keepers."""
     if not burst_sharpness:
         return [], [], {}, {}
 
@@ -340,8 +345,10 @@ def rate_burst(burst_sharpness: dict, burst_flags: dict, burst_size: int, settin
         burst_keepers = [i for i in sorted_members if i in keepers]
         rated[look] = max(0, star_tier(motion_look[look], MOTION_LOOK_TIERS)
                           - sum(FLAG_PENALTIES[f][1] for f in penalised[look]))
-    far = {i for i in (eligible | cut_off) - keepers
-           if burst_sharpness[i] < GRADED_STEPS[-1][0] * star_scale * best}
+    far = sorted((i for i in (eligible | cut_off) - keepers
+                  if burst_sharpness[i] < FAR_BEHIND_SHARE * star_scale * best), key=lambda i: burst_sharpness[i])
+    reject_cap = getattr(settings, "reject_cap", 0)
+    far = set(far[:reject_cap] if reject_cap else far)
     stars_of, reason_of = {}, {}
     for img_id in sorted_members:
         is_keeper = img_id in keepers
@@ -353,10 +360,10 @@ def rate_burst(burst_sharpness: dict, burst_flags: dict, burst_size: int, settin
             stars_of[img_id], reason_of[img_id] = "leave", "No vehicle"
             continue
         if not is_keeper:
-            if settings.nk_mode == "leave":
+            if img_id in far:
+                stars = "leave" if settings.nk_mode == "leave" else -1
+            elif settings.nk_mode in ("leave", "reject"):
                 stars = "leave"
-            elif settings.nk_mode == "reject" or img_id in far:
-                stars = -1
             elif settings.nk_mode == "graded":
                 raw_score = burst_sharpness[img_id]
                 share = (raw_score / best if best > 0 else 0.0) / star_scale

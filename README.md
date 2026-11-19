@@ -149,7 +149,7 @@ Each frame gets a star rating, which ranks it against the rest of the batch, plu
 | Tag | Meaning |
 |-----|---------|
 | `Assisted Culling\|Keeper` | The best frame (or frames) of its burst |
-| `Assisted Culling\|Rejected` | A much worse frame than its burst's best: far behind (under 45% of the best's sharpness) or blank, rated -1. With *non-keepers* on *reject (-1)*, every frame not kept. A frame that only lost to a sharper one gets no `Rejected` tag and is rated per *non-keepers*. |
+| `Assisted Culling\|Rejected` | A much worse frame than its burst's best: far behind (under 30% of the best's sharpness, at most *rejects per burst* of them, worst first) or blank, rated -1. A frame that only lost to a sharper one gets no `Rejected` tag and is rated per *non-keepers*. |
 | `Assisted Culling\|Overexposed` | Blown highlights |
 | `Assisted Culling\|Underexposed` | Crushed shadows |
 | `Assisted Culling\|Eyes Closed` | *face & eyes* mode only: a face big enough to judge, with no open eyes found. Dark sunglasses trigger it too. |
@@ -169,7 +169,7 @@ Frames are also tagged with how they were judged, so you can spot-check the scor
 | `Assisted Culling\|Technique\|Motion Blur` / `…\|Missed Pan` | *motorsport* only: the frame is blurred in one straight line, or the car is blurred across the pan (see [Motorsport](#motorsport-subject--motion)) |
 | `Assisted Culling\|Why\|Keeper` / `…\|Keeper by margin` | Every scored frame gets one `Why` tag saying how it was decided. Kept by rank, or kept by the [keeper margin](#keeper-margin). |
 | `Assisted Culling\|Why\|Outranked` / `…\|Graded` / `…\|Not shortlisted` | Lost to a sharper frame, lost and rated by burst (*graded by burst*), or left out of the SAM shortlist. Filter on one to step through, say, every frame the margin kept. |
-| `Assisted Culling\|Why\|Far behind` | Lost and scored under 45% of its burst's best (e.g. best 400, frame 150), so it is rejected: rating -1 and the `Rejected` tag. With *non-keepers* on *leave alone* the rating is left and only the tags are written. A frame left out of the SAM shortlist, or with no vehicle, is never far behind. |
+| `Assisted Culling\|Why\|Far behind` | Lost and scored under 30% of its burst's best (e.g. best 400, frame 100), so it is rejected, at most *rejects per burst* of them per burst, worst first: rating -1 and the `Rejected` tag. With *non-keepers* on *leave alone* the rating is left and only the tags are written. A frame left out of the SAM shortlist, or with no vehicle, is never far behind. |
 | `Assisted Culling\|Why\|Close call` | The burst's last keeper and the best frame that lost scored within 5% of each other. Both get this tag in place of Keeper / Outranked; the keeper is still kept and rated as usual. Check both by eye. |
 | `Assisted Culling\|Why\|Spread` | *Spread keepers over the burst* only: kept as the best frame of its stretch of the burst over a sharper frame elsewhere (see [Keeper margin](#keeper-margin)). Wins over Close call on that keeper; the frame it beat still says Close call. |
 | `Assisted Culling\|Why\|Subject clearer` | *Break close calls with the sharpness judge* only: kept over the sharper frame of a close call because the judge model rated it at least 5% higher. The sharper frame keeps Close call. |
@@ -382,7 +382,9 @@ How many frames per burst survive: *single best only*, *portrait (1 or 2)*, *dyn
 
 ### Non-keepers
 
-What happens to the frames that aren't kept: *leave alone*, *reject (-1)*, a fixed star count from 0 to 5, or *graded by burst*. A frame far behind its burst's best (under 45% of its sharpness, times the *star scale*) is rejected whatever is picked here: rating -1 and the `Rejected` tag (`Why|Far behind`). *leave alone* still leaves its rating and writes only the tags. The other frames not kept get no `Rejected` tag, except with *reject (-1)*, which rejects and tags them all.
+What happens to the frames that aren't kept: *leave alone*, *reject bad frames (-1)*, a fixed star count from 0 to 5, or *graded by burst*. A frame far behind its burst's best (under 30% of its sharpness, times the *star scale*) is rejected whatever is picked here: rating -1 and the `Rejected` tag (`Why|Far behind`). *leave alone* still leaves its rating and writes only the tags. *reject bad frames* rejects only those and leaves the other frames not kept alone; they get no `Rejected` tag.
+
+**rejects per burst** (off, 1, 2, 3, 5; default 2) caps the far-behind rejects in one burst to its worst frames. The other far-behind frames get the *non-keepers* rating as frames that lost (`Why|Outranked` or `Graded`). Blank frames are always rejected and never count toward it.
 
 *graded by burst* rates each non-keeper below the burst's lowest keeper, by how sharp it is next to the burst's best frame:
 
@@ -392,7 +394,7 @@ What happens to the frames that aren't kept: *leave alone*, *reject (-1)*, a fix
 | 75% or more | two less |
 | 60% or more | three less |
 | 45% or more | four less |
-| below 45% | rejected (-1); 0 for a frame left out of the SAM shortlist |
+| below 45% | 0; rejected (-1) when far behind (under 30%) |
 
 Flags still cost a star each. **Star strictness** scales these steps too: stricter drops non-keepers faster, more generous keeps them closer to the keeper. For a spread of ratings around each burst's best frame, use *graded by burst* with a keeper margin of 90%.
 

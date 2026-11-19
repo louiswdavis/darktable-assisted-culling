@@ -1906,6 +1906,8 @@ if __name__ == "__main__":
     parser.add_argument("--exp-mode", default="whole_frame", help="Exposure evaluation mode")
     parser.add_argument("--keep-mode", default="dynamic_burst", help="Keeper allowance logic")
     parser.add_argument("--nk-mode", default="leave", help="Handling for non-keepers")
+    parser.add_argument("--reject-cap", default=0, type=int,
+                        help="Reject at most this many far-behind frames per burst, worst first (0 = no limit)")
     parser.add_argument("--fast-jpeg", action="store_true",
                         help="Decode JPEGs at reduced scale (faster; scores shift slightly)")
     parser.add_argument("--emit-saliency-points", action="store_true",

@@ -244,6 +244,8 @@ local sharp_opts = {"center", "tiles_uniformity", "peak", "face_detect", "subjec
 local exp_opts = {"whole_frame", "subject_only", "strict", "none"}
 local keep_opts = {"single_best", "portrait_mode", "dynamic_burst", "keep_all"}
 local nk_opts = {"leave", "reject", "0", "1", "2", "3", "4", "5", "graded"}
+-- at most this many far-behind frames rejected per burst, worst first (the scorer's --reject-cap)
+local reject_cap_opts = {"off", "1", "2", "3", "5"}
 -- also keep every frame within this % of its burst's best (the scorer's --keep-margin)
 local keep_margin_opts = {"off", "95", "90", "85", "80", "75"}
 -- multiplies every sharpness threshold a star needs (the scorer's --star-scale)
@@ -256,8 +258,8 @@ local GROUP_TAG_KEYS = { "group_tag_1", "group_tag_2", "group_tag_3" }
 M.LATEST_GROUPING_NODE = "Assisted Grouping"
 M.TAG_NODE_HINT = "grouping tags found but no native groups; type Assisted Grouping in a tag node box to use them"
 M.CHOICES = { genre = genre_opts, rank_mode = rank_opts, sharp_mode = sharp_opts, exp_mode = exp_opts,
-    keep_mode = keep_opts, keep_margin = keep_margin_opts, non_keeper = nk_opts, star_scale = star_scale_opts,
-    blank_share = blank_share_opts }
+    keep_mode = keep_opts, keep_margin = keep_margin_opts, non_keeper = nk_opts, reject_cap = reject_cap_opts,
+    star_scale = star_scale_opts, blank_share = blank_share_opts }
 
 -- The four modes each genre fills in. "custom" has none.
 M.GENRE_MODES = {
@@ -313,6 +315,7 @@ M.PRESET_SCHEMA = {
     { key = "keep_mode", kind = "choice", choices = keep_opts, default = "single_best" },
     { key = "keep_margin", kind = "choice", choices = keep_margin_opts, default = "off" },
     { key = "non_keeper", kind = "choice", choices = nk_opts, default = "leave" },
+    { key = "reject_cap", kind = "choice", choices = reject_cap_opts, default = "2" },
     { key = "star_scale", kind = "choice", choices = star_scale_opts, default = "1" },
     { key = "group_native", kind = "bool", default = true },
     { key = "group_tag_1", kind = "string", default = "" },
@@ -359,7 +362,7 @@ end
 M.PANEL_PAGES = {
     { number = 1, title = "scoring", keys = { "genre", "rank_mode", "sharp_mode", "exp_mode", "keep_mode",
         "keep_margin", "spread_keepers", "keep_angles", "motion_look", "number_reads", "sharp_judge", "non_keeper",
-        "star_scale", "star_slope" } },
+        "reject_cap", "star_scale", "star_slope" } },
     { number = 2, title = "bursts", keys = { "group_native", "group_tag_1", "group_tag_2", "group_tag_3" } },
     { number = 3, title = "penalties & speed", keys = { "apply_while_scoring", "fast_jpeg_decode",
         "penalise_overexposed", "penalise_underexposed", "penalise_eyes_closed", "penalise_cut_off",
@@ -404,7 +407,7 @@ M.TAG_TOGGLES = {
       writes = { "Why|Keeper", "Why|Keeper by margin", "Why|Outranked", "Why|Graded", "Why|Not shortlisted",
           "Why|No vehicle", "Why|Close call", "Why|Blank", "Why|Spread", "Why|Number clearer", "Why|Subject clearer",
           "Why|Other angle", "Why|Motion look", "Why|Far behind" },
-      when = "every scored frame, saying how it was decided. Keeper: kept by rank. Keeper by margin: kept by the keeper margin. Outranked: lost to a sharper frame. Far behind: lost and scored under 45% of its burst's best, so it is rejected. Graded: lost and rated by burst. Not shortlisted: subject tracking (SAM) left it out of the shortlist. No vehicle: the detector found no car, so the frame kept its rating (only with \"Leave frames with no vehicle\" on). Blank: the frame is one flat colour, so it was rejected. Close call: the last keeper and the best frame that lost scored within 5% of each other; the keeper is still kept, but check both. Spread: kept as its stretch of the burst's best frame over a sharper frame elsewhere (only with \"Spread keepers over the burst\" on). Number clearer: kept over the sharper frame of a close call because tagging read the car's number clearer in it (only with \"Break close calls on the number read\" on). Subject clearer: kept over the sharper frame of a close call because the sharpness judge scored its car clearer (only with \"Break close calls with the sharpness judge\" on). Other angle: the best frame of a view of the car the sharpest keeper does not show, kept one star below it (only with \"Keep the other angles\" on). Motion look: the burst's straightest motion blur with the car in view, kept as well as the sharp keepers (only with \"Keep a motion-blur frame\" on). Filter on one to step through, say, every frame that lost to the margin." },
+      when = "every scored frame, saying how it was decided. Keeper: kept by rank. Keeper by margin: kept by the keeper margin. Outranked: lost to a sharper frame. Far behind: lost and scored under 30% of its burst's best, so it is rejected (at most rejects per burst, worst first). Graded: lost and rated by burst. Not shortlisted: subject tracking (SAM) left it out of the shortlist. No vehicle: the detector found no car, so the frame kept its rating (only with \"Leave frames with no vehicle\" on). Blank: the frame is one flat colour, so it was rejected. Close call: the last keeper and the best frame that lost scored within 5% of each other; the keeper is still kept, but check both. Spread: kept as its stretch of the burst's best frame over a sharper frame elsewhere (only with \"Spread keepers over the burst\" on). Number clearer: kept over the sharper frame of a close call because tagging read the car's number clearer in it (only with \"Break close calls on the number read\" on). Subject clearer: kept over the sharper frame of a close call because the sharpness judge scored its car clearer (only with \"Break close calls with the sharpness judge\" on). Other angle: the best frame of a view of the car the sharpest keeper does not show, kept one star below it (only with \"Keep the other angles\" on). Motion look: the burst's straightest motion blur with the car in view, kept as well as the sharp keepers (only with \"Keep a motion-blur frame\" on). Filter on one to step through, say, every frame that lost to the margin." },
 }
 
 -- Headings of the tags-written page, in order; each TAG_TOGGLES row's `kind` is one of these.
@@ -922,8 +925,8 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         run_log.rotate(LOGS_KEPT)
         log(string.format("run started: darktable %s, %d images (%d locked left out)",
             tostring(dt.configuration.version), #images, n_locked))
-        log(string.format("settings: rank %s, sharpness %s, exposure %s, keepers %s, non-keepers %s",
-            rank_mode, sharp_mode, exp_mode, keep_mode, nk_mode))
+        log(string.format("settings: rank %s, sharpness %s, exposure %s, keepers %s, non-keepers %s, rejects per burst %s",
+            rank_mode, sharp_mode, exp_mode, keep_mode, nk_mode, tostring(settings.reject_cap)))
 
         -- the job and the start message go up before the selection's tags and groups are read
         if dt.gui then
@@ -1237,6 +1240,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             "--exp-mode", tostring(exp_mode),
             "--keep-mode", tostring(keep_mode),
             "--nk-mode", tostring(nk_mode),
+            "--reject-cap", tostring(tonumber(settings.reject_cap) or 0),
             "--tag-only-flags", tag_only_flags(),
             "--star-scale", tostring(settings.star_scale or "1"),
             "--keep-margin", tostring((tonumber(settings.keep_margin) or 0) / 100),
@@ -1309,8 +1313,8 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         local tag_on = {}
         for _, t in ipairs(M.TAG_TOGGLES) do tag_on[t.key] = tag_enabled(t.key) end
         local diag_off = M.diag_off(tag_on)
-        -- rejected: a frame the scorer rejected (far behind its burst's best, or blank), or any
-        -- frame not kept when non-keepers is reject. A frame left alone for no vehicle is neither.
+        -- rejected: a frame the scorer rejected (far behind its burst's best, or blank). A frame
+        -- left alone for no vehicle is neither.
         -- The rating and Keeper / Rejected are written here; every other tag change is queued
         -- in detail_queue and written after the end message.
         local rating_writes, all_writes, tag_tally = 0, 0, {}
@@ -1375,7 +1379,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             end
             local diag = ";" .. parts[7] .. ";"
             local rejected = not is_keeper and not diag:find(";Why|No vehicle;", 1, true)
-                and (nk_mode == "reject" or diag:find(";Why|Far behind;", 1, true) ~= nil
+                and (diag:find(";Why|Far behind;", 1, true) ~= nil
                     or diag:find(";Why|Blank;", 1, true) ~= nil)
             if rejected then stats.rejected = stats.rejected + 1 end
             if diag:find(";Subject|Vehicle|Guessed;", 1, true) then stats.guessed = stats.guessed + 1 end
@@ -2072,8 +2076,12 @@ local function install_panel()
         { _("off"), _("within 95% of best"), _("within 90% of best"), _("within 85% of best"), _("within 80% of best"), _("within 75% of best") })
 
     local non_keeper_combo = choice_combo("non_keeper", _("non-keepers"),
-        _("The rating of images that are not kept. A frame under 45% of its burst's best sharpness is far behind: it is rejected (-1, Rejected tag) whatever is picked here, e.g. best 400, frame 150. Leave alone keeps its rating and writes only the tag. Reject (-1) rejects and tags them all.\ngraded: stars below the burst's lowest keeper by how close each frame is to the burst's best: 90%+ one star less, 75%+ two, 60%+ three, 45%+ four, else 0."),
-        { _("leave alone"), _("reject (-1)"), _("0 stars"), _("1 star"), _("2 stars"), _("3 stars"), _("4 stars"), _("5 stars"), _("graded by burst") })
+        _("The rating of images that are not kept. A frame under 30% of its burst's best sharpness is far behind: it is rejected (-1, Rejected tag) whatever is picked here, e.g. best 400, frame 100, up to rejects per burst. Leave alone keeps its rating and writes only the tag. Reject bad frames rejects only those and leaves the rest alone.\ngraded: stars below the burst's lowest keeper by how close each frame is to the burst's best: 90%+ one star less, 75%+ two, 60%+ three, 45%+ four, else 0."),
+        { _("leave alone"), _("reject bad frames (-1)"), _("0 stars"), _("1 star"), _("2 stars"), _("3 stars"), _("4 stars"), _("5 stars"), _("graded by burst") })
+
+    local reject_cap_combo = choice_combo("reject_cap", _("rejects per burst"),
+        _("The most far-behind frames rejected in one burst, worst first. The others far behind get the non-keepers rating. Blank frames are always rejected."),
+        { _("no limit"), _("1"), _("2"), _("3"), _("5") })
 
     local star_scale_combo = choice_combo("star_scale", _("star strictness"),
         _("Scales the sharpness every star needs, in universal and relative ranking, and how fast graded non-keepers lose stars. Stricter: fewer stars for the same frame. More generous: more stars. The scores themselves don't change. With Rate keepers against each other on, keepers in a universal run of 10 or more take their stars from that instead; this still sets how fast graded non-keepers lose stars."),
@@ -2347,7 +2355,7 @@ local function install_panel()
           check("sharp_judge", _("Break close calls with the sharpness judge"),
               _("In a close call that the number read left alone, scores the car crop of the burst's top frames (up to 3 within 5% of the best) with a learned image-quality model (HyperIQA) and keeps the frame it scores at least 5% clearer. Motion-aware sharpness only. Needs hyperiqa_model.onnx and hyperiqa_model.onnx.data in the plugin's models folder (see the README); each judged frame is decoded again, so a run takes longer. The frame kept this way gets Why|Subject clearer.\nDefault: off. Unproven: compare a run with it on and off against your picks (eval_culling.py) before relying on it.")),
           new_widget("section_label") { label = _("ratings") },
-          non_keeper_combo, star_scale_combo,
+          non_keeper_combo, reject_cap_combo, star_scale_combo,
           check("star_slope", _("Rate keepers against each other"),
               _("Rates the run's keepers against each other instead of against fixed score steps: ranked by sharpness and cut into five equal groups, the sharpest group 5 stars, the next 4, down to 1. Changes stars only, never which frames are kept. Star strictness does not move these keepers' stars. Other angle keepers stay one star below their burst's best, Motion look keepers keep their own rating, and a flag still costs its stars. Runs with fewer than 10 keepers, and the relative and binary ranking, use the fixed steps.\nDefault: on.")) },
         group_widgets,

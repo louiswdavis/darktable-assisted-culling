@@ -151,7 +151,7 @@ with tempfile.TemporaryDirectory() as tmp:
     import json
     from rating import TIER_THRESHOLDS, rate_burst, star_tier
 
-    s = E.settings_of({"rank_mode": "universal", "keep_mode": "single_best", "keep_margin": "off", "spread_keepers": "off", "number_reads": "off", "sharp_judge": "off", "keep_angles": "off", "motion_look": "off", "star_slope": "off", "non_keeper": "leave", "star_scale": "1"})
+    s = E.settings_of({"rank_mode": "universal", "keep_mode": "single_best", "keep_margin": "off", "spread_keepers": "off", "number_reads": "off", "sharp_judge": "off", "keep_angles": "off", "motion_look": "off", "star_slope": "off", "non_keeper": "leave", "reject_cap": "2", "star_scale": "1"})
     check("settings_of: margin off is 0, scale is a float", (s.keep_margin, s.star_scale, s.nk_mode), (0.0, 1.0, "leave"))
     switched = E.settings_of({**vars(s), "non_keeper": "leave", "keep_margin": "off", "star_scale": "1", "keep_angles": "on", "star_slope": "on"})
     check("settings_of: the ticket 84 switches are booleans", (switched.keep_angles, switched.motion_look, switched.star_slope),
@@ -180,7 +180,7 @@ with tempfile.TemporaryDirectory() as tmp:
     preset = json.loads(E.preset_json(ranked[0][0], "subject_focus"))
     check("preset_json: a custom preset with the run's sharpness mode", (preset["genre"], preset["sharp_mode"], sorted(preset)),
           ("custom", "subject_focus", ["genre", "keep_angles", "keep_margin", "keep_mode", "motion_look", "non_keeper", "number_reads", "rank_mode",
-                                         "sharp_judge", "sharp_mode", "spread_keepers", "star_scale", "star_slope"]))
+                                         "reject_cap", "sharp_judge", "sharp_mode", "spread_keepers", "star_scale", "star_slope"]))
     text = E.render_suggestions(ranked, 1, 5, "subject_focus", 1)
     check("render_suggestions: one shoot warns", "one shoot only" in text, True)
     check("render_suggestions: two shoots do not", "one shoot only" in E.render_suggestions(ranked, 2, 10, "subject_focus", 1), False)

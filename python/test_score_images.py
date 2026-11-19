@@ -293,11 +293,11 @@ def run_tests():
     check("why: an all-no-vehicle burst is left alone", set(why_of(no_vehicle={"a", "b", "c"}).values()), {"No vehicle"})
 
     def far_of(**ns):
-        """id -> (stars, Why reason) for the 9/6/1 burst: c is under 45% of the best."""
+        """id -> (stars, Why reason) for the 9/6/1 burst: c is under 30% of the best."""
         why = why_of(ns=ns)
         return {r[0]: (r[5], why[r[0]]) for r in (line.strip().split(",") for line in open(res_path))}
 
-    check("far behind: only the frame under 45% of the burst's best is rejected, the other loser takes the non-keeper stars",
+    check("far behind: only the frame under 30% of the burst's best is rejected, the other loser takes the non-keeper stars",
           far_of(nk_mode="0"), {"a": (far_of(nk_mode="0")["a"][0], "Keeper"), "b": ("0", "Outranked"), "c": ("-1", "Far behind")})
     check("far behind: graded non-keepers, the far frame is rejected in place of 0 stars",
           {k: v for k, v in far_of(nk_mode="graded").items() if k != "a"}, {"b": ("0", "Graded"), "c": ("-1", "Far behind")})
@@ -307,6 +307,27 @@ def run_tests():
           why_of(eligible={"a", "b"})["c"], "Not shortlisted")
     check("far behind: a keeper is never far behind",
           why_of(ns={"keep_mode": "keep_all"}), {"a": "Keeper", "b": "Keeper", "c": "Keeper"})
+
+    def rejects_of(scores, **ns):
+        """id -> (stars, Why reason) for one burst of these scores, non-keepers on reject."""
+        open(res_path, "w").close()
+        S.process_burst_logic("1", scores, {k: () for k in scores}, len(scores), Namespace(
+            **{"keep_mode": "single_best", "rank_mode": "universal", "nk_mode": "reject", **ns}), res_path)
+        rows = [line.strip().split(",") for line in open(res_path)]
+        return {r[0]: (r[5], [t for t in r[6].split(";") if t.startswith("Why|")][0][4:]) for r in rows}
+
+    check("reject: only the far frame is rejected, the other loser keeps its rating",
+          {k: v for k, v in rejects_of({"a": 9.0, "b": 6.0, "c": 1.0}).items() if k != "a"},
+          {"b": ("leave", "Outranked"), "c": ("-1", "Far behind")})
+    check("far behind: a frame at 35% of the best is not far behind, one at 25% is",
+          {k: v for k, v in rejects_of({"a": 10.0, "b": 3.5, "c": 2.5}).items() if k != "a"},
+          {"b": ("leave", "Outranked"), "c": ("-1", "Far behind")})
+    check("reject cap: only the burst's 2 worst far frames are rejected",
+          {k: v for k, v in rejects_of({"a": 10.0, "b": 2.0, "c": 1.0, "d": 2.5, "e": 0.5}, reject_cap=2).items() if k != "a"},
+          {"b": ("leave", "Outranked"), "c": ("-1", "Far behind"), "d": ("leave", "Outranked"), "e": ("-1", "Far behind")})
+    check("reject cap: 0 rejects every far frame",
+          {v for k, v in rejects_of({"a": 10.0, "b": 2.0, "c": 1.0, "d": 2.5, "e": 0.5}, reject_cap=0).items() if k != "a"},
+          {("-1", "Far behind")})
     open(res_path, "w").close()
     S.process_burst_logic("1", {"a": 9.0, "b": 8.8}, {"a": (), "b": ()}, 2, Namespace(
         keep_mode="single_best", rank_mode="universal", nk_mode="leave"), res_path)
@@ -977,7 +998,7 @@ def run_tests():
           {"a": (1, 5), "b": (1, 4), "c": (0, 2), "d": (0, 1), "e": (0, -1)})
     check("keeper margin off: graded non-keepers step down from the keeper", graded(0.0),
           {"a": (1, 5), "b": (0, 4), "c": (0, 3), "d": (0, 2), "e": (0, -1)})
-    check("graded: a stricter star scale drops non-keepers faster, here to a reject", graded(0.0, 2.0)["c"], (0, -1))
+    check("graded: a stricter star scale drops non-keepers faster, here to a reject", graded(0.0, 3.0)["c"], (0, -1))
 
     # report_rows --------------------------------------------------------------
     rep_manifest = [("1", "/p/a.jpg", "0", "", "", "", 0.0, 0.0, 0.0, "37"), ("2", "/p/b.jpg", "0", "", "", "", 0.0, 0.0, 0.0, ""),
