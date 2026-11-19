@@ -96,6 +96,10 @@ are deliberate, but today read as soft, cut off or far behind. Best first:
    a fast shutter is a weaker action frame (guides: frozen wheels kill the sense of speed). Small
    tie-break inside a burst only, never a reject; skipped for airborne or drifting cars (needs
    the peak-moment tags). Effort S–M.
+   **Not built (2026-11-19): already covered.** Inside a burst a frozen frame classifies
+   `ordinary` (×1.0) and a pan `pan` (×`PAN_BONUS` 1.15), so the pan already outranks it; a burst
+   of only frozen frames has nothing to break. The airborne/drift skip would need the peak-moment
+   tags, which do not exist yet. Tune `PAN_BONUS` with `eval_culling.py --set` instead.
 
 ## Keep separate scores until the rating step
 

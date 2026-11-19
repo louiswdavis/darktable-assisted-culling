@@ -385,7 +385,7 @@ M.TAG_TOGGLES = {
     { key = "keeper", label = "Keeper", kind = "output", writes = { "Keeper" },
       when = "the best frame (or frames) of its burst." },
     { key = "rejected", label = "Rejected", kind = "output", writes = { "Rejected" },
-      when = "it lost to a sharper frame from the same burst. Its stars follow the non-keepers setting." },
+      when = "far behind its burst's best (Why|Far behind, at most rejects per burst) or blank (Why|Blank); rated -1 whatever the non-keepers setting. A frame that only lost to a sharper one is not tagged Rejected." },
     { key = "overexposed", label = "Overexposed", kind = "output", writes = { "Overexposed" },
       when = "blown highlights, judged by the exposure setting." },
     { key = "underexposed", label = "Underexposed", kind = "output", writes = { "Underexposed" },
@@ -410,13 +410,13 @@ M.TAG_TOGGLES = {
       writes = { "Why|Keeper", "Why|Keeper by margin", "Why|Outranked", "Why|Graded", "Why|Not shortlisted",
           "Why|No vehicle", "Why|Close call", "Why|Blank", "Why|Spread", "Why|Number clearer", "Why|Subject clearer",
           "Why|Other angle", "Why|Motion look", "Why|Far behind", "Why|Not a first pick" },
-      when = "every scored frame, saying how it was decided. Keeper: kept by rank. Keeper by margin: kept by the keeper margin. Outranked: lost to a sharper frame. Far behind: lost and scored under 30% of its burst's best, so it is rejected (at most rejects per burst, worst first). Graded: lost and rated by burst. Not shortlisted: subject tracking (SAM) left it out of the shortlist. No vehicle: the detector found no car, so the frame kept its rating (only with \"Leave frames with no vehicle\" on). Blank: the frame is one flat colour, so it was rejected. Close call: the last keeper and the best frame that lost scored within 5% of each other; the keeper is still kept, but check both. Spread: kept as its stretch of the burst's best frame over a sharper frame elsewhere (only with \"Spread keepers over the burst\" on). Number clearer: kept over the sharper frame of a close call because tagging read the car's number clearer in it (only with \"Break close calls on the number read\" on). Subject clearer: kept over the sharper frame of a close call because the sharpness judge scored its car clearer (only with \"Break close calls with the sharpness judge\" on). Other angle: the best frame of a view of the car the sharpest keeper does not show, kept one star below it (only with \"Keep the other angles\" on). Motion look: the burst's straightest motion blur with the car in view, kept as well as the sharp keepers (only with \"Keep a motion-blur frame\" on). Not a first pick: left alone because it is not one of the run's first picks (only with first picks on). Filter on one to step through, say, every frame that lost to the margin." },
+      when = "every scored frame, saying how it was decided. Keeper: kept by rank. Keeper by margin: kept by the keeper margin. Outranked: lost to a sharper frame. Far behind: lost and scored under 30% of its burst's best (times star strictness), so it is rejected (at most rejects per burst, worst first). Graded: lost and rated by burst. Not shortlisted: subject tracking (SAM) left it out of the shortlist. No vehicle: the detector found no car, so the frame kept its rating (only with \"Leave frames with no vehicle\" on). Blank: the frame is one flat colour, so it was rejected. Close call: the last keeper and the best frame that lost scored within 5% of each other; the keeper is still kept, but check both. Spread: kept as its stretch of the burst's best frame over a sharper frame elsewhere (only with \"Spread keepers over the burst\" on). Number clearer: kept over the sharper frame of a close call because tagging read the car's number clearer in it (only with \"Break close calls on the number read\" on). Subject clearer: kept over the sharper frame of a close call because the sharpness judge scored its car clearer (only with \"Break close calls with the sharpness judge\" on). Other angle: the best frame of a view of the car the sharpest keeper does not show, kept one star below it (only with \"Keep the other angles\" on). Motion look: the burst's straightest motion blur with the car in view, kept as well as the sharp keepers (only with \"Keep a motion-blur frame\" on). Not a first pick: left alone because it is not one of the run's first picks (only with first picks on). Filter on one to step through, say, every frame that lost to the margin." },
 }
 
 -- Headings of the tags-written page, in order; each TAG_TOGGLES row's `kind` is one of these.
 M.TAG_KINDS = {
     { kind = "output", label = "outputs" },
-    { kind = "check", label = "checks" },
+    { kind = "check", label = "check by hand" },
     { kind = "diag", label = "how it decided" },
 }
 
@@ -2060,7 +2060,7 @@ local function install_panel()
     end
 
     local genre_combo = choice_combo("genre", _("genre"),
-        _("Fills in the four settings below for a photography genre. Changing any of them switches to custom."),
+        _("Fills in ranking mode, sharpness, exposure and keepers for a photography genre. Changing any of those four switches this to custom."),
         { _("landscape"), _("portrait"), _("sport"), _("macro"), _("custom") })
 
     local rank_combo = choice_combo("rank_mode", _("ranking mode"),
@@ -2068,15 +2068,15 @@ local function install_panel()
         { _("universal absolute"), _("binary (keepers top)"), _("relative to selection") })
 
     local sharp_combo = choice_combo("sharp_mode", _("sharpness"),
-        _("How sharpness is measured.\nedge-to-edge: scores the softest areas of the frame (ignoring plain sky), so a soft corner costs a frame.\nface & eyes: falls back to subject bias when no face is found; tags a frame Eyes Closed (one star lower) when a clear face shows no open eyes.\nsubject tracking (SAM): outlines the subject with darktable's AI mask model before scoring; slower than the rest, since each burst's top few frames go through the model.\nmotorsport: finds the car, scores it at full resolution so overcast light isn't punished, and reads each frame's motion. Good pans score higher (Panning), a whole frame blurred in one straight line is kept with its burst (Motion Blur), a car blurred across the pan scores lower (Missed Pan)."),
+        _("How sharpness is measured.\ncenter crop: the middle half of the frame only.\nedge-to-edge: scores the softest areas of the frame (ignoring plain sky), so a soft corner costs a frame.\nabsolute peak 1%: the sharpest 1% of edges anywhere in the frame, for a small sharp subject (macro).\nface & eyes: falls back to subject bias when no face is found; tags a frame Eyes Closed (one star lower) when a clear face shows no open eyes.\nsubject bias: a 3×3 grid weighted toward the centre, for a subject roughly mid-frame.\nsubject tracking (SAM): outlines the subject with darktable's AI mask model before scoring; slower than the rest, since each burst's top few frames go through the model.\nmotorsport: finds the car, scores it at full resolution so overcast light isn't punished, and reads each frame's motion. Good pans score higher (Panning), a whole frame blurred in one straight line is kept with its burst (Motion Blur), a car blurred across the pan scores lower (Missed Pan), streaks running out from the frame centre read as Zoom Burst."),
         { _("center crop"), _("edge-to-edge uniformity"), _("absolute peak 1%"), _("face & eyes (OpenCV)"), _("subject bias (center-weighted)"), _("subject tracking (SAM)"), _("motorsport (subject & motion)") })
 
     local exp_combo = choice_combo("exp_mode", _("exposure"),
-        _("Flags clipped shadows/highlights (Overexposed/Underexposed tag, one star lower; turn the penalty off under penalties & speed below)."),
+        _("Flags clipped highlights or shadows (Overexposed / Underexposed tag, one star lower; the penalty can be turned off on the penalties & speed page).\nwhole frame: flags a frame with over 2% of it clipped.\nsubject only: the same, ignoring the top fifth of the frame (sky).\nstrict histogram: flags from 1% of the frame at or near clipping.\nignore exposure: no exposure flags."),
         { _("whole frame"), _("subject only (ignore sky)"), _("strict histogram"), _("ignore exposure") })
 
     local keep_combo = choice_combo("keep_mode", _("keepers"),
-        _("How many of each burst are kept (the sharpest ones)."),
+        _("How many of each burst are kept (the sharpest ones).\nsingle best: 1.\nportrait: 1 in a burst of up to 3 frames, else 2.\ndynamic: 1 in a burst of up to 4 frames, 2 up to 8, 3 up to 12, 4 up to 18, else 5.\nkeep all: every frame (focus stacks)."),
         { _("single best only"), _("portrait (1 or 2)"), _("dynamic (1 to 5)"), _("keep all (focus stack)") })
 
     local keep_margin_combo = choice_combo("keep_margin", _("keeper margin"),
@@ -2084,7 +2084,7 @@ local function install_panel()
         { _("off"), _("within 95% of best"), _("within 90% of best"), _("within 85% of best"), _("within 80% of best"), _("within 75% of best") })
 
     local non_keeper_combo = choice_combo("non_keeper", _("non-keepers"),
-        _("The rating of images that are not kept. A frame under 30% of its burst's best sharpness is far behind: it is rejected (-1, Rejected tag) whatever is picked here, e.g. best 400, frame 100, up to rejects per burst. Leave alone keeps its rating and writes only the tag. Reject bad frames rejects only those and leaves the rest alone.\ngraded: stars below the burst's lowest keeper by how close each frame is to the burst's best: 90%+ one star less, 75%+ two, 60%+ three, 45%+ four, else 0."),
+        _("The rating of frames that are not kept.\nleave alone: keeps their rating and writes only the tags.\nreject bad frames: rejects only the far-behind frames and leaves the rest alone.\n0 to 5 stars: that rating.\ngraded: stars below the burst's lowest keeper by how close each frame is to the burst's best: 90%+ one star less, 75%+ two, 60%+ three, 45%+ four, else 0.\nWhatever is picked, a frame under 30% of its burst's best (times star strictness) is far behind and rejected (-1, Rejected tag), up to rejects per burst: with the best at 400, a frame at 100 is far behind."),
         { _("leave alone"), _("reject bad frames (-1)"), _("0 stars"), _("1 star"), _("2 stars"), _("3 stars"), _("4 stars"), _("5 stars"), _("graded by burst") })
 
     local reject_cap_combo = choice_combo("reject_cap", _("rejects per burst"),
@@ -2092,7 +2092,7 @@ local function install_panel()
         { _("no limit"), _("1"), _("2"), _("3"), _("5") })
 
     local star_scale_combo = choice_combo("star_scale", _("star strictness"),
-        _("Scales the sharpness every star needs, in universal and relative ranking, and how fast graded non-keepers lose stars. Stricter: fewer stars for the same frame. More generous: more stars. The scores themselves don't change. With Rate keepers against each other on, keepers in a universal run of 10 or more take their stars from that instead; this still sets how fast graded non-keepers lose stars."),
+        _("Scales the sharpness every star needs, in universal and relative ranking, how fast graded non-keepers lose stars, and the far-behind line (30% of the burst's best). Stricter: fewer stars for the same frame. More generous: more stars. The scores themselves don't change. With Rate keepers against each other on, keepers in a universal run of 10 or more take their stars from that instead; this still sets how fast graded non-keepers lose stars."),
         { _("much more generous (×0.5)"), _("more generous (×0.75)"), _("standard (×1)"), _("stricter (×1.25)"), _("much stricter (×1.5)"), _("strictest (×2)") })
 
     local first_picks_combo = choice_combo("first_picks", _("first picks"),
@@ -2148,7 +2148,7 @@ local function install_panel()
     local option_checks = {
         new_widget("section_label") { label = _("speed") },
         check("apply_while_scoring", _("Apply ratings while scoring"),
-            _("Faster overall on big batches, but darktable's UI shares the CPU with the scorer; turn off if the UI lags.\nDefault: off. Turn on for batches of several hundred frames.")),
+            _("Faster overall on big batches, but darktable's UI shares the CPU with the scorer; turn off if the UI lags. No effect with first picks on: ratings wait until the picks are chosen.\nDefault: off. Turn on for batches of several hundred frames.")),
         check("fast_jpeg_decode", _("Fast JPEG decoding"),
             _("Decodes JPEGs and RAW previews at reduced size, several times faster. Sharpness scores shift slightly, but keepers are ranked within each burst, so picks rarely change.\nDefault: on. Turn off when frames are close in sharpness and you want full-size scores.")),
     }
@@ -2157,7 +2157,7 @@ local function install_panel()
         if not f.rejects then
             local label = f.tag:match("|(.+)$")
             option_checks[#option_checks + 1] = check("penalise_" .. f.name, string.format(_("%s lowers stars"), label),
-                string.format(_("On: %s images get one star less. Off: they're still tagged %s (if it's on under tags written) but keep their rating.\nDefault: on. Turn off for styles where it's the point (low-key, high-key)."), label, label))
+                string.format(_("On: %s images get one star less. Off: they're still tagged %s (if it's on under tags written) but keep their rating.\nDefault: on. Turn off when the flag is the look you want, e.g. low-key or high-key for the exposure flags."), label, label))
         end
     end
     option_checks[#option_checks + 1] = new_widget("section_label") { label = _("blank frames and vehicles") }
@@ -2167,7 +2167,7 @@ local function install_panel()
     option_checks[#option_checks + 1] = check("no_vehicle_leave", _("Leave frames with no vehicle"),
         _("Motorsport and subject tracking (SAM) sharpness only, when the vehicle detector is installed. A frame where it finds no car is never a keeper, keeps its rating and gets Why|No vehicle, instead of being scored on the centre of the frame. A burst with no car in any frame is left alone.\nDefault: off. Turn on for car shoots once you've checked a run's No vehicle frames really are empty."))
     option_checks[#option_checks + 1] = check("car_boxes_only", _("Only car boxes (from tagging)"),
-        _("Motorsport and subject tracking (SAM) sharpness only, when the vehicle detector is installed. Once Assisted Tagging has run on these images with its car check, sharpness is judged only on the boxes it kept as cars, so a marshal, shed or railing box is never the subject. A frame whose boxes it all dropped counts as no vehicle. Images tagging hasn't run on, or that changed since, use every detector box.\nDefault: on. Turn off to judge every detector box, as before."))
+        _("Motorsport and subject tracking (SAM) sharpness only, when the vehicle detector is installed. Once Assisted Tagging has run on these images with its car check, sharpness is judged only on the boxes it kept as cars, so a marshal, shed or railing box is never the subject. A frame whose boxes it all dropped counts as no vehicle. Images tagging hasn't run on, or that changed since, use every detector box.\nDefault: on. Turn off to judge every detector box."))
 
     local tag_checks = {}
     local kind_labels, last_kind = {}, nil
@@ -2361,11 +2361,11 @@ local function install_panel()
               _("When a burst shows the car from more than one side (the detector's box changes shape by 1.3 times or more), also keeps the best frame of each other view that scores at least 70% of the burst's best, one star below the sharpest keeper. A frame with the car cut off by the frame edge never keeps while the burst has a frame showing the whole car. The frame kept this way gets Why|Other angle. Needs the detector (motorsport sharpness).\nDefault: on.")),
           check("motion_look", _("Keep a motion-blur frame"),
               _("Also keeps the one frame per burst whose blur runs most nearly in a single straight line (straightness 0.75 or more) with the car in view and not cut off, on top of the sharp keepers and never in place of one. Blurred objects in front of the car do not rule it out. Rated by how straight the blur is: 3 stars from 0.75, 4 from 0.80, 5 from 0.85. The frame kept this way gets Why|Motion look. Needs the detector (motorsport sharpness).\nDefault: on.")),
-          new_widget("section_label") { label = _("close calls (last keeper within 5% of the next frame)") },
+          new_widget("section_label") { label = _("close calls (best frame that lost within 5% of the last keeper)") },
           check("number_reads", _("Break close calls on the number read"),
               _("In a close call (the last keeper and the best frame that lost score within 5%), keeps the frame where tagging read the car's number clearly: both frames must read the same number and the dropped one read it at least 0.10 more confidently. Reads come from tagging's last run on this collection (its boxes.json); frames changed since, or missing from it, keep the sharpness ranking. The frame kept this way gets Why|Number clearer.\nDefault: off. Unproven: compare a run with it on and off against your picks (eval_culling.py) before relying on it.")),
           check("sharp_judge", _("Break close calls with the sharpness judge"),
-              _("In a close call that the number read left alone, scores the car crop of the burst's top frames (up to 3 within 5% of the best) with a learned image-quality model (HyperIQA) and keeps the frame it scores at least 5% clearer. Motion-aware sharpness only. Needs hyperiqa_model.onnx and hyperiqa_model.onnx.data in the plugin's models folder (see the README); each judged frame is decoded again, so a run takes longer. The frame kept this way gets Why|Subject clearer.\nDefault: off. Unproven: compare a run with it on and off against your picks (eval_culling.py) before relying on it.")),
+              _("In a close call that the number read left alone, scores the car crop of the burst's top frames (up to 3 within 5% of the best) with a learned image-quality model (HyperIQA) and keeps the frame it scores at least 5% clearer. Motorsport sharpness only. Needs hyperiqa_model.onnx and hyperiqa_model.onnx.data in the plugin's models folder (see the README); each judged frame is decoded again, so a run takes longer. The frame kept this way gets Why|Subject clearer.\nDefault: off. Unproven: compare a run with it on and off against your picks (eval_culling.py) before relying on it.")),
           new_widget("section_label") { label = _("ratings") },
           non_keeper_combo, reject_cap_combo, star_scale_combo,
           check("star_slope", _("Rate keepers against each other"),
@@ -2374,7 +2374,7 @@ local function install_panel()
         group_widgets,
         option_checks,
         tag_checks,
-        { new_widget("section_label") { label = _("cull (models; writes ratings and tags)") },
+        { new_widget("section_label") { label = _("cull (writes ratings and tags)") },
           run_tag_check, action_button },
         { new_widget("section_label") { label = _("explain the last run (changes nothing)") },
           why_button, report_button,
