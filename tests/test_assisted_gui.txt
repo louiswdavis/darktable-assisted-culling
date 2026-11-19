@@ -125,6 +125,18 @@ ok   reject mode: the log counts the frames set to 0
 ok   reject mode: the saved ratings keep the rating from before the first run
 ok   reject mode, restore after two runs: back to the ratings from before the first
 ok   reject mode: no Lua error
+ok   verify: says it started
+ok   verify: the scorer is not asked for a report
+ok   verify: no rating and no Keeper tag is written
+ok   verify: the last cull's report and saved ratings are kept
+ok   verify: the toast counts what differs
+ok   verify: one row for the photos a cull would rate differently, with Fix
+ok   verify: ratings changed by hand get their own row, with no Fix
+ok   verify: the Keeper row lists the bursts' photos, Fix = cull
+ok   verify, Fix: Cull selection ran on those bursts only
+ok   verify again, after Fix: only the hand-changed rating is left
+ok   verify again: the Keeper row is gone
+ok   verify: no Lua error
 ok   detail tags: a tag attached to two images is looked up once in the run
 ok   detail tags: every Keeper / Rejected tag is attached before the first detail tag
 ok   detail tags: a second job bar, both closed at the end

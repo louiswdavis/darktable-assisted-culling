@@ -440,6 +440,7 @@ One heading, **cull (writes ratings and tags)**.
 
 - **Tag each run** (default off). Stamps every frame a run writes with `Assisted Culling|Run|YYYY-MM-DD HH:MM`.
 - **Cull selection.** Scores the selected images and rates/tags them. Click again to cancel.
+- **Verify selection.** Scores the selected images as **Cull selection** would and changes nothing: no rating, no tag, and the last run's report (used by **Why these ratings?**) stays. [To check](#to-check) then lists what a cull would change. Scores come from the [score cache](#score-cache), so a repeat is quick. While a run is going it is queued; **Cancel culling** stops it.
 
 ### 6 tools
 
@@ -456,8 +457,10 @@ Two headings: **explain the last run (changes nothing)** over the first two butt
 A box headed **To check**, above the progress line, lists what a run leaves for you to look at, so a toast that went by unseen isn't lost. It shows only when it has items. Each item reads `<action>: <what happened>` in full, wrapped over as many lines as it needs, with its buttons below. The newest run's items sit on top. Older runs' items move below an *Earlier runs (before HH:MM): may not hold any more* line, since a later run can have settled them; they stay until you remove them, so a Fix still works. It lists:
 
 - **Cull**: errors, subject tracking that outlined only some frames, a cancel after some images were rated, photos with a guessed subject, photos in close calls, images that couldn't be updated or read, detail tags that failed or were stopped.
+- **Verify**: photos whose stars differ from what a cull gives now, with one line per photo (`DSC00023.JPG: 0 stars, a cull now gives 5`); ratings you changed by hand since the last cull (`1 stars, the last cull wrote 4`), on their own line with no **Fix**; and, with the *Keeper* tag on, bursts with no `Keeper` tag or more than a cull gives. **Fix** on the stars line and the Keeper line runs **Cull selection** on those bursts' photos.
 - **Clear**, **Restore ratings**, **Reset ratings**: a cancel that left photos not reached, and images that couldn't be changed.
 
+- **Fix** beside a line makes the change it describes to those photos only, and removes the line.
 - **Select** beside a line selects its photos in the lighttable. Photos removed from the library since are skipped, and a toast counts them. Lines about photos darktable couldn't read or update have no **Select**: those photos may be gone.
 - The next run of the same action replaces that action's lines; other actions' lines stay. **Clear** empties the box.
 - Six lines show; more add `and N more (see the log)`. The list is saved to `assisted_culling.checks.txt` in darktable's config folder, so it survives a restart.
@@ -621,6 +624,7 @@ Use a selection with at least two bursts of 3+ frames each.
 14. **Reset ratings to 0.** Give a few hundred frames 3 stars and reject one. Select them all and click **Reset ratings to 0**. *Expect:* the panel line counts up (`resetting ratings 120 / 300`), a job bar appears, and the thumbnails lose their stars as it goes. Click the job bar's **x** part-way. *Expect:* it stops within a second or two; the message says how many were set and how many were not reached; the frames not reached still have 3 stars. Click the button again. *Expect:* it finishes the rest, counts the first part as "already at 0", the rejected frame is at 0 stars, tags and the selection are unchanged. Note how long the full reset takes next to darktable's own `0` key on the same selection.
 15. **Detail tags after the ratings.** Cull a few hundred frames that were never culled, with *Why* on. *Expect:* the stars and `Keeper` / `Rejected` appear first and the message ends `Ratings are ready. Now writing N detail tags`; a second job bar (*writing detail tags*) counts up and darktable still scrolls and opens images meanwhile; at the end `Assisted Culling: detail tags written (N).`. Cull again and click the detail job bar's **x** partway (clear the marks first): the message says how many images still miss theirs, and one more cull writes the rest. No crash, no `LUA ERROR`.
 16. **Export and import a preset.** Store a preset named `Rally`, then pick **export preset…** in the actions menu, choose an empty folder and click **Export**. *Expect:* `preset "Rally" exported to <folder>\Rally.atpreset`; that folder holds `manifest.json` and `preset.json`. Pick **import preset…**, choose the `Rally.atpreset` folder, click **Import**. *Expect:* `imported "Rally (2)" …`; picking `Rally (2)` shows the same settings as `Rally`.
+17. **Verify selection.** Cull a burst, change one frame's stars by hand, remove `Keeper` from another burst's keeper, and select both bursts plus a frame never culled. Click **Verify selection**. *Expect:* `verify started on N images…`, then `verify only, nothing changed. …`; no star or tag changed; **Open last report** shows the cull's report, not the verify. To check lists the never-culled frame under *would get other stars* (with **Fix**), your hand change under *you changed 1 ratings* (no **Fix**), and the burst without `Keeper` under *bursts have no Keeper tag*. Click **Fix** on that line. *Expect:* only that burst is culled again and gets its `Keeper`; your hand rating stays. Verify again: only the hand-changed line is left.
 
 ## Development
 

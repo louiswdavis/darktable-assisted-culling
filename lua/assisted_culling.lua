@@ -857,7 +857,9 @@ local function show_status(text)
 end
 
 -- the "To check" box above the progress line
-local alerts = C.alerts_box(new_widget, dt.configuration.config_dir .. "/assisted_culling.checks.txt", log)
+-- filled by install_panel: the To check Fix buttons run panel actions
+local fixes = {}
+local alerts = C.alerts_box(new_widget, dt.configuration.config_dir .. "/assisted_culling.checks.txt", log, fixes)
 
 -- dt.print_error only writes to darktable's log (-d lua); users never see it. Errors also go to To check.
 -- `to_check` is the To check line when the toast's text doesn't read well there.
@@ -914,7 +916,8 @@ local function read_saved_ratings()
     return record_of
 end
 
-function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_mode)
+-- verify: score and rank as a cull would, write nothing, and list in To check what a cull would change
+function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_mode, verify)
     rank_mode = rank_mode or "universal"
     sharp_mode = sharp_mode or "subject_focus"
     exp_mode = exp_mode or "whole_frame"
@@ -953,11 +956,11 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         end
 
         run_started = true
-        alerts.begin("Cull")
+        alerts.begin(verify and "Verify" or "Cull")
         new_run_paths()
         flush_log() -- anything logged since the last run (e.g. a failed clear) belongs to its log
         run_log.rotate(LOGS_KEPT)
-        log(string.format("run started: darktable %s, %d images (%d locked left out)",
+        log(string.format("%s started: darktable %s, %d images (%d locked left out)", verify and "verify" or "run",
             tostring(dt.configuration.version), #images, n_locked))
         log(string.format("settings: rank %s, sharpness %s, exposure %s, keepers %s, non-keepers %s, rejects per burst %s, first picks %s",
             rank_mode, sharp_mode, exp_mode, keep_mode, nk_mode, tostring(settings.reject_cap), tostring(settings.first_picks)))
@@ -967,7 +970,8 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             culling_job = dt.gui.create_job(_("Assisted Culling"), true, stop_job)
             culling_job.percent = 0.0
         end
-        say(string.format("Assisted Culling: started on %s…", #images == 1 and "1 image" or #images .. " images"))
+        say(string.format("Assisted Culling: %s on %s…", verify and "verify started" or "started",
+            #images == 1 and "1 image" or #images .. " images"))
         local sam_model
         if sharp_mode == "sam_subject" then
             local why
@@ -1314,11 +1318,11 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         if sam_model then
             table.move({ "--prescores", PRESCORE_PATH, "--sam-model", sam_model }, 1, 4, #argv + 1, argv)
         end
-        table.move({
-            "--cache", CACHE_PATH,
-            "--report", REPORT_PATH,
-            "--report-archive-dir", REPORT_ARCHIVE_DIR,
-        }, 1, 6, #argv + 1, argv)
+        argv[#argv + 1], argv[#argv + 2] = "--cache", CACHE_PATH
+        -- Why and --learn read the last cull's report, so a verify keeps it
+        if not verify then
+            table.move({ "--report", REPORT_PATH, "--report-archive-dir", REPORT_ARCHIVE_DIR }, 1, 4, #argv + 1, argv)
+        end
 
         if cancelled() then
             M.cancel_requested = true -- cancelled during the SAM stages: don't start scoring at all
@@ -1338,6 +1342,9 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         local stats = { keepers = 0, others = 0, rejected = 0, flagged = {}, guessed = 0, subject_bias = 0 }
         -- image ids for To check
         local guessed_ids, close_ids = {}, {}
+        -- verify: burst number → { ids, name, keepers, tagged, differs }, in the order met; one line per photo
+        local verify_bursts, verify_order = {}, {}
+        local differ_details, hand_ids, hand_details = {}, {}, {}
         for _, f in ipairs(FLAGS) do stats.flagged[f.name] = 0 end
 
         -- ---- result application (shared by "while scoring" and the final drain) ----
@@ -1441,6 +1448,48 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             if diag:find(";Scored|Subject bias;", 1, true) then stats.subject_bias = stats.subject_bias + 1 end
             local want_rating = nil
             if parts[6] ~= "leave" then want_rating = tonumber(parts[6]) or 0 end
+
+            if verify then
+                local burst = verify_bursts[burst_of[id]]
+                if not burst then
+                    burst = { ids = {}, keepers = 0, tagged = 0, differs = false }
+                    verify_bursts[burst_of[id]] = burst
+                    verify_order[#verify_order + 1] = burst
+                end
+                for _, img in ipairs(group) do
+                    local ok_check, check_err = pcall(function()
+                        local path = (img.path .. "/" .. img.filename):gsub("[\r\n]", " ")
+                        local saved = saved_ratings[img.id]
+                        local want = want_rating
+                        if want == nil and demote_plugin_stars and not is_keeper and img.rating ~= 0
+                            and saved ~= nil and saved.path == path and img.rating == saved.written then
+                            want = 0
+                        end
+                        burst.ids[#burst.ids + 1] = img.id
+                        burst.name = burst.name or img.filename
+                        if is_keeper then burst.keepers = burst.keepers + 1 end
+                        if tags_of(img)[TAG_KEEPER] then burst.tagged = burst.tagged + 1 end
+                        if want == nil or img.rating == want then return end
+                        if saved ~= nil and saved.path == path and img.rating ~= saved.written then
+                            hand_ids[#hand_ids + 1] = img.id
+                            hand_details[#hand_details + 1] = string.format("%s: %d stars, the last cull wrote %d",
+                                img.filename, img.rating, saved.written)
+                        else
+                            burst.differs = true
+                            differ_details[#differ_details + 1] = string.format("%s: %d stars, a cull now gives %d",
+                                img.filename, img.rating, want)
+                        end
+                    end)
+                    if ok_check then
+                        applied_total = applied_total + 1
+                    else
+                        failed_total = failed_total + 1
+                        first_error = first_error or tostring(check_err)
+                        log(C.image_label(img) .. ": verify couldn't read it: " .. tostring(check_err))
+                    end
+                end
+                return 0
+            end
 
             local writes = 0
             for _, img in ipairs(group) do
@@ -1641,7 +1690,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         show_status("")
 
         if M.cancel_requested then
-            if applied_total > 0 then
+            if applied_total > 0 and not verify then
                 say(string.format("Assisted Culling: cancelled. %d of %d images were already rated and keep their changes. Run again to finish, or use Clear culling marks to remove the tags%s.",
                     applied_total, #images,
                     next(previous_ratings) and " and Restore previous ratings to put the star ratings back" or ""))
@@ -1665,6 +1714,42 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             if #tail > 300 then tail = tail:sub(#tail - 299) end
             notify_error(_("Assisted Culling: no ratings came back from the scorer. ")
                 .. (tail ~= "" and tail or _("Check the plugins folder in preferences → Lua options, and that darktable-assisted-culling/.venv has python/requirements.txt installed.")), to_check)
+        elseif verify then
+            local differ_ids, keeper_ids, keeper_details, n_differ_bursts, n_keeper_bursts = {}, {}, {}, 0, 0
+            for _, burst in ipairs(verify_order) do
+                if burst.differs then
+                    n_differ_bursts = n_differ_bursts + 1
+                    table.move(burst.ids, 1, #burst.ids, #differ_ids + 1, differ_ids)
+                end
+                if tag_on.keeper and burst.keepers > 0 and (burst.tagged == 0 or burst.tagged > burst.keepers) then
+                    n_keeper_bursts = n_keeper_bursts + 1
+                    table.move(burst.ids, 1, #burst.ids, #keeper_ids + 1, keeper_ids)
+                    keeper_details[#keeper_details + 1] = string.format("%s: %d Keeper tags, a cull now gives %d",
+                        burst.name, burst.tagged, burst.keepers)
+                end
+            end
+            if #differ_details + #hand_ids + n_keeper_bursts == 0 then
+                say(string.format("Assisted Culling: verify only, nothing changed. All %d images match a cull now.", applied_total))
+            else
+                say(string.format("Assisted Culling: verify only, nothing changed. %d of %d images would get other stars from a cull now, %d ratings were changed by hand, %d bursts have the wrong Keeper tags. See To check.",
+                    #differ_details, applied_total, #hand_ids, n_keeper_bursts))
+            end
+            if #differ_details > 0 then
+                alerts.add(string.format("%d photos would get other stars from a cull now; Fix culls their %d bursts (%d photos)",
+                    #differ_details, n_differ_bursts, #differ_ids), differ_ids, "cull", differ_details)
+            end
+            if #hand_ids > 0 then
+                alerts.add(string.format("you changed %d ratings since the last cull; a cull keeps or overwrites them by its settings", #hand_ids),
+                    hand_ids, nil, hand_details)
+            end
+            if n_keeper_bursts > 0 then
+                alerts.add(string.format("%d bursts have no Keeper tag or more than a cull gives; Fix culls them (%d photos)",
+                    n_keeper_bursts, #keeper_ids), keeper_ids, "cull", keeper_details)
+            end
+            if failed_total > 0 then alerts.add(string.format("%d images couldn't be read (see log)", failed_total)) end
+            if n_skipped > 0 then alerts.add(string.format("%d images unreadable (see log)", n_skipped)) end
+            log(string.format("verify: %d of %d images differ from a cull now, %d changed by hand, %d bursts with wrong Keeper tags",
+                #differ_details, applied_total, #hand_ids, n_keeper_bursts))
         else
             local msg = string.format("Assisted Culling: done. %d keepers, %d not kept", stats.keepers, stats.others)
             if stats.rejected > 0 then msg = msg .. string.format(" (%d rejected)", stats.rejected) end
@@ -2059,12 +2144,12 @@ local function copy_images(images)
     return out
 end
 
-local function launch_score(images, s)
+local function launch_score(images, s, verify)
     is_running = true
     M.cancel_requested = false
     settings = s
     if action_button then action_button.label = _("Cancel culling") end
-    M.score_images(images, s.rank_mode, s.sharp_mode, s.exp_mode, s.keep_mode, s.non_keeper)
+    M.score_images(images, s.rank_mode, s.sharp_mode, s.exp_mode, s.keep_mode, s.non_keeper, verify)
 end
 
 local function clear_queue()
@@ -2091,7 +2176,8 @@ run_next = function()
     nxt.run()
 end
 
-local function start_culling(allow_cancel)
+-- images: the photos to cull, the lighttable's action images when nil. verify: score without writing.
+local function start_culling(allow_cancel, images, verify)
     if is_clearing then
         dt.print(_("Assisted Culling: busy clearing marks, try again in a moment."))
         return
@@ -2105,14 +2191,14 @@ local function start_culling(allow_cancel)
             if action_button then action_button.label = _("Cancelling...") end
             dt.print(_("Assisted Culling: cancelling, finishing the current step..."))
         else
-            local images, s = copy_images(dt.gui.action_images), read_panel()
-            if not queue_if_busy(_("Culling"), #images > 0, function() launch_score(images, s) end) then
+            local queued, s = copy_images(images or dt.gui.action_images), read_panel()
+            if not queue_if_busy(verify and _("Verify") or _("Culling"), #queued > 0, function() launch_score(queued, s, verify) end) then
                 dt.print(_("Assisted Culling: already running. Click Cancel culling in the panel to stop it."))
             end
         end
         return
     end
-    launch_score(dt.gui.action_images, read_panel())
+    launch_score(images or dt.gui.action_images, read_panel(), verify)
 end
 
 local function install_panel()
@@ -2218,6 +2304,16 @@ local function install_panel()
         changed()
         start_culling(true)
     end)
+
+    local verify_button = new_widget("button") {
+        label = _("Verify selection"),
+        tooltip = _("Score the selected images as Cull selection would and change nothing. To check lists the photos whose stars a cull would change, ratings you changed by hand since the last cull, and bursts whose Keeper tags don't match; Fix culls those bursts. Scores come from the cache, so a repeat is quick."),
+    }
+    verify_button.clicked_callback = C.guarded_callback(guard, "button verify", function()
+        changed()
+        start_culling(false, nil, true)
+    end)
+    fixes.cull = function(images) start_culling(false, images, false) end
 
     local group_tag_entries = {}
     for n in ipairs(GROUP_TAG_KEYS) do
@@ -2486,7 +2582,7 @@ local function install_panel()
         option_checks,
         tag_checks,
         { new_widget("section_label") { label = _("cull (writes ratings and tags)") },
-          run_tag_check, action_button },
+          run_tag_check, action_button, verify_button },
         { new_widget("section_label") { label = _("explain the last run (changes nothing)") },
           why_button, report_button,
           new_widget("section_label") { label = _("undo") },

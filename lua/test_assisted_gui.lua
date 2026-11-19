@@ -792,6 +792,57 @@ non_keeper_combo.selected = 1 -- leave
 non_keeper_combo.changed_callback(non_keeper_combo)
 check("reject mode: no Lua error", lua_errors(), nil)
 
+-- Verify selection ----------------------------------------------------------------------
+-- 21 still matches its cull, 22 was rated by hand since, 23 was never culled, 24 lost its Keeper tag
+local matching, hand_changed, never_culled, untagged = image(21, "DSC00021.JPG"), image(22, "DSC00022.JPG"),
+    image(23, "DSC00023.JPG"), image(24, "DSC00024.JPG")
+local verify_set = { matching, hand_changed, never_culled, untagged }
+PYTHON.results = "21,0.90,,,1,3,\n22,0.90,,,1,4,\n24,0.90,,,1,2,\n"
+click("Cull selection", { matching, hand_changed, untagged })
+hand_changed.rating = 1
+dt.tags.detach(keeper_tag, untagged)
+local REPORT = ROOT .. "/config/assisted_culling/last-run.csv"
+write_file(REPORT, "the last cull's report\n")
+local ratings_file = read_file(PREVIOUS_RATINGS)
+local function verify_row(text)
+    for i = 2, #to_check do
+        local row = to_check[i]
+        if row.visible and row[1] and (row[1].label or ""):gsub("\n", " "):find(text, 1, true) then return row end
+    end
+    return { {}, {}, { {}, {} } }
+end
+PYTHON.results = "21,0.90,,,1,3,\n22,0.90,,,1,4,\n23,0.90,,,1,5,\n24,0.90,,,1,2,\n"
+click("Verify selection", verify_set)
+check("verify: says it started", printed("Assisted Culling: verify started on 4 images…"), true)
+check("verify: the scorer is not asked for a report", #PYTHON.runs .. " "
+    .. tostring(table.concat((PYTHON.runs[1] or { argv = {} }).argv, " "):find("--report", 1, true)), "1 nil")
+check("verify: no rating and no Keeper tag is written",
+    matching.rating .. " " .. hand_changed.rating .. " " .. never_culled.rating .. " " .. untagged.rating .. " "
+    .. tostring(has_tag(never_culled, "Assisted Culling|Keeper")) .. " " .. tostring(has_tag(untagged, "Assisted Culling|Keeper")),
+    "3 1 0 2 false false")
+check("verify: the last cull's report and saved ratings are kept", read_file(REPORT) .. tostring(read_file(PREVIOUS_RATINGS) == ratings_file),
+    "the last cull's report\ntrue")
+check("verify: the toast counts what differs", last_print(),
+    "Assisted Culling: verify only, nothing changed. 1 of 4 images would get other stars from a cull now, 1 ratings were changed by hand, 2 bursts have the wrong Keeper tags. See To check.")
+local differ = verify_row("photos would get other stars")
+check("verify: one row for the photos a cull would rate differently, with Fix",
+    (differ[1].label or ""):gsub("\n", " ") .. "; " .. tostring(differ[2].text):gsub("\n%s*", " ") .. "; " .. tostring(differ[3][2].visible),
+    "Verify: 1 photos would get other stars from a cull now; Fix culls their 1 bursts (1 photos); • DSC00023.JPG: 0 stars, a cull now gives 5; true")
+local by_hand = verify_row("you changed")
+check("verify: ratings changed by hand get their own row, with no Fix",
+    tostring(by_hand[2].text):gsub("\n%s*", " ") .. "; " .. tostring(by_hand[3][1].visible) .. " " .. tostring(by_hand[3][2].visible),
+    "• DSC00022.JPG: 1 stars, the last cull wrote 4; true false")
+check("verify: the Keeper row lists the bursts' photos, Fix = cull",
+    (read_file(CHECKS_FILE) or ""):find("Verify\t2 bursts have no Keeper tag or more than a cull gives; Fix culls them (2 photos)\t23,24\tcull\t", 1, true) ~= nil, true)
+;(button(verify_row("bursts have no Keeper tag"), "Fix") or { clicked_callback = function() end }).clicked_callback()
+check("verify, Fix: Cull selection ran on those bursts only",
+    never_culled.rating .. " " .. tostring(has_tag(untagged, "Assisted Culling|Keeper")) .. " " .. hand_changed.rating, "5 true 1")
+click("Verify selection", verify_set)
+check("verify again, after Fix: only the hand-changed rating is left", last_print(),
+    "Assisted Culling: verify only, nothing changed. 0 of 4 images would get other stars from a cull now, 1 ratings were changed by hand, 0 bursts have the wrong Keeper tags. See To check.")
+check("verify again: the Keeper row is gone", verify_row("bursts have no Keeper tag")[1].label, nil)
+check("verify: no Lua error", lua_errors(), nil)
+
 -- Detail tags --------------------------------------------------------------------------
 -- Ratings and Keeper / Rejected are written first; the Why and flag tags follow under their own job bar.
 local detail1, detail2, detail3 = image(201, "DSC00201.JPG"), image(202, "DSC00202.JPG"), image(203, "DSC00203.JPG")
