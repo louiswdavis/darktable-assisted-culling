@@ -1392,4 +1392,111 @@ function C.paged_sections(group, pages)
     return dt.new_widget("box")(body)
 end
 
+-- To check ---------------------------------------------------------------------
+-- What runs leave for the user to look at (failures, photos a run flagged), in a box above the
+-- progress line, so a toast that went by unseen isn't lost. A run's items stay until the next run
+-- of the same action or Clear. They are saved to `path`, one item per line
+-- "action<TAB>text<TAB>image id,image id", so a restart keeps them.
+C.ALERT_ROWS = 6
+
+-- [{ action, text, ids }] from the saved file's text.
+function C.alerts_parse(text)
+    local items = {}
+    for line in (text or ""):gmatch("[^\r\n]+") do
+        local action, item, ids_text = line:match("^([^\t]*)\t([^\t]*)\t?([^\t]*)$")
+        if action then
+            local ids = {}
+            for id in ids_text:gmatch("%d+") do ids[#ids + 1] = tonumber(id) end
+            items[#items + 1] = { action = action, text = item, ids = ids }
+        end
+    end
+    return items
+end
+
+function C.alerts_format(items)
+    local lines = {}
+    for _, item in ipairs(items) do
+        local fields = {}
+        for i, field in ipairs({ item.action, item.text }) do fields[i] = field:gsub("[\t\r\n]+", " ") end
+        lines[#lines + 1] = fields[1] .. "\t" .. fields[2] .. "\t" .. table.concat(item.ids, ",")
+    end
+    return #lines > 0 and table.concat(lines, "\n") .. "\n" or ""
+end
+
+-- alerts.widget is the box; alerts.begin(action) starts a run of `action`, dropping its earlier
+-- items; alerts.add(text, ids) adds an item to the run begun last, with a Select button when `ids`
+-- (image ids) has any. `new_widget` is the plugin's widget maker; `log` gets save failures.
+function C.alerts_box(new_widget, path, log)
+    local alerts = { items = C.alerts_parse(C.read_file_or_tmp(path)) }
+    local current = ""
+    local header = new_widget("label") { label = "To check", halign = "start" }
+    local rows, more = {}, new_widget("label") { label = "", halign = "start", visible = false }
+    local function select_ids(ids)
+        local images = {}
+        for _, id in ipairs(ids) do images[#images + 1] = dt.database.get_image(id) end
+        if #images < #ids then
+            dt.print(string.format("%d of these photos are no longer in the library", #ids - #images))
+        end
+        dt.gui.selection(images)
+    end
+    for i = 1, C.ALERT_ROWS do
+        local row = { label = new_widget("label") { label = "", halign = "start", ellipsize = "end" } }
+        row.button = new_widget("button") {
+            label = "Select",
+            tooltip = "Select these photos in the lighttable",
+            clicked_callback = function() select_ids(row.ids) end,
+        }
+        row.box = new_widget("box") { orientation = "horizontal", row.label, row.button }
+        rows[i] = row
+    end
+    local function show()
+        local items = alerts.items
+        for i, row in ipairs(rows) do
+            local item = items[i]
+            row.box.visible = item ~= nil
+            if item then
+                row.label.label = (item.action ~= "" and item.action .. ": " or "") .. item.text
+                row.label.tooltip = row.label.label
+                row.ids = item.ids
+                row.button.visible = #item.ids > 0
+            end
+        end
+        more.visible = #items > #rows
+        more.label = string.format("and %d more (see the log)", #items - #rows)
+        alerts.widget.visible = #items > 0
+    end
+    local function save()
+        local ok, err = C.write_file_atomic(path, C.alerts_format(alerts.items))
+        if not ok then log("to check: couldn't save " .. path .. ": " .. tostring(err)) end
+        show()
+    end
+    function alerts.begin(action)
+        current = action
+        local kept = {}
+        for _, item in ipairs(alerts.items) do
+            if item.action ~= action then kept[#kept + 1] = item end
+        end
+        alerts.items = kept
+        save()
+    end
+    function alerts.add(text, ids)
+        alerts.items[#alerts.items + 1] = { action = current, text = text, ids = ids or {} }
+        save()
+    end
+    local clear = new_widget("button") {
+        label = "Clear",
+        tooltip = "Empty this list. Each run replaces its own items anyway.",
+        clicked_callback = function()
+            alerts.items = {}
+            save()
+        end,
+    }
+    local body = { orientation = "vertical", new_widget("box") { orientation = "horizontal", header, clear } }
+    for _, row in ipairs(rows) do body[#body + 1] = row.box end
+    body[#body + 1] = more
+    alerts.widget = new_widget("box")(body)
+    show()
+    return alerts
+end
+
 return C

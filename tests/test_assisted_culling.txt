@@ -1,4 +1,4 @@
-ok   plugin_common.lua matches COMMON_HASH (copy it to the other repos after a change)
+FAIL plugin_common.lua matches COMMON_HASH (copy it to the other repos after a change): got 22795b0d, want e215d465
 ok   shell_quote: Windows escapes quotes, keeps %
 ok   shell_quote: POSIX escapes single quotes
 ok   parse_csv_line: quoted comma and doubled quote
@@ -206,4 +206,4 @@ ok   pick_detector: D-FINE beats YOLOX
 ok   pick_detector: the best has no 'not installed' note
 ok   pick_detector: none installed is nil
 
-all tests passed
+1 test(s) failed
