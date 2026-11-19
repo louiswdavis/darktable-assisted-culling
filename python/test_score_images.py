@@ -329,6 +329,12 @@ def run_tests():
           {v for k, v in rejects_of({"a": 10.0, "b": 2.0, "c": 1.0, "d": 2.5, "e": 0.5}, reject_cap=0).items() if k != "a"},
           {("-1", "Far behind")})
     open(res_path, "w").close()
+    S.process_burst_logic("1", {"a": 9.0, "b": 6.0, "c": 1.0}, {k: () for k in "abc"}, 3, Namespace(
+        keep_mode="single_best", rank_mode="universal", nk_mode="reject", reject_cap=2), res_path, creative=True)
+    check("creative burst: no frame is far behind or rejected",
+          {r[0]: (r[5], r[6]) for r in (line.strip().split(",") for line in open(res_path)) if r[0] != "a"},
+          {"b": ("leave", "Why|Outranked"), "c": ("leave", "Why|Outranked")})
+    open(res_path, "w").close()
     S.process_burst_logic("1", {"a": 9.0, "b": 8.8}, {"a": (), "b": ()}, 2, Namespace(
         keep_mode="single_best", rank_mode="universal", nk_mode="leave"), res_path)
     close_rows = {r[0]: r for r in (line.strip().split(",") for line in open(res_path))}
@@ -388,6 +394,8 @@ def run_tests():
     check("cut off: loses to a whole car", (kept, why["a"]), (["b"], "Outranked"))
     check("cut off: kept when every frame is cut off",
           R.rate_burst(trio, {k: ("cut_off",) for k in trio}, 3, single)[1], ["a"])
+    check("cut off: a creative burst keeps its cut-off frame",
+          R.rate_burst(trio, {"a": ("cut_off",), "b": (), "c": ()}, 3, single, creative=True)[1], ["a"])
     check("cut off: tag-only setting does not change eligibility",
           R.rate_burst(trio, {"a": ("cut_off",), "b": (), "c": ()}, 3,
                        Namespace(**{**vars(single), "tag_only_flags": frozenset({"cut_off"})}))[1], ["b"])
@@ -711,6 +719,16 @@ def run_tests():
     st = os.stat(frames[0])
     os.utime(frames[0], ns=(st.st_atime_ns, st.st_mtime_ns + 10**9))
     check("cache: a modified file is re-scored", plain_run(), {"0": fresh["0"], "1": "12345.0"})
+    picks_res, picks_report = os.path.join(tmp, "picks_res.csv"), os.path.join(tmp, "picks_report.csv")
+    plain_run(results=picks_res, first_picks=1, report=picks_report)
+    picks_rows = list(_csv.reader(open(picks_res)))
+    check("first picks: one keeper rated, the other burst's keeper left alone with Why|Not a first pick",
+          sorted((r[4], r[5], r[6].split(";")[-1]) for r in picks_rows),
+          [("0", "leave", "Why|Not a first pick"), ("1", picks_rows[[r[4] for r in picks_rows].index("1")][5], "Why|Keeper")])
+    check("first picks: the side file of the whole run is removed", os.path.exists(picks_res + ".all"), False)
+    check("first picks: the report says why",
+          sorted(r[9].split(",")[0] for r in list(_csv.reader(open(picks_report)))[1:]),
+          ["kept: rank 1 of 1", "left alone: rank 1 of 1"])
     motion_fresh = plain_run(sharp_mode="motion_aware")
     check("motion_aware: every frame scored without a detector", sorted(motion_fresh), ["0", "1"])
     check("motion_aware: a rerun reads its cache entries", plain_run(sharp_mode="motion_aware"), motion_fresh)
@@ -913,7 +931,7 @@ def run_tests():
         return out
 
     def motion_class(gray, share=S.STREAK_SHARE):
-        return S.classify_motion(S.motion_tiles(gray), S.CENTRE_BOX, share)[0]
+        return S.classify_motion(S.motion_tiles(gray), S.CENTRE_BOX, share, gray.shape[1] / gray.shape[0])[0]
 
     check("motion: sharp car on a streaked background is a pan", motion_class(framed(streak_h, texture)), "pan")
     check("motion: whole frame streaked one way is motion blur", motion_class(streak_h), "motion_blur")
@@ -921,7 +939,26 @@ def run_tests():
           motion_class(framed(streak_h, streak_v)), "missed_pan")
     check("motion: sharp everywhere is ordinary", motion_class(texture), "ordinary")
     check("motion: straightness of a clean streak is high",
-          S.classify_motion(S.motion_tiles(streak_h), S.CENTRE_BOX, S.STREAK_SHARE)[1] > 0.6, True)
+          S.classify_motion(S.motion_tiles(streak_h), S.CENTRE_BOX, S.STREAK_SHARE, 1.0)[1] > 0.6, True)
+    # a 3:2 frame blurred along lines out from its centre, as a zoom ring turned mid-exposure leaves it
+    wide = rng.integers(0, 256, (240, 360), dtype=np.uint8)
+    reach = float(np.hypot(360, 240) / 2)
+    zoom = cv2.warpPolar(cv2.blur(cv2.warpPolar(wide, (400, 720), (180, 120), reach, cv2.WARP_POLAR_LINEAR), (41, 1)),
+                         (360, 240), (180, 120), reach, cv2.WARP_POLAR_LINEAR | cv2.WARP_INVERSE_MAP)
+    check("motion: streaks out from the frame centre are a zoom burst", motion_class(zoom), "zoom_burst")
+    check("motion: a 3:2 frame streaked one way is not a zoom burst", motion_class(cv2.blur(wide, (31, 1))),
+          "motion_blur")
+    check("motion: a 3:2 sharp frame is ordinary", motion_class(wide), "ordinary")
+    check("creative burst: mostly zoom bursts", S.creative_burst(["zoom_burst"] * 4 + ["ordinary"], [0.0]), True)
+    check("creative burst: motion blur at 1/8 s or slower",
+          S.creative_burst(["motion_blur"] * 5, [1 / 8, 1 / 4, 1 / 8]), True)
+    check("creative burst: motion blur at 1/60 s is not",
+          S.creative_burst(["motion_blur"] * 5, [1 / 60] * 5), False)
+    check("creative burst: motion blur with no shutter known is not", S.creative_burst(["motion_blur"] * 5, [0.0]), False)
+    check("creative burst: under 80% styled is not",
+          S.creative_burst(["zoom_burst"] * 3 + ["pan", "ordinary"], [1.0]), False)
+    check("creative burst: no frames", S.creative_burst([], [1.0]), False)
+    check("class factor: a zoom burst scores on sharpness alone", S.class_factor("zoom_burst"), 1.0)
 
     rgb_of = lambda g: np.dstack([g, g, g])
     full_contrast = S.normalised_sharpness(rgb_of(texture))
@@ -1195,6 +1232,22 @@ def run_tests():
     # eval_culling.py keeps its own copy of the motion tags (it imports no cv2/numpy) -----
     import eval_culling
     check("eval_culling: MOTION_CLASS mirrors MOTION_TAGS", eval_culling.MOTION_CLASS, {v: k for k, v in S.MOTION_TAGS.items()})
+    check("eval_culling: CREATIVE_TAG mirrors score_images", eval_culling.CREATIVE_TAG, S.CREATIVE_TAG)
+
+    run_rows = [["a", "300", "", "1", "1", "4", "Why|Keeper"], ["b", "200", "", "1", "1", "3", "Why|Keeper by margin"],
+                ["c", "100", "", "1", "0", "leave", "Technique|Panning;Why|Outranked"],
+                ["d", "100", "", "2", "1", "5", "Why|Keeper"], ["e", "10", "", "2", "0", "-1", "Why|Far behind"],
+                ["f", "350", "", "3", "1", "4", "Why|Keeper"]]
+    picked = S.first_picks(run_rows, 2)
+    check("first_picks: the best keeper of each burst competes, most stars then score",
+          [r[0] for r in picked if r[4] == "1"], ["d", "f"])
+    check("first_picks: a picked row is unchanged", picked[3], run_rows[3])
+    check("first_picks: the rest are left alone, other tags kept, no reject",
+          [(r[0], r[4], r[5], r[6]) for r in picked if r[0] in "abce"],
+          [("a", "0", "leave", "Why|Not a first pick"), ("b", "0", "leave", "Why|Not a first pick"),
+           ("c", "0", "leave", "Technique|Panning;Why|Not a first pick"), ("e", "0", "leave", "Why|Not a first pick")])
+    check("first_picks: more picks than bursts rates each burst's best keeper only",
+          [r[0] for r in S.first_picks(run_rows, 10) if r[4] == "1"], ["a", "d", "f"])
     check("eval_culling: score-part constants mirror score_images",
           {n: eval_culling.PART_DEFAULTS[n] for n in ("PAN_BONUS", "MISSED_PAN_FACTOR")},
           {"PAN_BONUS": S.PAN_BONUS, "MISSED_PAN_FACTOR": S.MISSED_PAN_FACTOR})

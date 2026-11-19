@@ -170,6 +170,15 @@ with tempfile.TemporaryDirectory() as tmp:
     margin = E.settings_of({**vars(s), "non_keeper": "graded", "keep_margin": "75", "star_scale": "1"})
     rated = {f["path"]: f for f in E.replay(whole, margin, "subject_focus")}
     check("replay: a margin keeps a2 as well and grades a3", (rated[a2]["keeper"], rated[a3]["keeper"], rated[a3]["stars"] is not None), (True, False, True))
+    zoomed = E.frame_of({"burst": "x", "file": "z.jpg", "tags": "Technique|Zoom Burst;Technique|Creative Burst"}, "subject_focus")
+    check("frame_of: zoom burst class and creative burst from the tags", (zoomed["motion"], zoomed["creative"]), ("zoom_burst", True))
+    rejecting = E.settings_of({**vars(s), "non_keeper": "reject", "keep_margin": "off", "star_scale": "1"})
+    plain_a3 = {f["path"]: f for f in E.replay(whole, rejecting, "subject_focus")}[a3]
+    creative_a3 = {f["path"]: f for f in E.replay([{**f, "creative": f["burst"] == whole[0]["burst"]} for f in whole],
+                                                  rejecting, "subject_focus")}[a3]
+    check("replay: a creative burst rejects no far-behind frame",
+          ((plain_a3["stars"], plain_a3["reason"]), (creative_a3["stars"], creative_a3["reason"])),
+          ((-1, "Far behind"), (None, "Outranked")))
 
     ranked = E.suggest([(whole, truth)], "subject_focus", 1, 3)
     check("suggest: top 3", len(ranked), 3)

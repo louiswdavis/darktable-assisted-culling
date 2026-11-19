@@ -90,10 +90,10 @@ function C.latest_group_keys(items)
     return key_of, n_runs
 end
 
-C.GROUP_TAGS_HINT = "grouping tags found but no native groups; set Group support to Grouping tags to use them"
+C.GROUP_TAGS_HINT = "grouping tags found but no native groups; set grouping support to grouping tags to use them"
 
 -- GROUP_TAGS_HINT when native grouping put no photo in a group of 2+ but an item carries a
--- grouping tag (grouping ran with Write group tags but not native groups), else nil.
+-- grouping tag (grouping ran with Group tags on but not native groups), else nil.
 function C.group_tags_hint(grouped, items)
     if grouped > 0 then return nil end
     for _, item in ipairs(items) do

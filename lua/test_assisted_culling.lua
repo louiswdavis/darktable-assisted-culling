@@ -17,7 +17,7 @@ end
 -- plugin_common.lua ---------------------------------------------------------------
 -- The same file in all three plugin repos; COMMON_HASH pins it. After changing it, copy it to the
 -- other two repos and put the hash this prints into their tests too.
-local COMMON_HASH = "9c0c49b6"
+local COMMON_HASH = "3e126186"
 local script_dir = (arg and arg[0] or ""):match("^(.*)[/\\]") or "."
 local PC = dofile(script_dir .. "/plugin_common.lua")
 local function fnv1a(text)
@@ -425,8 +425,8 @@ check("preset schema: other angle, motion look and star slope default on",
     tostring(cd.keep_angles) .. "|" .. tostring(cd.motion_look) .. "|" .. tostring(cd.star_slope), "true|true|true")
 for _, t in ipairs(C.TAG_TOGGLES) do
     if t.key == "why" then
-        check("TAG_TOGGLES: Why writes fourteen reasons, ending with the two new keepers and far behind",
-            #t.writes .. "|" .. t.writes[12] .. "|" .. t.writes[13] .. "|" .. t.writes[14], "14|Why|Other angle|Why|Motion look|Why|Far behind")
+        check("TAG_TOGGLES: Why writes fifteen reasons, ending with far behind and not a first pick",
+            #t.writes .. "|" .. t.writes[14] .. "|" .. t.writes[15], "15|Why|Far behind|Why|Not a first pick")
     end
 end
 check("preset schema: sharpness judge defaults off", cd.sharp_judge, false)
@@ -435,6 +435,7 @@ check("preset schema: graded non-keepers can be picked",
 check("preset schema: star strictness defaults to standard", cd.star_scale, "1")
 check("preset schema: blank frames default to 95%", cd.blank_share, "95")
 check("preset schema: rejects per burst default to 2", cd.reject_cap, "2")
+check("preset schema: first picks default off", cd.first_picks, "off")
 check("preset schema: an unknown star strictness falls back",
     C.preset_merge(C.PRESET_SCHEMA, { star_scale = "3" }).star_scale, "1")
 local has_motion = false
