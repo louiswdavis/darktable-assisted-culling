@@ -1396,18 +1396,18 @@ end
 -- What runs leave for the user to look at (failures, photos a run flagged), in a box above the
 -- progress line, so a toast that went by unseen isn't lost. A run's items stay until the next run
 -- of the same action or Clear. They are saved to `path`, one item per line
--- "action<TAB>text<TAB>image id,image id", so a restart keeps them.
+-- "action<TAB>text<TAB>image id,image id[<TAB>fix]", so a restart keeps them.
 C.ALERT_ROWS = 6
 
--- [{ action, text, ids }] from the saved file's text.
+-- [{ action, text, ids, fix }] from the saved file's text; fix is "" on a line without one.
 function C.alerts_parse(text)
     local items = {}
     for line in (text or ""):gmatch("[^\r\n]+") do
-        local action, item, ids_text = line:match("^([^\t]*)\t([^\t]*)\t?([^\t]*)$")
+        local action, item, ids_text, fix = line:match("^([^\t]*)\t([^\t]*)\t?([^\t]*)\t?([^\t]*)$")
         if action then
             local ids = {}
             for id in ids_text:gmatch("%d+") do ids[#ids + 1] = tonumber(id) end
-            items[#items + 1] = { action = action, text = item, ids = ids }
+            items[#items + 1] = { action = action, text = item, ids = ids, fix = fix }
         end
     end
     return items
@@ -1417,36 +1417,53 @@ function C.alerts_format(items)
     local lines = {}
     for _, item in ipairs(items) do
         local fields = {}
-        for i, field in ipairs({ item.action, item.text }) do fields[i] = field:gsub("[\t\r\n]+", " ") end
+        for i, field in ipairs({ item.action, item.text, item.fix or "" }) do fields[i] = field:gsub("[\t\r\n]+", " ") end
         lines[#lines + 1] = fields[1] .. "\t" .. fields[2] .. "\t" .. table.concat(item.ids, ",")
+            .. (fields[3] ~= "" and "\t" .. fields[3] or "")
     end
     return #lines > 0 and table.concat(lines, "\n") .. "\n" or ""
 end
 
 -- alerts.widget is the box; alerts.begin(action) starts a run of `action`, dropping its earlier
--- items; alerts.add(text, ids) adds an item to the run begun last, with a Select button when `ids`
--- (image ids) has any. `new_widget` is the plugin's widget maker; `log` gets save failures.
-function C.alerts_box(new_widget, path, log)
+-- items; alerts.add(text, ids, fix) adds an item to the run begun last, with a Select button when
+-- `ids` (image ids) has any, and a Fix button when `fix` names a function in `fixes`. Fix removes
+-- the item, then calls fixes[fix](images). `fixes` may be filled after this call. `new_widget` is
+-- the plugin's widget maker; `log` gets save failures.
+function C.alerts_box(new_widget, path, log, fixes)
+    fixes = fixes or {}
     local alerts = { items = C.alerts_parse(C.read_file_or_tmp(path)) }
     local current = ""
     local header = new_widget("label") { label = "To check", halign = "start" }
     local rows, more = {}, new_widget("label") { label = "", halign = "start", visible = false }
-    local function select_ids(ids)
+    local save
+    local function images_of(ids)
         local images = {}
         for _, id in ipairs(ids) do images[#images + 1] = dt.database.get_image(id) end
         if #images < #ids then
             dt.print(string.format("%d of these photos are no longer in the library", #ids - #images))
         end
-        dt.gui.selection(images)
+        return images
     end
     for i = 1, C.ALERT_ROWS do
         local row = { label = new_widget("label") { label = "", halign = "start", ellipsize = "end" } }
         row.button = new_widget("button") {
             label = "Select",
             tooltip = "Select these photos in the lighttable",
-            clicked_callback = function() select_ids(row.ids) end,
+            clicked_callback = function() dt.gui.selection(images_of(row.item.ids)) end,
         }
-        row.box = new_widget("box") { orientation = "horizontal", row.label, row.button }
+        row.fix = new_widget("button") {
+            label = "Fix",
+            tooltip = "Make the change this line describes, to these photos only",
+            clicked_callback = function()
+                local item = row.item
+                for k, other in ipairs(alerts.items) do
+                    if other == item then table.remove(alerts.items, k) break end
+                end
+                save()
+                fixes[item.fix](images_of(item.ids))
+            end,
+        }
+        row.box = new_widget("box") { orientation = "horizontal", row.label, row.button, row.fix }
         rows[i] = row
     end
     local function show()
@@ -1457,15 +1474,16 @@ function C.alerts_box(new_widget, path, log)
             if item then
                 row.label.label = (item.action ~= "" and item.action .. ": " or "") .. item.text
                 row.label.tooltip = row.label.label
-                row.ids = item.ids
+                row.item = item
                 row.button.visible = #item.ids > 0
+                row.fix.visible = #item.ids > 0 and fixes[item.fix] ~= nil
             end
         end
         more.visible = #items > #rows
         more.label = string.format("and %d more (see the log)", #items - #rows)
         alerts.widget.visible = #items > 0
     end
-    local function save()
+    function save()
         local ok, err = C.write_file_atomic(path, C.alerts_format(alerts.items))
         if not ok then log("to check: couldn't save " .. path .. ": " .. tostring(err)) end
         show()
@@ -1479,8 +1497,8 @@ function C.alerts_box(new_widget, path, log)
         alerts.items = kept
         save()
     end
-    function alerts.add(text, ids)
-        alerts.items[#alerts.items + 1] = { action = current, text = text, ids = ids or {} }
+    function alerts.add(text, ids, fix)
+        alerts.items[#alerts.items + 1] = { action = current, text = text, ids = ids or {}, fix = fix or "" }
         save()
     end
     local clear = new_widget("button") {
