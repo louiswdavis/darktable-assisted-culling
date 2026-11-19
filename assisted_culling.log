@@ -1057,3 +1057,7 @@
 01:11:08 lua: Assisted Culling: done. 1742 keepers, 1933 not kept (56 rejected), 381 cut off, 31 blocked, 46 blank. Ratings are ready. Now writing 7327 detail tags; the job bar's x stops them.
 01:11:08 lua: apply: timing: 79.3s in tag and rating writes, 18.6s paused, 27.7s in progress updates (job bar 0.0s, panel line 27.5s, toast 0.2s); 3176 rating writes, 0 Keeper / Rejected tag writes; final drain took 119s
 01:11:08 lua: detail tags: started, 7327 tag writes on 7326 images
+02:22:49 lua: apply: detail tags: 7327 of 7327 tag writes on 7326 of 7326 images in 4301s (waited 2180.3s for darktable, paused 2100.9s)
+02:22:49 lua: Assisted Culling: detail tags written (7327).
+02:22:49 lua: apply: tag writes by tag (+ attached, - detached): 3506 +Assisted Culling|Why|Outranked, 2292 +Assisted Culling|Why|Keeper, 456 +Assisted Culling|Why|Keeper by margin, 446 +Assisted Culling|Why|Close call, 286 +Assisted Culling|Why|Other angle, 208 +Assisted Culling|Why|Motion look, 92 +Assisted Culling|Why|Blank, 20 +Assisted Culling|Why|Far behind, 20 +Assisted Culling|Why|Spread, 1 -Assisted Culling|Why|Keeper
+02:22:49 lua: run finished, 4438s in total
