@@ -646,8 +646,44 @@ check("clear, cancelled: the first image is cleared, the next keeps its tag",
 check("clear, cancelled: the message counts both", last_print(),
     "Assisted Culling: clear cancelled. Removed culling tags from 1 of 3 images; 2 not reached keep their tags.")
 check("clear, cancelled: the panel line is cleared", status_label.label, "")
+
+-- To check: the photos the cancelled clear didn't reach
+local to_check = panel[#panel - 1]
+check("To check sits above the progress line, outside the folding pages",
+    type(to_check) == "table" and to_check[1] and to_check[1][1] and to_check[1][1].label, "To check")
+to_check = type(to_check) == "table" and to_check[1] and to_check[1][1] and to_check[1][1].label == "To check" and to_check or { {}, {} }
+local CHECKS_FILE = ROOT .. "/config/assisted_culling.checks.txt"
+-- the row of the clear's item: an earlier Cull run's items stay above it
+local function clear_row()
+    for i = 2, #to_check do
+        local row = to_check[i]
+        if row.visible and row[1] and (row[1].label or ""):find("^Clear: ") then return row end
+    end
+    return { {}, {} }
+end
+check("To check: the cancelled clear shows in the box", to_check.visible, true)
+check("To check: the row names the action and the count",
+    clear_row()[1].label, "Clear: clear cancelled: 2 photos not reached keep their tags")
+check("To check: the item is saved for a restart",
+    (read_file(CHECKS_FILE) or ""):find("Clear\tclear cancelled: 2 photos not reached keep their tags\t2,3\n", 1, true) ~= nil, true)
+selection_sets = 0
+;(button(clear_row(), "Select") or { clicked_callback = function() end }).clicked_callback()
+check("To check: Select selects the photos not reached", selection_sets .. " " .. #dt.gui.action_images, "1 2")
+selection_sets = 0
 click("Clear culling marks", { jpeg2 })
 check("clear, after a cancel: the next clear runs", has_tag(jpeg2, "Assisted Culling|Keeper"), false)
+check("To check: the next clear replaces its items", (read_file(CHECKS_FILE) or ""):find("Clear\t", 1, true), nil)
+check("To check: the clear's row is gone", clear_row()[1].label, nil)
+dt.tags.attach(keeper_tag, jpeg1)
+dt.tags.attach(keeper_tag, jpeg2)
+on_sleep = function() if jobs[1] and jobs[1].valid then jobs[1].valid = false end end
+click("Clear culling marks", { jpeg1, jpeg2, jpeg3 })
+on_sleep = nil
+check("To check: a second cancelled clear fills the box again", clear_row()[1].label ~= nil, true)
+;(button(to_check, "Clear") or { clicked_callback = function() end }).clicked_callback()
+check("To check: Clear empties the box", to_check.visible, false)
+check("To check: Clear empties the saved list", read_file(CHECKS_FILE), "")
+click("Clear culling marks", { jpeg2 })
 
 -- Restore previous ratings ----------------------------------------------------------
 local PREVIOUS_RATINGS = ROOT .. "/config/assisted_culling.previous-ratings.csv"

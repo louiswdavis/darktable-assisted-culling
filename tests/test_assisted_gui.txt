@@ -89,7 +89,17 @@ ok   clear: the selection is never changed
 ok   clear, cancelled: the first image is cleared, the next keeps its tag
 ok   clear, cancelled: the message counts both
 ok   clear, cancelled: the panel line is cleared
+ok   To check sits above the progress line, outside the folding pages
+ok   To check: the cancelled clear shows in the box
+ok   To check: the row names the action and the count
+ok   To check: the item is saved for a restart
+ok   To check: Select selects the photos not reached
 ok   clear, after a cancel: the next clear runs
+ok   To check: the next clear replaces its items
+ok   To check: the clear's row is gone
+ok   To check: a second cancelled clear fills the box again
+ok   To check: Clear empties the box
+ok   To check: Clear empties the saved list
 ok   restore, nothing selected: asks for a selection
 ok   restore, no run yet: says so
 ok   restore: the run rated both scored frames
