@@ -125,9 +125,9 @@ class Detector:
 
 # YOLOX as exported by opencv_zoo (object_detection_yolox_2022nov.onnx): RGB 0–255
 # letterboxed top-left onto a 114-grey 640² canvas; raw per-anchor grid outputs.
-def _yolox_load(data: bytes):
+def _yolox_load(data: bytes, threads: int):
     """cv2.dnn net from the file bytes: cv2's own path argument is narrow on
-    Windows, so a non-ASCII path (a username) fails."""
+    Windows, so a non-ASCII path (a username) fails. `threads` is unused: cv2 sets its own."""
     return cv2.dnn.readNetFromONNX(np.frombuffer(data, np.uint8))
 
 
@@ -167,10 +167,10 @@ def _yolox_run(detector: Detector, canvas: np.ndarray, scale: float, w: int, h: 
 # `orig_target_sizes` 1×2; outputs `labels`, `boxes` xyxy in input pixels, `scores`) or the
 # transformers export (onnx-community/dfine_*-ONNX: one image input; outputs `logits` 1×Q×80
 # and `pred_boxes` 1×Q×4 as normalised cx,cy,w,h), which gets sigmoid and the box conversion here.
-def _detr_load(data: bytes):
+def _detr_load(data: bytes, threads: int):
     import onnxruntime  # lazy: culling installs it only once the DETR family is the default
     opts = onnxruntime.SessionOptions()
-    opts.intra_op_num_threads = 1  # the worker pool supplies the parallelism
+    opts.intra_op_num_threads = threads
     return onnxruntime.InferenceSession(data, sess_options=opts, providers=["CPUExecutionProvider"])
 
 
@@ -209,9 +209,11 @@ FAMILIES = {
 }
 
 
-def load_detector(model_path: str) -> Detector:
+def load_detector(model_path: str, threads: int = 1) -> Detector:
     """A Detector for the model file, its family chosen from the filename; InputError when
-    the file is missing, unreadable or of no known family. Read once per process."""
+    the file is missing, unreadable or of no known family. Read once per process. `threads` is
+    onnxruntime's intra-op count (DETR only; 0 = every core): 1 suits a worker pool, which
+    supplies the parallelism; a single process detecting alone passes 0."""
     name = os.path.basename(model_path)
     family = next((f for f, row in FAMILIES.items() if row["match"](name)), None)
     if family is None:
@@ -223,7 +225,7 @@ def load_detector(model_path: str) -> Detector:
     except OSError as e:
         raise InputError(f"object detector model not found or unreadable: {model_path} ({e})") from e
     did = f"{family}:{name}:{len(data)}:{hashlib.sha1(data).hexdigest()}"
-    return Detector(id=did, family=family, net=FAMILIES[family]["load"](data), classes=FAMILIES[family]["classes"])
+    return Detector(id=did, family=family, net=FAMILIES[family]["load"](data, threads), classes=FAMILIES[family]["classes"])
 
 
 # ---------------------------------------------------------------- inference
