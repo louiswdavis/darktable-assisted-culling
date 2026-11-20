@@ -1,4 +1,8 @@
 ok   plugin_common.lua matches COMMON_HASH (copy it to the other repos after a change)
+ok   count: 0 is plural
+ok   count: 1 is singular
+ok   count: 2 is plural
+ok   count: an irregular plural
 ok   shell_quote: Windows escapes quotes, keeps %
 ok   shell_quote: POSIX escapes single quotes
 ok   parse_csv_line: quoted comma and doubled quote
@@ -25,14 +29,14 @@ ok   run_log: the current log holds the newest run
 ok   run_log: .prev.log holds the run before
 ok   run_log: .prev5.log holds the oldest kept run
 ok   paced_writer: only the failed write is logged
-ok   latest_group_keys keeps each photo's own run
+ok   latest_group_keys keeps each image's own run
 ok   latest_group_keys counts runs
 ok   group_tags_hint fires when native found nothing but tags exist
 ok   group_tags_hint silent when native groups exist
 ok   tag_group_keys reads immediate children only
 ok   tag_group_keys takes the first child by name
-ok   tag_group_keys reports the photo
-ok   tag_group_keys leaves unmatched photos out
+ok   tag_group_keys reports the image
+ok   tag_group_keys leaves unmatched images out
 ok   native_group_keys maps leaders
 ok   number_groups shares and separates
 ok   number_groups with no keys at all

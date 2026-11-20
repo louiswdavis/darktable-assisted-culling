@@ -95,7 +95,7 @@ ok   To check: the cancelled clear shows in the box
 ok   To check: no ratings back, the line names no log fragment
 ok   To check: the row names the action and the count
 ok   To check: the item is saved for a restart
-ok   To check: Select selects the photos not reached
+ok   To check: Select selects the images not reached
 ok   clear, after a cancel: the next clear runs
 ok   To check: the next clear replaces its items
 ok   To check: the clear's row is gone
@@ -130,9 +130,9 @@ ok   verify: the scorer is not asked for a report
 ok   verify: no rating and no Keeper tag is written
 ok   verify: the last cull's report and saved ratings are kept
 ok   verify: the toast counts what differs
-ok   verify: one row for the photos a cull would rate differently, with Fix
+ok   verify: one row for the images a cull would rate differently, with Fix
 ok   verify: ratings changed by hand get their own row, with no Fix
-ok   verify: the Keeper row lists the bursts' photos, Fix = cull
+ok   verify: the Keeper row lists the bursts' images, Fix = cull
 ok   verify, Fix: Cull Selection ran on those bursts only
 ok   verify again, after Fix: only the hand-changed rating is left
 ok   verify again: the Keeper row is gone
