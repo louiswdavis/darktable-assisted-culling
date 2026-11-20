@@ -169,4 +169,7 @@ ok   reset, after a cancel: the next reset runs, the panel isn't left busy
 ok   reset, an image removed from the library: the others are at 0
 ok   reset: no Lua error
 ok   no job bar is closed twice
+ok   no widget is placed twice in the panel
+ok   Run page: model runs only, main button first
+ok   Tools page: explain, then Undo
 all passed
