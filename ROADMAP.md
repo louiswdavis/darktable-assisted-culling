@@ -128,7 +128,9 @@ Adobe's Assisted Culling reports focus, eyes, exposure and misfire as separate s
 
 ## A "needs review" state
 
-Today every frame ends up rated. The competitors mark the frames they're unsure of instead:
+**Built (ticket 32), awaiting a Windows cull:** a frame with no vehicle box is left unrated with a `No vehicle` reason, and frames near the keep line get a `Close call` reason. Second pass on leftovers (Review helpers) is not built.
+
+Before, every frame ended up rated. The competitors mark the frames they're unsure of instead:
 - an **Unsure / Needs review** bucket (a tag or colour label) for frames whose score sits near the keep line, so a second look covers only those
 - **when in doubt, keep**: a close call leans to keeping, because a wrongly rejected frame is the expensive mistake
 - a frame with **no vehicle box** stays unrated with a reason tag, instead of being scored on the whole image
@@ -139,7 +141,7 @@ Open: whether "unsure" is a colour label, a tag under `Assisted Culling|Why|…`
 
 - **Rejects stick, confirms count.** A frame the user rejected or rated by hand is not re-rated on the next run. A hand pick in a burst counts as the keeper.
 - **Changeable keeper.** Picking a different frame as keeper re-runs only that burst's keep step.
-- **Restore previous ratings.** Every run saves the ratings it replaced, so one click undoes a run. Several competitors are criticised for having no undo.
+- **Restore previous ratings (built 2026-11-18, README step 13).** Every run saves the ratings it replaced (`assisted_culling.previous-ratings.csv`); the button puts back only ratings still as the run wrote them, one run back. Several competitors are criticised for having no undo.
 
 ## Score-only mode
 
@@ -159,13 +161,15 @@ Effort S.
 
 ## Learn from hand ratings
 
-Still open: `eval_culling.py` exists, `--suggest` does not. Search a small grid of settings against the ratings changed by hand on past shoots and print the best few. Second stage: a small ranker trained on "kept frame beats dropped frame" pairs inside a burst.
+First stage built: `eval_culling.py --suggest` searches a small grid of settings against hand ratings (ticket 19), and `--learn` takes the truth from stars changed after a run plus frames edited in darkroom (ticket 85). Second stage, still open: a small ranker trained on "kept frame beats dropped frame" pairs inside a burst.
 
 How the second stage could work: every keeper the user swaps by hand is a pair (chosen beats dropped). Fit a Bradley-Terry model over the existing score fields (arXiv 1803.07212), so the ranker learns weights, not pixels. Make it opt-in with a reset button: a 2023 AAAI study found personalised aesthetic models can do worse than the general one.
 
 ## More than one keeper per car, when frames differ
 
-Today each car gets one keeper. Apple's keeper patent (US10671895) ranks a burst, drops frames under a quality floor, then keeps extra frames only when they look different enough from the ones already kept, up to 3. For culling: keep a second or third frame of a car only if it's a different view or moment (embedding distance over a threshold). Check it against the one-keeper-per-car rule before building; it could be a setting ("up to N per car").
+**Built (ticket 84, committed 2026-11-18):** keep extra frames for a different angle or a motion look, with an even star slope (`--keep-angles`, `--motion-look`, `--star-slope` in replay). A bigger shoot is needed to see the slope.
+
+Before, each car got one keeper. Apple's keeper patent (US10671895) ranks a burst, drops frames under a quality floor, then keeps extra frames only when they look different enough from the ones already kept, up to 3. For culling: keep a second or third frame of a car only if it's a different view or moment (embedding distance over a threshold). Check it against the one-keeper-per-car rule before building; it could be a setting ("up to N per car").
 
 ## Keeper per track
 
@@ -205,8 +209,7 @@ Also:
 ## Faster runs on Windows
 
 No published CPU timings exist for the newer models, so measure first.
-- **Time each stage** in the report (detect, segment, score per frame), so the slow step is known
-  before anything is changed
+- **Time each stage**: part built (ticket 75): the run log has `started`/`done` lines with seconds and peak memory per stage. Not in the report yet
 - **GPU through onnxruntime**: the DirectML provider still works but ONNX Runtime has put it in
   sustained engineering; new Windows work goes to Windows ML. An opt-in
   `onnxruntime-directml` with automatic CPU fallback is the cheap trial; a Windows ML route waits
