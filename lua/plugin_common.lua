@@ -9,6 +9,9 @@
 
 local C = {}
 
+-- The plugin's own folder: this file sits in its lua/ folder.
+local PLUGIN_DIR = ((debug.getinfo(1, "S").source:sub(2):match("^(.*)[/\\]") or "."):match("^(.*)[/\\]")) or ".."
+
 C.IS_WINDOWS = package.config:sub(1, 1) == "\\"
 
 -- Shared preferences ------------------------------------------------------------
@@ -943,7 +946,9 @@ end
 --       read_panel = fn() -> settings | nil, why,
 --       show = fn(settings), remember = fn(name), initial = name, log = fn(msg),
 --       on_change = fn(name, is_template) | nil, can_switch = fn() -> ok, why | nil,
---       allow_store_new = bool }
+--       allow_store_new = bool, plugin_folder = fn() -> path or "" }
+-- Export writes <plugin_folder()>/exports/<name>.atpreset; with no folder set, the folder above
+-- this file's lua/ folder.
 -- Optional store.copy_note(from, to) -> confirm text | nil, why and store.copy(from, to) -> ok, err:
 -- store new then asks first, and copies the selected preset's store (e.g. a folder) before writing.
 -- Optional store.export_files(name, picked) -> { { name, path | dir }, ... } adds files (path) or
@@ -960,7 +965,7 @@ function C.make_preset_controls(o)
     local name_mode
     local picker, menu, name_entry, name_box, confirm_label, confirm_box, dirty_label
     local confirm_button, confirm_action, delete_clicked
-    local export_box, export_chooser, import_box, import_chooser
+    local export_box, import_box, import_chooser
     local export_checks = {} -- key -> check_button, one per store.export_options entry
 
     -- Store and preset messages start lowercase; a toast reads as a sentence after the prefix.
@@ -1188,12 +1193,15 @@ function C.make_preset_controls(o)
 
     -- The saved preset, not the panel: unsaved changes stay out and the message says so.
     local function export_clicked()
-        local folder = export_chooser.value
-        if not folder or folder == "" then say("pick a folder to export into first"); return end
         local text = o.store.read(current)
         if not text then say("couldn't read " .. o.store.path(current)); return end
-        local bundle = folder .. "/" .. current .. ".atpreset"
-        if C.path_exists(bundle) then say(bundle .. " already exists: delete or rename it first"); return end
+        local root = o.plugin_folder and o.plugin_folder() or ""
+        local folder = (root ~= "" and root or PLUGIN_DIR) .. "/exports"
+        local bundle, i = folder .. "/" .. current .. ".atpreset", 1
+        while C.path_exists(bundle) do
+            i = i + 1
+            bundle = string.format("%s/%s (%d).atpreset", folder, current, i)
+        end
         C.make_dir(bundle)
         local picked = {}
         for key, check in pairs(export_checks) do picked[key] = check.value and true or nil end
@@ -1275,7 +1283,7 @@ function C.make_preset_controls(o)
     }
     menu = dt.new_widget("combobox") {
         label = "Actions",
-        tooltip = "Preset actions: update the selected preset with the panel's values, store the panel as a new preset, rename, delete, export to a folder or import one.",
+        tooltip = "Preset actions: update the selected preset with the panel's values, store the panel as a new preset, rename, delete, export to the plugin's exports folder, or import a bundle.",
         changed_callback = function(self)
             local i = self.selected
             if not i or i <= 1 then return end
@@ -1312,16 +1320,10 @@ function C.make_preset_controls(o)
             dt.new_widget("button") { label = "Cancel", clicked_callback = function() confirm_box.visible = false end },
         },
     }
-    export_chooser = dt.new_widget("file_chooser_button") {
-        title = "Folder to Export the Preset Into",
-        is_directory = true,
-        tooltip = "The preset is written to a <name>.atpreset folder inside this one.",
-    }
     local export_parts = {
         orientation = "vertical",
         visible = false,
-        dt.new_widget("label") { label = "Export into Folder", halign = "start" },
-        export_chooser,
+        dt.new_widget("label") { label = "Export to the Plugin's exports Folder", halign = "start" },
     }
     for _, opt in ipairs(o.store.export_options or {}) do
         export_checks[opt.key] = dt.new_widget("check_button") { label = opt.label, tooltip = opt.tooltip, value = false }
@@ -1350,7 +1352,7 @@ function C.make_preset_controls(o)
         },
     }
     ctl.widgets = { picker = picker, menu = menu, dirty_label = dirty_label, name_box = name_box, confirm_box = confirm_box,
-        export_box = export_box, export_chooser = export_chooser, import_box = import_box, import_chooser = import_chooser }
+        export_box = export_box, import_box = import_box, import_chooser = import_chooser }
     ctl.widget = dt.new_widget("box") {
         orientation = "vertical",
         dt.new_widget("box") { orientation = "horizontal", picker, menu },

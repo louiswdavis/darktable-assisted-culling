@@ -7,3 +7,4 @@ __pycache__/
 .superpowers/
 /models/
 luac.out
+/exports/

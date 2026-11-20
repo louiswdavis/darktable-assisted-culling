@@ -2546,6 +2546,7 @@ local function install_panel()
     ctl = make_preset_controls({
         prefix = "Assisted Culling",
         plugin = "assisted_culling",
+        plugin_folder = plugin_folder_pref,
         schema = M.PRESET_SCHEMA,
         store = store,
         read_panel = read_panel,
