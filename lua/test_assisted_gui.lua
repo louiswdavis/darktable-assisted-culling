@@ -933,6 +933,41 @@ check("reset, an image removed from the library: the others are at 0", jpeg1.rat
 check("reset: no Lua error", lua_errors(), nil)
 check("no job bar is closed twice", double_closes, 0)
 
+local placed, twice = {}, {}
+local function walk_widgets(widget)
+    if type(widget) ~= "table" or not widget.kind then return end
+    if placed[widget] then twice[#twice + 1] = tostring(widget.label or widget.kind) end
+    placed[widget] = true
+    for _, child in ipairs(widget) do walk_widgets(child) end
+end
+walk_widgets(panel)
+check("no widget is placed twice in the panel", table.concat(twice, ", "), "")
+-- the box below the page button titled `title` (C.paged_sections: button, body, button, body…)
+local function page_body(widget, title)
+    if type(widget) ~= "table" then return nil end
+    for i, child in ipairs(widget) do
+        if type(child) == "table" and child.kind == "button" and type(child.label) == "string"
+            and child.label:match("^%d+  " .. title .. " ") then return widget[i + 1] end
+        local found = page_body(child, title)
+        if found then return found end
+    end
+    return nil
+end
+-- every button under `box`, nested boxes included, in panel order
+local function button_labels(box, out)
+    out = out or {}
+    for _, w in ipairs(box or {}) do
+        if type(w) == "table" and w.kind == "button" then out[#out + 1] = w.label
+        elseif type(w) == "table" then button_labels(w, out) end
+    end
+    return table.concat(out, ", ")
+end
+check("Run page: model runs only, main button first",
+    button_labels(page_body(panel, "Run")), "Cull Selection, Verify Selection")
+check("Tools page: explain, then Undo",
+    button_labels(page_body(panel, "Tools")),
+    "Why These Ratings?, Open Last Report, Clear Culling Marks, Restore Previous Ratings, Reset Ratings to 0")
+
 os.execute = real_execute
 real_execute(WINDOWS and ('rmdir /s /q "' .. ROOT:gsub("/", "\\") .. '"') or ("rm -rf '" .. ROOT .. "'"))
 
