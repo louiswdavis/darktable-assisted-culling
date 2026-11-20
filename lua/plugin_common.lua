@@ -304,6 +304,11 @@ function C.image_label(img)
     return ok and label or "image no longer in the library"
 end
 
+-- "1 image" / "2 images" for a toast or alert: `plural` defaults to `noun` plus "s".
+function C.count(n, noun, plural)
+    return n .. " " .. (n == 1 and noun or plural or noun .. "s")
+end
+
 -- pcall that also logs a failure with its traceback as "<what> failed: ...". Returns what pcall returns.
 function C.logged_call(log, what, fn)
     return xpcall(fn, function(err)
@@ -1459,7 +1464,7 @@ function C.alerts_box(new_widget, path, log, fixes)
         local images = {}
         for _, id in ipairs(ids) do images[#images + 1] = dt.database.get_image(id) end
         if #images < #ids then
-            dt.print(string.format("%d of these photos are no longer in the library.", #ids - #images))
+            dt.print(string.format("Couldn't open %s: no longer in the library.", C.count(#ids - #images, "image")))
         end
         return images
     end

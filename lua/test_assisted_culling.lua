@@ -17,7 +17,7 @@ end
 -- plugin_common.lua ---------------------------------------------------------------
 -- The same file in all three plugin repos; COMMON_HASH pins it. After changing it, copy it to the
 -- other two repos and put the hash this prints into their tests too.
-local COMMON_HASH = "4028fb69"
+local COMMON_HASH = "6850b432"
 local script_dir = (arg and arg[0] or ""):match("^(.*)[/\\]") or "."
 local PC = dofile(script_dir .. "/plugin_common.lua")
 local function fnv1a(text)
@@ -29,6 +29,10 @@ local cf = assert(io.open(script_dir .. "/plugin_common.lua", "rb"))
 local common_text = cf:read("a"):gsub("\r\n", "\n")
 cf:close()
 check("plugin_common.lua matches COMMON_HASH (copy it to the other repos after a change)", fnv1a(common_text), COMMON_HASH)
+check("count: 0 is plural", PC.count(0, "image"), "0 images")
+check("count: 1 is singular", PC.count(1, "image"), "1 image")
+check("count: 2 is plural", PC.count(2, "image"), "2 images")
+check("count: an irregular plural", PC.count(2, "entry", "entries"), "2 entries")
 check("shell_quote: Windows escapes quotes, keeps %", PC.shell_quote('C:\\x %y% "z"', true), '"C:\\x %y% \\"z\\""')
 check("shell_quote: POSIX escapes single quotes", PC.shell_quote("a'b", false), "'a'\\''b'")
 check("parse_csv_line: quoted comma and doubled quote", PC.parse_csv_line('1,"a ""x"", b.jpg",3\r', 3)[2], 'a "x", b.jpg')
@@ -118,7 +122,7 @@ local lk, n_runs = C.latest_group_keys({
     { id = 4, tags = { [G12 .. "|0001"] = true } },
 })
 local lng = C.number_groups({ 1, 2, 3, 4 }, lk)
-check("latest_group_keys keeps each photo's own run", table.concat({ lng[1], lng[2], lng[3], lng[4] }, ","), "1,1,2,2")
+check("latest_group_keys keeps each image's own run", table.concat({ lng[1], lng[2], lng[3], lng[4] }, ","), "1,1,2,2")
 check("latest_group_keys counts runs", n_runs, 2)
 check("group_tags_hint fires when native found nothing but tags exist",
     C.group_tags_hint(0, { { id = 1, tags = { [G12 .. "|0001"] = true } } }), C.GROUP_TAGS_HINT)
@@ -133,9 +137,9 @@ local gk2, multi = C.tag_group_keys({
     { id = 3, tags = { [G12 .. "|0002"] = true, [G12 .. "|0001"] = true } },
 }, G12)
 check("tag_group_keys takes the first child by name", gk2[3], "0001")
-check("tag_group_keys reports the photo", multi[1], 3)
+check("tag_group_keys reports the image", multi[1], 3)
 local gk3 = C.tag_group_keys({ { id = 4, tags = { [G10 .. "|0001"] = true } } }, G12)
-check("tag_group_keys leaves unmatched photos out", gk3[4], nil)
+check("tag_group_keys leaves unmatched images out", gk3[4], nil)
 
 local nk = C.native_group_keys({ { id = 1, leader = 5 }, { id = 2, leader = 5 }, { id = 3 } })
 check("native_group_keys maps leaders", nk[1] .. nk[2] .. tostring(nk[3]), "55nil")
@@ -147,13 +151,13 @@ local ng2 = C.number_groups({ 7, 8, 9 }, {})
 check("number_groups with no keys at all", ng2[7] .. ng2[8] .. ng2[9], "123")
 
 -- csv helpers ------------------------------------------------------------
-local line = C.csv_line({ 42, "/home/user/photo 01.NEF", 7 })
-check("csv_line quotes and joins fields", line, '"42","/home/user/photo 01.NEF","7"')
+local line = C.csv_line({ 42, "/home/user/image 01.NEF", 7 })
+check("csv_line quotes and joins fields", line, '"42","/home/user/image 01.NEF","7"')
 check("csv_line doubles embedded quotes", C.csv_line({ 'a "b", c' }), '"a ""b"", c"')
 
-local parsed = C.parse_csv_line("42,/home/user/photo 01.NEF,7,ok,1,4", 6)
+local parsed = C.parse_csv_line("42,/home/user/image 01.NEF,7,ok,1,4", 6)
 check("parse_csv_line splits into 6 fields", #parsed, 6)
-check("parse_csv_line field 2 keeps spaces", parsed[2], "/home/user/photo 01.NEF")
+check("parse_csv_line field 2 keeps spaces", parsed[2], "/home/user/image 01.NEF")
 check("parse_csv_line rejects wrong field count", C.parse_csv_line("1,2,3", 6), nil)
 local crlf = C.parse_csv_line("7,1,2,3,4,1\r", 6)
 check("parse_csv_line drops csv.writer's trailing \\r", crlf and crlf[6], "1")

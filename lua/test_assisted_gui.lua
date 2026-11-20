@@ -247,7 +247,7 @@ package.loaded["lib/dtutils.file"] = {
 
 -- An image as darktable hands it over, ungrouped and unrated.
 local function image(id, filename)
-    local img = { id = id, filename = filename, path = "/photos", rating = 0, tags = {} }
+    local img = { id = id, filename = filename, path = "/images", rating = 0, tags = {} }
     img.group_leader = img
     images_by_id[id] = img
     return img
@@ -683,12 +683,12 @@ check("To check: the cancelled clear shows in the box", to_check.visible, true)
 check("To check: no ratings back, the line names no log fragment",
     (read_file(CHECKS_FILE) or ""):find("Cull\tno ratings came back from the scorer (see the log)\t\t\t\t", 1, true) ~= nil, true)
 check("To check: the row names the action and the count",
-    (clear_row()[1].text or ""):gsub("\n", " "), "Clear: Clear cancelled: 2 photos not reached keep their tags.")
+    (clear_row()[1].text or ""):gsub("\n", " "), "Clear: Clear cancelled: 2 images not reached keep their tags.")
 check("To check: the item is saved for a restart",
-    (read_file(CHECKS_FILE) or ""):find("Clear\tClear cancelled: 2 photos not reached keep their tags.\t2,3\t", 1, true) ~= nil, true)
+    (read_file(CHECKS_FILE) or ""):find("Clear\tClear cancelled: 2 images not reached keep their tags.\t2,3\t", 1, true) ~= nil, true)
 selection_sets = 0
 ;(button(clear_row(), "Select") or { clicked_callback = function() end }).clicked_callback()
-check("To check: Select selects the photos not reached", selection_sets .. " " .. #dt.gui.action_images, "1 2")
+check("To check: Select selects the images not reached", selection_sets .. " " .. #dt.gui.action_images, "1 2")
 selection_sets = 0
 click("Clear Culling Marks", { jpeg2 })
 check("clear, after a cancel: the next clear runs", has_tag(jpeg2, "Assisted Culling|Keeper"), false)
@@ -719,12 +719,12 @@ jpeg1.rating, jpeg2.rating, jpeg3.rating = 5, 4, 2
 click("Cull Selection", { jpeg1, jpeg2, jpeg3 })
 check("restore: the run rated both scored frames", jpeg1.rating .. " " .. jpeg2.rating .. " " .. jpeg3.rating, "3 1 2")
 check("restore: the run saved the rating each frame had", read_file(PREVIOUS_RATINGS),
-    "1,5,3,/photos/DSC00001.JPG\n2,4,1,/photos/DSC00002.JPG\n")
+    "1,5,3,/images/DSC00001.JPG\n2,4,1,/images/DSC00002.JPG\n")
 
 -- a run that changes no rating keeps the file of the run before it
 click("Cull Selection", { jpeg1, jpeg2, jpeg3 })
 check("restore: a run that changes no rating keeps the saved ratings", read_file(PREVIOUS_RATINGS),
-    "1,5,3,/photos/DSC00001.JPG\n2,4,1,/photos/DSC00002.JPG\n")
+    "1,5,3,/images/DSC00001.JPG\n2,4,1,/images/DSC00002.JPG\n")
 
 jpeg2.rating = 2
 selection_sets = 0
@@ -784,7 +784,7 @@ check("reject mode, keeper dropped: the run's stars go to 0, hand ratings stay",
 check("reject mode: the log counts the frames set to 0",
     (read_file(ROOT .. "/config/assisted_culling.log") or ""):find("apply: 1 non-keepers set to 0", 1, true) ~= nil, true)
 check("reject mode: the saved ratings keep the rating from before the first run", read_file(PREVIOUS_RATINGS),
-    "11,4,0,/photos/DSC00011.JPG\n12,0,2,/photos/DSC00012.JPG\n14,0,3,/photos/DSC00014.JPG\n")
+    "11,4,0,/images/DSC00011.JPG\n12,0,2,/images/DSC00012.JPG\n14,0,3,/images/DSC00014.JPG\n")
 click("Restore Previous Ratings", { was_kept, kept_twice, hand_rated, rerated })
 check("reject mode, restore after two runs: back to the ratings from before the first",
     was_kept.rating .. " " .. kept_twice.rating .. " " .. hand_rated.rating .. " " .. rerated.rating, "4 0 2 4")
@@ -824,16 +824,16 @@ check("verify: the last cull's report and saved ratings are kept", read_file(REP
     "the last cull's report\ntrue")
 check("verify: the toast counts what differs", last_print(),
     "Assisted Culling: Verify only, nothing changed. 1 of 4 images would get other stars from a cull now, 1 ratings were changed by hand, 2 bursts have the wrong Keeper tags. See To check.")
-local differ = verify_row("photos would get other stars")
-check("verify: one row for the photos a cull would rate differently, with Fix",
+local differ = verify_row("images would get other stars")
+check("verify: one row for the images a cull would rate differently, with Fix",
     (differ[1].text or ""):gsub("\n", " ") .. "; " .. tostring(differ[2].text):gsub("\n%s*", " ") .. "; " .. tostring(differ[3][2].visible),
-    "Verify: 1 photos would get other stars from a cull now; Fix culls their 1 bursts (1 photos).; • DSC00023.JPG: 0 stars, a cull now gives 5; true")
+    "Verify: 1 images would get other stars from a cull now; Fix culls their 1 bursts (1 images).; • DSC00023.JPG: 0 stars, a cull now gives 5; true")
 local by_hand = verify_row("You changed")
 check("verify: ratings changed by hand get their own row, with no Fix",
     tostring(by_hand[2].text):gsub("\n%s*", " ") .. "; " .. tostring(by_hand[3][1].visible) .. " " .. tostring(by_hand[3][2].visible),
     "• DSC00022.JPG: 1 stars, the last cull wrote 4; true false")
-check("verify: the Keeper row lists the bursts' photos, Fix = cull",
-    (read_file(CHECKS_FILE) or ""):find("Verify\t2 bursts have no Keeper tag or more than a cull gives; Fix culls them (2 photos).\t23,24\tcull\t", 1, true) ~= nil, true)
+check("verify: the Keeper row lists the bursts' images, Fix = cull",
+    (read_file(CHECKS_FILE) or ""):find("Verify\t2 bursts have no Keeper tag or more than a cull gives; Fix culls them (2 images).\t23,24\tcull\t", 1, true) ~= nil, true)
 ;(button(verify_row("bursts have no Keeper tag"), "Fix") or { clicked_callback = function() end }).clicked_callback()
 check("verify, Fix: Cull Selection ran on those bursts only",
     never_culled.rating .. " " .. tostring(has_tag(untagged, "Assisted Culling|Keeper")) .. " " .. hand_changed.rating, "5 true 1")

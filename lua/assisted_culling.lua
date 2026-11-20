@@ -1735,7 +1735,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                     #differ_details, applied_total, #hand_ids, n_keeper_bursts))
             end
             if #differ_details > 0 then
-                alerts.add(string.format("%d photos would get other stars from a cull now; Fix culls their %d bursts (%d photos).",
+                alerts.add(string.format("%d images would get other stars from a cull now; Fix culls their %d bursts (%d images).",
                     #differ_details, n_differ_bursts, #differ_ids), differ_ids, "cull", differ_details)
             end
             if #hand_ids > 0 then
@@ -1743,7 +1743,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                     hand_ids, nil, hand_details)
             end
             if n_keeper_bursts > 0 then
-                alerts.add(string.format("%d bursts have no Keeper tag or more than a cull gives; Fix culls them (%d photos).",
+                alerts.add(string.format("%d bursts have no Keeper tag or more than a cull gives; Fix culls them (%d images).",
                     n_keeper_bursts, #keeper_ids), keeper_ids, "cull", keeper_details)
             end
             if failed_total > 0 then alerts.add(string.format("%d images couldn't be read (see log).", failed_total)) end
@@ -1774,9 +1774,9 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             end
             say(msg)
             if #guessed_ids > 0 then
-                alerts.add(string.format("%d photos with a guessed subject: check them by hand.", #guessed_ids), guessed_ids)
+                alerts.add(string.format("%s with a guessed subject: check them by hand.", C.count(#guessed_ids, "image")), guessed_ids)
             end
-            if #close_ids > 0 then alerts.add(string.format("%d photos in close calls: check both frames.", #close_ids), close_ids) end
+            if #close_ids > 0 then alerts.add(string.format("%s in close calls: check both frames.", C.count(#close_ids, "image")), close_ids) end
             if failed_total > 0 then alerts.add(string.format("%d images couldn't be updated (see log).", failed_total)) end
             if n_skipped > 0 then alerts.add(string.format("%d images unreadable (see log).", n_skipped)) end
             log(string.format("apply: timing: %.1fs in tag and rating writes, %.1fs paused, %.1fs in progress updates (job bar %.1fs, panel line %.1fs, toast %.1fs); %d rating writes, %d Keeper / Rejected tag writes; final drain took %ds",
@@ -1839,7 +1839,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                         local ok_id, id = pcall(function() return detail_queue[k].img.id end)
                         if ok_id then unreached[#unreached + 1] = id end
                     end
-                    alerts.add(string.format("Detail tags stopped: %d photos still miss theirs; cull them again.", #unreached), unreached)
+                    alerts.add(string.format("Detail tags stopped: %d images still miss theirs; cull them again.", #unreached), unreached)
                 else
                     say(string.format("Assisted Culling: Detail tags written (%d)%s.", detail_written,
                         detail_failed > 0 and (", " .. detail_failed .. " images couldn't be updated") or ""))
@@ -2001,7 +2001,7 @@ function M.clear_marks(images)
             local ok_id, id = pcall(function() return images[k].id end)
             if ok_id then unreached[#unreached + 1] = id end
         end
-        alerts.add(string.format("Clear cancelled: %d photos not reached keep their tags.", #unreached), unreached)
+        alerts.add(string.format("Clear cancelled: %d images not reached keep their tags.", #unreached), unreached)
     else
         say(string.format("Assisted Culling: Removed culling tags from %d of %d images%s. Star ratings were not changed.",
             cleared, total, counts))
@@ -2121,7 +2121,7 @@ function M.reset_ratings(images)
             local ok_id, id = pcall(function() return images[k].id end)
             if ok_id then unreached[#unreached + 1] = id end
         end
-        alerts.add(string.format("Reset cancelled: %d photos not reached keep their rating.", #unreached), unreached)
+        alerts.add(string.format("Reset cancelled: %d images not reached keep their rating.", #unreached), unreached)
     else
         say(string.format("Assisted Culling: Set %d of %d images to 0 stars%s. Tags were not changed.", reset, total, counts))
     end
@@ -2307,7 +2307,7 @@ local function install_panel()
 
     local verify_button = new_widget("button") {
         label = _("Verify Selection"),
-        tooltip = _("Score the selected images as Cull Selection would and change nothing. To check lists the photos whose stars a cull would change, ratings you changed by hand since the last cull, and bursts whose Keeper tags don't match; Fix culls those bursts. Scores come from the cache, so a repeat is quick."),
+        tooltip = _("Score the selected images as Cull Selection would and change nothing. To check lists the images whose stars a cull would change, ratings you changed by hand since the last cull, and bursts whose Keeper tags don't match; Fix culls those bursts. Scores come from the cache, so a repeat is quick."),
     }
     verify_button.clicked_callback = C.guarded_callback(guard, "button verify", function()
         changed()
@@ -2319,7 +2319,7 @@ local function install_panel()
     for n in ipairs(GROUP_TAG_KEYS) do
         group_tag_entries[n] = new_widget("entry") {
             placeholder = string.format(_("tag node %d (blank = not used)"), n),
-            tooltip = _("A tag node whose children section the photos, e.g. Rally|2026 (car numbers from Assisted Tagging) or Assisted Grouping|2026-01-01 12:00:00|Group. Each filled node cuts the groups further, in order: photos with different children go to separate pools, each with its own keepers, and photos without the tag stay together in their group. With native groups off, the first filled node forms the groups and photos without its tag are judged alone. Type Assisted Grouping to use each photo's own latest Assisted Grouping run.\nDefault: blank (not used)."),
+            tooltip = _("A tag node whose children section the images, e.g. Rally|2026 (car numbers from Assisted Tagging) or Assisted Grouping|2026-01-01 12:00:00|Group. Each filled node cuts the groups further, in order: images with different children go to separate pools, each with its own keepers, and images without the tag stay together in their group. With native groups off, the first filled node forms the groups and images without its tag are judged alone. Type Assisted Grouping to use each image's own latest Assisted Grouping run.\nDefault: blank (not used)."),
             text = "",
         }
     end
@@ -2340,7 +2340,7 @@ local function install_panel()
 
     local group_widgets = {
         check("group_native", _("Cull by Native Groups"),
-            _("On: darktable's image groups are the groups keepers are picked within. Off: the first filled tag node below forms the groups; with none filled, every photo is judged alone.\nDefault: on. Turn off after an Assisted Grouping run you have not applied as darktable groups, and type Assisted Grouping in tag node 1.")),
+            _("On: darktable's image groups are the groups keepers are picked within. Off: the first filled tag node below forms the groups; with none filled, every image is judged alone.\nDefault: on. Turn off after an Assisted Grouping run you have not applied as darktable groups, and type Assisted Grouping in tag node 1.")),
         new_widget("section_label") { label = _("Extra Grouping by Tags") },
     }
     for n, entry in ipairs(group_tag_entries) do
@@ -2349,7 +2349,7 @@ local function install_panel()
     end
 
     local run_tag_check = check("run_tag", _("Tag Each Run"),
-        _("Add a timestamp tag (Assisted Culling|Run|YYYY-MM-DD HH:MM) to every image a run writes, so the latest run's photos can be filtered apart from earlier ones. Stamps accumulate; remove old ones in darktable's tag manager. Clear Culling Marks leaves them.\nDefault: off. Turn on when re-running a shoot and you want to review only what changed."))
+        _("Add a timestamp tag (Assisted Culling|Run|YYYY-MM-DD HH:MM) to every image a run writes, so the latest run's images can be filtered apart from earlier ones. Stamps accumulate; remove old ones in darktable's tag manager. Clear Culling Marks leaves them.\nDefault: off. Turn on when re-running a shoot and you want to review only what changed."))
 
     local option_checks = {
         new_widget("section_label") { label = _("Speed") },
