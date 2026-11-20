@@ -469,7 +469,7 @@ click("Cull selection", { jpeg1, jpeg2 })
 local cull_row
 for i = 2, #panel[#panel - 1] do
     local row = panel[#panel - 1][i]
-    if row.visible and row[1] and (row[1].label or ""):find("^Cull: ") then cull_row = row[1].label:gsub("\n", " ") end
+    if row.visible and row[1] and (row[1].text or ""):find("^Cull: ") then cull_row = row[1].text end
 end
 check("cull, scorer crashes: To check names the error, not a cut log tail", cull_row,
     "Cull: failed: ValueError: cannot reshape array of size 0 (see the log)")
@@ -668,14 +668,14 @@ check("clear, cancelled: the panel line is cleared", status_label.label, "")
 -- To check: the photos the cancelled clear didn't reach
 local to_check = panel[#panel - 1]
 check("To check sits above the progress line, outside the folding pages",
-    type(to_check) == "table" and to_check[1] and to_check[1][1] and to_check[1][1].label, "To check")
-to_check = type(to_check) == "table" and to_check[1] and to_check[1][1] and to_check[1][1].label == "To check" and to_check or { {}, {} }
+    type(to_check) == "table" and to_check[1] and to_check[1][2] and to_check[1][2].label, "To check")
+to_check = type(to_check) == "table" and to_check[1] and to_check[1][2] and to_check[1][2].label == "To check" and to_check or { {}, {} }
 local CHECKS_FILE = ROOT .. "/config/assisted_culling.checks.txt"
 -- the row of the clear's item: an earlier Cull run's items stay above it
 local function clear_row()
     for i = 2, #to_check do
         local row = to_check[i]
-        if row.visible and row[1] and (row[1].label or ""):find("^Clear: ") then return row end
+        if row.visible and row[1] and (row[1].text or ""):find("^Clear: ") then return row end
     end
     return { {}, {} }
 end
@@ -683,7 +683,7 @@ check("To check: the cancelled clear shows in the box", to_check.visible, true)
 check("To check: no ratings back, the line names no log fragment",
     (read_file(CHECKS_FILE) or ""):find("Cull\tno ratings came back from the scorer (see the log)\t\t\t\t", 1, true) ~= nil, true)
 check("To check: the row names the action and the count",
-    (clear_row()[1].label or ""):gsub("\n", " "), "Clear: clear cancelled: 2 photos not reached keep their tags")
+    (clear_row()[1].text or ""):gsub("\n", " "), "Clear: clear cancelled: 2 photos not reached keep their tags")
 check("To check: the item is saved for a restart",
     (read_file(CHECKS_FILE) or ""):find("Clear\tclear cancelled: 2 photos not reached keep their tags\t2,3\t", 1, true) ~= nil, true)
 selection_sets = 0
@@ -693,14 +693,14 @@ selection_sets = 0
 click("Clear culling marks", { jpeg2 })
 check("clear, after a cancel: the next clear runs", has_tag(jpeg2, "Assisted Culling|Keeper"), false)
 check("To check: the next clear replaces its items", (read_file(CHECKS_FILE) or ""):find("Clear\t", 1, true), nil)
-check("To check: the clear's row is gone", clear_row()[1].label, nil)
+check("To check: the clear's row is gone", clear_row()[1].text, nil)
 dt.tags.attach(keeper_tag, jpeg1)
 dt.tags.attach(keeper_tag, jpeg2)
 on_sleep = function() if jobs[1] and jobs[1].valid then jobs[1].valid = false end end
 click("Clear culling marks", { jpeg1, jpeg2, jpeg3 })
 on_sleep = nil
-check("To check: a second cancelled clear fills the box again", clear_row()[1].label ~= nil, true)
-;(button(to_check, "Clear") or { clicked_callback = function() end }).clicked_callback()
+check("To check: a second cancelled clear fills the box again", clear_row()[1].text ~= nil, true)
+;(button(to_check, "Clear list") or { clicked_callback = function() end }).clicked_callback()
 check("To check: Clear empties the box", to_check.visible, false)
 check("To check: Clear empties the saved list", read_file(CHECKS_FILE), "")
 click("Clear culling marks", { jpeg2 })
@@ -807,7 +807,7 @@ local ratings_file = read_file(PREVIOUS_RATINGS)
 local function verify_row(text)
     for i = 2, #to_check do
         local row = to_check[i]
-        if row.visible and row[1] and (row[1].label or ""):gsub("\n", " "):find(text, 1, true) then return row end
+        if row.visible and row[1] and (row[1].text or ""):gsub("\n", " "):find(text, 1, true) then return row end
     end
     return { {}, {}, { {}, {} } }
 end
@@ -826,7 +826,7 @@ check("verify: the toast counts what differs", last_print(),
     "Assisted Culling: verify only, nothing changed. 1 of 4 images would get other stars from a cull now, 1 ratings were changed by hand, 2 bursts have the wrong Keeper tags. See To check.")
 local differ = verify_row("photos would get other stars")
 check("verify: one row for the photos a cull would rate differently, with Fix",
-    (differ[1].label or ""):gsub("\n", " ") .. "; " .. tostring(differ[2].text):gsub("\n%s*", " ") .. "; " .. tostring(differ[3][2].visible),
+    (differ[1].text or ""):gsub("\n", " ") .. "; " .. tostring(differ[2].text):gsub("\n%s*", " ") .. "; " .. tostring(differ[3][2].visible),
     "Verify: 1 photos would get other stars from a cull now; Fix culls their 1 bursts (1 photos); • DSC00023.JPG: 0 stars, a cull now gives 5; true")
 local by_hand = verify_row("you changed")
 check("verify: ratings changed by hand get their own row, with no Fix",
@@ -840,7 +840,7 @@ check("verify, Fix: Cull selection ran on those bursts only",
 click("Verify selection", verify_set)
 check("verify again, after Fix: only the hand-changed rating is left", last_print(),
     "Assisted Culling: verify only, nothing changed. 0 of 4 images would get other stars from a cull now, 1 ratings were changed by hand, 0 bursts have the wrong Keeper tags. See To check.")
-check("verify again: the Keeper row is gone", verify_row("bursts have no Keeper tag")[1].label, nil)
+check("verify again: the Keeper row is gone", verify_row("bursts have no Keeper tag")[1].text, nil)
 check("verify: no Lua error", lua_errors(), nil)
 
 -- Detail tags --------------------------------------------------------------------------

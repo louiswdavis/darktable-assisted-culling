@@ -462,7 +462,7 @@ A box headed **To check**, above the progress line, lists what a run leaves for 
 
 - **Fix** beside a line makes the change it describes to those photos only, and removes the line.
 - **Select** beside a line selects its photos in the lighttable. Photos removed from the library since are skipped, and a toast counts them. Lines about photos darktable couldn't read or update have no **Select**: those photos may be gone.
-- The next run of the same action replaces that action's lines; other actions' lines stay. **Clear** empties the box.
+- The next run of the same action replaces that action's lines; other actions' lines stay. **Clear list**, under the items, empties the box.
 - Six lines show; more add `and N more (see the log)`. The list is saved to `assisted_culling.checks.txt` in darktable's config folder, so it survives a restart.
 
 ## Preferences

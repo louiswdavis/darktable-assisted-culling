@@ -1037,7 +1037,7 @@ function C.make_preset_controls(o)
     end
 
     local function ask_confirm(text, button, action)
-        confirm_label.label = text
+        confirm_label.text = text
         confirm_button.label = button
         confirm_action = action
         hide_boxes()
@@ -1292,7 +1292,7 @@ function C.make_preset_controls(o)
             dt.new_widget("button") { label = "Cancel", clicked_callback = function() name_box.visible = false end },
         },
     }
-    confirm_label = dt.new_widget("label") { label = "", halign = "start" }
+    confirm_label = dt.new_widget("text_view") { editable = false, text = "" }
     confirm_button = dt.new_widget("button") {
         label = "Delete",
         clicked_callback = function() if confirm_action then confirm_action() end end,
@@ -1400,8 +1400,6 @@ end
 -- "action<TAB>text<TAB>image id,image id[<TAB>fix[<TAB>detail<US>detail[<TAB>run]]]" (US = \31,
 -- run = os.time() when its run began), so a restart keeps them.
 C.ALERT_ROWS = 6
--- characters per line of an item: darktable's label has no word wrap, so show() breaks the lines
-C.ALERT_WRAP = 44
 
 -- [{ action, text, ids, fix, details, run }] from the saved file's text; fix is "", details {} and
 -- run 0 on a line without them.
@@ -1458,21 +1456,9 @@ function C.alerts_box(new_widget, path, log, fixes)
         end
         return images
     end
-    -- `text` broken into lines of C.ALERT_WRAP characters at most; lines after the first start with `indent`
-    local function wrap(text, indent)
-        local lines, line = {}, ""
-        for word in text:gmatch("%S+") do
-            if line ~= "" and #line + 1 + #word > C.ALERT_WRAP then
-                lines[#lines + 1], line = line, indent .. word
-            else
-                line = line == "" and word or line .. " " .. word
-            end
-        end
-        lines[#lines + 1] = line
-        return table.concat(lines, "\n")
-    end
     for i = 1, C.ALERT_ROWS do
-        local row = { label = new_widget("label") { label = "", halign = "start" },
+        -- read-only text views: darktable's label can't wrap, a text view wraps at the panel's width
+        local row = { label = new_widget("text_view") { editable = false, text = "" },
                       details = new_widget("text_view") { editable = false, text = "" } }
         row.button = new_widget("button") {
             label = "Select",
@@ -1506,9 +1492,9 @@ function C.alerts_box(new_widget, path, log, fixes)
             local item = items[i]
             row.box.visible = item ~= nil
             if item then
-                row.label.label = wrap((item.action ~= "" and item.action .. ": " or "") .. item.text, "")
+                row.label.text = (item.action ~= "" and item.action .. ": " or "") .. item.text
                 local lines = {}
-                for _, detail in ipairs(item.details) do lines[#lines + 1] = wrap("• " .. detail, "    ") end
+                for _, detail in ipairs(item.details) do lines[#lines + 1] = "• " .. detail end
                 row.details.text = table.concat(lines, "\n")
                 row.details.visible = #lines > 0
                 row.item = item
@@ -1547,16 +1533,20 @@ function C.alerts_box(new_widget, path, log, fixes)
         save()
     end
     local clear = new_widget("button") {
-        label = "Clear",
+        label = "Clear list",
         tooltip = "Empty this list. Each run replaces its own items anyway.",
         clicked_callback = function()
             alerts.items = {}
             save()
         end,
     }
-    local body = { orientation = "vertical", new_widget("box") { orientation = "horizontal", header, clear } }
+    -- a blank line above the heading sets the box apart from the section before it; Clear list
+    -- sits under the items, on its own line
+    local body = { orientation = "vertical",
+        new_widget("box") { orientation = "vertical", new_widget("label") { label = " " }, header } }
     for _, row in ipairs(rows) do body[#body + 1] = row.box end
     body[#body + 1] = more
+    body[#body + 1] = clear
     alerts.widget = new_widget("box")(body)
     show()
     return alerts
