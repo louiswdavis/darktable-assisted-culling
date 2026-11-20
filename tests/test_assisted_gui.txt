@@ -133,7 +133,7 @@ ok   verify: the toast counts what differs
 ok   verify: one row for the photos a cull would rate differently, with Fix
 ok   verify: ratings changed by hand get their own row, with no Fix
 ok   verify: the Keeper row lists the bursts' photos, Fix = cull
-ok   verify, Fix: Cull selection ran on those bursts only
+ok   verify, Fix: Cull Selection ran on those bursts only
 ok   verify again, after Fix: only the hand-changed rating is left
 ok   verify again: the Keeper row is gone
 ok   verify: no Lua error

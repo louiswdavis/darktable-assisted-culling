@@ -1076,7 +1076,7 @@ function C.make_preset_controls(o)
 
     function ctl.name() return current end
 
-    -- "unsaved changes" when the panel differs from the file. Template has no file.
+    -- "Unsaved Changes" when the panel differs from the file. Template has no file.
     function ctl.check_dirty()
         local dirty = false
         if current ~= "template" and ctl.saved then
@@ -1253,7 +1253,7 @@ function C.make_preset_controls(o)
     end
 
     picker = dt.new_widget("combobox") {
-        label = "preset",
+        label = "Preset",
         tooltip = "Pick a saved set of panel settings. template = the defaults. With unsaved changes, switching asks first: Switch drops them. Save with actions → update preset.",
         changed_callback = function(self)
             local name = self.value
@@ -1269,7 +1269,7 @@ function C.make_preset_controls(o)
         "template",
     }
     menu = dt.new_widget("combobox") {
-        label = "actions",
+        label = "Actions",
         tooltip = "Preset actions: update the selected preset with the panel's values, store the panel as a new preset, rename, delete, export to a folder or import one.",
         changed_callback = function(self)
             local i = self.selected
@@ -1280,7 +1280,7 @@ function C.make_preset_controls(o)
         end,
         "choose…",
     }
-    dirty_label = dt.new_widget("label") { label = "unsaved changes", halign = "start", visible = false }
+    dirty_label = dt.new_widget("label") { label = "Unsaved Changes", halign = "start", visible = false }
     name_entry = dt.new_widget("entry") { placeholder = "preset name", text = "" }
     name_box = dt.new_widget("box") {
         orientation = "vertical",
@@ -1308,14 +1308,14 @@ function C.make_preset_controls(o)
         },
     }
     export_chooser = dt.new_widget("file_chooser_button") {
-        title = "folder to export the preset into",
+        title = "Folder to Export the Preset Into",
         is_directory = true,
         tooltip = "The preset is written to a <name>.atpreset folder inside this one.",
     }
     local export_parts = {
         orientation = "vertical",
         visible = false,
-        dt.new_widget("label") { label = "export into folder", halign = "start" },
+        dt.new_widget("label") { label = "Export into Folder", halign = "start" },
         export_chooser,
     }
     for _, opt in ipairs(o.store.export_options or {}) do
@@ -1329,14 +1329,14 @@ function C.make_preset_controls(o)
     }
     export_box = dt.new_widget("box")(export_parts)
     import_chooser = dt.new_widget("file_chooser_button") {
-        title = "preset bundle (.atpreset folder)",
+        title = "Preset Bundle (.atpreset Folder)",
         is_directory = true,
         tooltip = "A <name>.atpreset folder made by export preset. A preset with the same name is kept: the import gets (2) added.",
     }
     import_box = dt.new_widget("box") {
         orientation = "vertical",
         visible = false,
-        dt.new_widget("label") { label = "import .atpreset folder", halign = "start" },
+        dt.new_widget("label") { label = "Import .atpreset Folder", halign = "start" },
         import_chooser,
         dt.new_widget("box") {
             orientation = "horizontal",
@@ -1392,7 +1392,7 @@ function C.paged_sections(group, pages)
     return dt.new_widget("box")(body)
 end
 
--- To check ---------------------------------------------------------------------
+-- To Check ---------------------------------------------------------------------
 -- What runs leave for the user to look at (failures, photos a run flagged), in a box above the
 -- progress line, so a toast that went by unseen isn't lost. A run's items stay until the next run
 -- of the same action or Clear. The newest run's items come first; older ones sit below an
@@ -1445,7 +1445,7 @@ function C.alerts_box(new_widget, path, log, fixes)
     fixes = fixes or {}
     local alerts = { items = C.alerts_parse(C.read_file_or_tmp(path)) }
     local current, current_run = "", alerts.items[1] and alerts.items[1].run or 0
-    local header = new_widget("section_label") { label = "To check" }
+    local header = new_widget("section_label") { label = "To Check" }
     local rows, more = {}, new_widget("label") { label = "", halign = "start", visible = false }
     local save
     local function images_of(ids)
@@ -1533,14 +1533,14 @@ function C.alerts_box(new_widget, path, log, fixes)
         save()
     end
     local clear = new_widget("button") {
-        label = "Clear list",
+        label = "Clear List",
         tooltip = "Empty this list. Each run replaces its own items anyway.",
         clicked_callback = function()
             alerts.items = {}
             save()
         end,
     }
-    -- a blank line above the heading sets the box apart from the section before it; Clear list
+    -- a blank line above the heading sets the box apart from the section before it; Clear List
     -- sits under the items, on its own line
     local body = { orientation = "vertical",
         new_widget("box") { orientation = "vertical", new_widget("label") { label = " " }, header } }

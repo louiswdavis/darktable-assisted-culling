@@ -2,8 +2,8 @@
 
 A culling assistant for [darktable](https://www.darktable.org/). Select a batch of images in lighttable, click one button, and it will:
 
-- group your selection into **bursts** using the groups you already made (darktable's own groups or [Assisted Grouping](../darktable-assisted-grouping/README.md) tags)
-- score every frame for **sharpness** and **exposure clipping**
+- group your selection into **Bursts** using the groups you already made (darktable's own groups or [Assisted Grouping](../darktable-assisted-grouping/README.md) tags)
+- score every frame for **Sharpness** and **exposure clipping**
 - pick the sharpest frame in each burst as the **keeper**
 - write the result back as a **star rating** plus **tags** under `Assisted Culling|…`
 
@@ -58,7 +58,7 @@ Every model is optional: culling scores without any. There are three jobs, and t
 |---|---|---|
 | Subject mask (SAM) | the *subject tracking (SAM)* sharpness mode | managed by darktable (below) |
 | Vehicle detector | motorsport: SAM's prompt box, *motion-aware* sharpness, burst direction | `models/` in this repo |
-| Sharpness judge (HyperIQA) | **Break close calls with the sharpness judge** only | `models/` in this repo |
+| Sharpness judge (HyperIQA) | **Break Close Calls with the Sharpness Judge** only | `models/` in this repo |
 
 `models/` sits next to the venv; `.gitignore` skips the whole folder, so `git pull` leaves it alone. Re-cloning the repo deletes it.
 
@@ -138,7 +138,7 @@ Every other setting lives in the panel and is saved with its [preset](#presets).
 
 ## Using it
 
-In lighttable, select a batch (a whole shoot or a single burst) and click **Cull selection** in the **Assisted Culling** panel on the right. Progress shows in darktable's message area; click the button again, or the X on the job in darktable's job area, to cancel. When the selection had no groups (every frame judged alone), the done message ends with a notice saying so; group first for keepers.
+In lighttable, select a batch (a whole shoot or a single burst) and click **Cull Selection** in the **Assisted Culling** panel on the right. Progress shows in darktable's message area; click the button again, or the X on the job in darktable's job area, to cancel. When the selection had no groups (every frame judged alone), the done message ends with a notice saying so; group first for keepers.
 
 Running all three plugins? [WORKFLOW.md](../darktable-assisted-grouping/WORKFLOW.md) says which order to pick and what to re-run after what.
 
@@ -149,13 +149,13 @@ Each frame gets a star rating, which ranks it against the rest of the batch, plu
 | Tag | Meaning |
 |-----|---------|
 | `Assisted Culling\|Keeper` | The best frame (or frames) of its burst |
-| `Assisted Culling\|Rejected` | A much worse frame than its burst's best: far behind (under 30% of the best's sharpness, times *star strictness*; at most *rejects per burst* of them, worst first) or blank, rated -1. A frame that only lost to a sharper one gets no `Rejected` tag and is rated per *non-keepers*. |
+| `Assisted Culling\|Rejected` | A much worse frame than its burst's best: far behind (under 30% of the best's sharpness, times *Star Strictness*; at most *Rejects per Burst* of them, worst first) or blank, rated -1. A frame that only lost to a sharper one gets no `Rejected` tag and is rated per *Non-Keepers*. |
 | `Assisted Culling\|Overexposed` | Blown highlights |
 | `Assisted Culling\|Underexposed` | Crushed shadows |
 | `Assisted Culling\|Eyes Closed` | *face & eyes* mode only: a face big enough to judge, with no open eyes found. Dark sunglasses trigger it too. |
 | `Assisted Culling\|Cut Off` | *motorsport* mode with the vehicle detector only: the car touches the frame edge it is driving towards, or more than a tenth of it runs past another edge. The direction comes from the car's box moving across the burst (unknown when it moves under 5% of the frame width or fewer than 3 frames have a car; then both side edges count as leading). A car filling 60% of the frame or more is a tight crop and never flagged. A frame with no car before the burst's first frame with a car, or after its last, is cut off too: the car is not in yet, or has gone. One with no car between two car frames is a missed detection and not flagged. |
 | `Assisted Culling\|Blocked` | *motorsport* mode with the vehicle detector only: a larger (nearer) vehicle box covers more than a quarter of the car. The car is the box closest in size to the burst's typical car, so a car passing close in front isn't taken for it. |
-| `Assisted Culling\|Blank` | At least 95% of the frame is one flat colour (lens cap, black barrier, blown sky, fog), set by **blank frames**. Rejected (rating -1) in every mode and never a keeper, even when the whole burst is blank. A dark frame with lit headlights is not blank. |
+| `Assisted Culling\|Blank` | At least 95% of the frame is one flat colour (lens cap, black barrier, blown sky, fog), set by **Blank Frames**. Rejected (rating -1) in every mode and never a keeper, even when the whole burst is blank. A dark frame with lit headlights is not blank. |
 
 Frames are also tagged with how they were judged, so you can spot-check the scorer:
 
@@ -170,16 +170,16 @@ Frames are also tagged with how they were judged, so you can spot-check the scor
 | `Assisted Culling\|Technique\|Creative Burst` | *motorsport* only: 80% of the burst is zoom bursts or slow motion blur, so none of it is rejected as far behind |
 | `Assisted Culling\|Why\|Keeper` / `…\|Keeper by margin` | Every scored frame gets one `Why` tag saying how it was decided. Kept by rank, or kept by the [keeper margin](#keeper-margin). |
 | `Assisted Culling\|Why\|Outranked` / `…\|Graded` / `…\|Not shortlisted` | Lost to a sharper frame, lost and rated by burst (*graded by burst*), or left out of the SAM shortlist. Filter on one to step through, say, every frame the margin kept. |
-| `Assisted Culling\|Why\|Far behind` | Lost and scored under 30% of its burst's best, times *star strictness* (e.g. best 400, frame 100), so it is rejected, at most *rejects per burst* of them per burst, worst first: rating -1 and the `Rejected` tag. With *non-keepers* on *leave alone* the rating is left and only the tags are written. A frame left out of the SAM shortlist, or with no vehicle, is never far behind. |
+| `Assisted Culling\|Why\|Far behind` | Lost and scored under 30% of its burst's best, times *Star Strictness* (e.g. best 400, frame 100), so it is rejected, at most *Rejects per Burst* of them per burst, worst first: rating -1 and the `Rejected` tag. With *Non-Keepers* on *leave alone* the rating is left and only the tags are written. A frame left out of the SAM shortlist, or with no vehicle, is never far behind. |
 | `Assisted Culling\|Why\|Close call` | The burst's last keeper and the best frame that lost scored within 5% of each other. Both get this tag in place of Keeper / Outranked; the keeper is still kept and rated as usual. Check both by eye. |
-| `Assisted Culling\|Why\|Spread` | *Spread keepers over the burst* only: kept as the best frame of its stretch of the burst over a sharper frame elsewhere (see [Keeper margin](#keeper-margin)). Wins over Close call on that keeper; the frame it beat still says Close call. |
-| `Assisted Culling\|Why\|Subject clearer` | *Break close calls with the sharpness judge* only: kept over the sharper frame of a close call because the judge model rated it at least 5% higher. The sharper frame keeps Close call. |
-| `Assisted Culling\|Why\|Number clearer` | *Break close calls on the number read* only: kept over the sharper frame of a close call because tagging read the car's number more confidently in it. The sharper frame keeps Close call. |
-| `Assisted Culling\|Why\|Other angle` | *Keep the other angles* only: the best frame of a view of the car that the burst's sharpest keeper does not show (see [Keepers](#keepers)). Kept one star below that keeper. |
-| `Assisted Culling\|Why\|Motion look` | *Keep a motion-blur frame* only: the burst's straightest motion blur with the car in view, kept as well as the sharp keepers and rated by how straight the blur is. |
+| `Assisted Culling\|Why\|Spread` | *Spread Keepers Over the Burst* only: kept as the best frame of its stretch of the burst over a sharper frame elsewhere (see [Keeper margin](#keeper-margin)). Wins over Close call on that keeper; the frame it beat still says Close call. |
+| `Assisted Culling\|Why\|Subject clearer` | *Break Close Calls with the Sharpness Judge* only: kept over the sharper frame of a close call because the judge model rated it at least 5% higher. The sharper frame keeps Close call. |
+| `Assisted Culling\|Why\|Number clearer` | *Break Close Calls on the Number Read* only: kept over the sharper frame of a close call because tagging read the car's number more confidently in it. The sharper frame keeps Close call. |
+| `Assisted Culling\|Why\|Other angle` | *Keep the Other Angles* only: the best frame of a view of the car that the burst's sharpest keeper does not show (see [Keepers](#keepers)). Kept one star below that keeper. |
+| `Assisted Culling\|Why\|Motion look` | *Keep a Motion-Blur Frame* only: the burst's straightest motion blur with the car in view, kept as well as the sharp keepers and rated by how straight the blur is. |
 | `Assisted Culling\|Why\|Blank` | The frame is blank, so it was rejected whatever its sharpness. |
-| `Assisted Culling\|Why\|No vehicle` | Only with **Leave frames with no vehicle** on (penalties & speed page; default off), in motorsport or SAM sharpness with the vehicle detector installed. The detector found no car, so the frame is never a keeper, keeps its rating and gets no Rejected tag. A burst with no car in any frame is left alone. Other sharpness modes never run the detector, so they never write it. |
-| `Assisted Culling\|Why\|Not a first pick` | *first picks* only: not one of the run's first picks, so the frame keeps its rating, keeper or not, and nothing is rejected. |
+| `Assisted Culling\|Why\|No vehicle` | Only with **Leave Frames with No Vehicle** on (penalties & speed page; default off), in motorsport or SAM sharpness with the vehicle detector installed. The detector found no car, so the frame is never a keeper, keeps its rating and gets no Rejected tag. A burst with no car in any frame is left alone. Other sharpness modes never run the detector, so they never write it. |
+| `Assisted Culling\|Why\|Not a first pick` | *First Picks* only: not one of the run's first picks, so the frame keeps its rating, keeper or not, and nothing is rejected. |
 
 `Subject` is grouped by kind (`Vehicle` today), leaving room for other detectors later.
 
@@ -199,11 +199,11 @@ The log (`assisted_culling.log`) has one line per step: `apply: timing: … N ra
 
 #### Choosing which tags are written
 
-Every tag above has a switch under **tags written** in the panel (headings *outputs*, *check by hand*, *how it decided*): one per output tag, and one each for `Subject|Vehicle|Guessed` and the `Subject`, `Technique`, `Scored` and `Why` families. The switches are saved with the [preset](#presets) as `tag_<row>` keys (including `tag_subject_guessed`, default on) and all on in `template`. Each switch's tooltip names the tags it writes. Turn off the ones you don't use to keep darktable's tag list short:
+Every tag above has a switch under **Tags Written** in the panel (headings *Outputs*, *Check by Hand*, *How It Decided*): one per output tag, and one each for `Subject|Vehicle|Guessed` and the `Subject`, `Technique`, `Scored` and `Why` families. The switches are saved with the [preset](#presets) as `tag_<row>` keys (including `tag_subject_guessed`, default on) and all on in `template`. Each switch's tooltip names the tags it writes. Turn off the ones you don't use to keep darktable's tag list short:
 
 - **Off** = the next run stops writing that row's tags and removes them from the images it processes. Switching *Subject* off drops `Detected` only; `Guessed` has its own switch. A tag that was never written never shows up in the tag list.
 - **Stars and keeper picks don't change.** The tags only report the decision; flags still cost stars per *"… lowers stars"*.
-- Images outside the run keep their old tags; select them and use **Clear culling marks**. darktable keeps tag names nobody uses any more in its tag list; delete them in the tagging module's dictionary.
+- Images outside the run keep their old tags; select them and use **Clear Culling Marks**. darktable keeps tag names nobody uses any more in its tag list; delete them in the tagging module's dictionary.
 - `Locked` is yours and has no switch. The `Run` stamp stays the panel checkbox.
 
 Filter on these in darktable's **collections** module (tag → Assisted Culling) to step through just the keepers, or just the rejects. The parent `Assisted Culling` tag collects everything the plugin has scored.
@@ -215,55 +215,55 @@ Overexposed, Underexposed, Eyes Closed, Cut Off and Blocked each take one star o
 Two safeguards keep deliberate shots from being punished:
 
 - **Shared by the whole burst = no penalty.** If every frame in a burst is flagged the same way, it was most likely shot that way (a dark tunnel exit, say), so each frame keeps the tag but not the lost star.
-- **Per-flag switch.** For styles where a flag is the point (low-key, high-key), turn off *… lowers stars* for that flag under **penalties & speed** in the panel. Frames are still tagged (unless that flag's *tag* switch is off); the stars are left alone.
+- **Per-flag switch.** For styles where a flag is the point (low-key, high-key), turn off *… lowers stars* for that flag under **Penalties & Speed** in the panel. Frames are still tagged (unless that flag's *tag* switch is off); the stars are left alone.
 
 ### Re-running and clearing
 
-Re-running is safe: every tag is re-synced to the new result, so a frame that was a keeper last pass and isn't now loses its `Keeper` tag. It does overwrite star ratings, including ones you set by hand, except on non-keepers when *non-keepers* is *leave alone* or *reject*. With *reject* (and *first picks* off), a frame an earlier run rated that is no longer a keeper goes to 0 stars; a rating you set by hand stays.
+Re-running is safe: every tag is re-synced to the new result, so a frame that was a keeper last pass and isn't now loses its `Keeper` tag. It does overwrite star ratings, including ones you set by hand, except on non-keepers when *Non-Keepers* is *leave alone* or *reject*. With *reject* (and *First Picks* off), a frame an earlier run rated that is no longer a keeper goes to 0 stars; a rating you set by hand stays.
 
 A few things a re-run doesn't touch:
 
 - **Frames that can't be read** (counted as "unreadable" in the done message) keep whatever an earlier run left on them, tags and stars included.
 - **Frames outside the selection** aren't re-scored. Groups are read from the selected frames only, so re-running on part of a burst can leave a keeper from each run. Select whole bursts, or the whole shoot.
-- **A cancelled run** keeps the changes it already made; the rest keep their old values. Its message says how many images were changed. Run again to finish, or undo it: **Clear culling marks** removes the tags, and when the run had changed a star rating, **Restore previous ratings** puts the ratings back.
+- **A cancelled run** keeps the changes it already made; the rest keep their old values. Its message says how many images were changed. Run again to finish, or undo it: **Clear Culling Marks** removes the tags, and when the run had changed a star rating, **Restore Previous Ratings** puts the ratings back.
 
-Tick **Tag each run** to also stamp every frame a run writes with `Assisted Culling|Run|YYYY-MM-DD HH:MM`, so you can filter darktable down to one run's frames. Stamps accumulate, and **Clear culling marks** leaves them; remove old ones in darktable's tag manager.
+Tick **Tag Each Run** to also stamp every frame a run writes with `Assisted Culling|Run|YYYY-MM-DD HH:MM`, so you can filter darktable down to one run's frames. Stamps accumulate, and **Clear Culling Marks** leaves them; remove old ones in darktable's tag manager.
 
-Each scoring run also writes `assisted_culling/last-run.csv` in darktable's config folder (the folder holding `assisted_culling.log`): one row per scored frame with its burst, rank in the burst, score, stars, keeper yes/no, flags, diagnostic tags, a `why` line ("kept: rank 1 of 4, 2 allowed", "not kept: rank 3 of 4, only 2 allowed or not eligible; flagged blur"), the file's folder and a `reason` column (the frame's `Why` tag: Keeper, Keeper by margin, Outranked, Far behind, Graded, Not shortlisted, No vehicle, Blank, Close call, Spread, Number clearer, Subject clearer, Other angle, Motion look or Not a first pick) and a `car` column: the frame's child tag under each tag node that cut the groups, joined by `/` (e.g. `37/left`), blank when no node cut or the frame had no child (frames carrying several children of a node stay in their shared pool). A node that forms the groups (checkbox off, first filled node) is not listed. A `direction` column holds the burst's travel direction (left, right or unknown) in motorsport mode with the vehicle detector, blank otherwise. Then `id` (darktable's image id, which follows capture order) and, in *motion_aware* mode, the score parts `eval_culling.py --set` rebuilds from: `subject` (subject sharpness at the burst's shared size), `motion` (pan, missed_pan, motion_blur or ordinary), `straightness`, `crop` (the crop's size and the size it was compared at) and `subject_own` (subject sharpness at the crop's own size); blank in other modes. Last, `reads`: the car numbers tagging read on the frame as `number:confidence`, best first, joined by `|`, only when *Break close calls on the number read* is on. Then `judge`: the sharpness judge's score for the frame, only for frames it judged with *Break close calls with the sharpness judge* on. Then `view` (which view of the car the frame shows, a number per burst; blank with no detector or no car) and `motion_look` (`yes` when the frame shows enough of the car to keep for its motion look), which let `eval_culling.py` replay the other-angle and motion-look keepers. The allowance counts every frame of the burst, including frames that couldn't be read. Open it in a spreadsheet to see why a frame lost, or to tune thresholds from evidence. It is overwritten by the next run, but each run's copy is also kept as `assisted_culling/reports/YYYYMMDD-HHMMSS.csv` (newest 20), so two runs can be compared.
+Each scoring run also writes `assisted_culling/last-run.csv` in darktable's config folder (the folder holding `assisted_culling.log`): one row per scored frame with its burst, rank in the burst, score, stars, keeper yes/no, flags, diagnostic tags, a `why` line ("kept: rank 1 of 4, 2 allowed", "not kept: rank 3 of 4, only 2 allowed or not eligible; flagged blur"), the file's folder and a `reason` column (the frame's `Why` tag: Keeper, Keeper by margin, Outranked, Far behind, Graded, Not shortlisted, No vehicle, Blank, Close call, Spread, Number clearer, Subject clearer, Other angle, Motion look or Not a first pick) and a `car` column: the frame's child tag under each tag node that cut the groups, joined by `/` (e.g. `37/left`), blank when no node cut or the frame had no child (frames carrying several children of a node stay in their shared pool). A node that forms the groups (checkbox off, first filled node) is not listed. A `direction` column holds the burst's travel direction (left, right or unknown) in motorsport mode with the vehicle detector, blank otherwise. Then `id` (darktable's image id, which follows capture order) and, in *motion_aware* mode, the score parts `eval_culling.py --set` rebuilds from: `subject` (subject sharpness at the burst's shared size), `motion` (pan, missed_pan, motion_blur or ordinary), `straightness`, `crop` (the crop's size and the size it was compared at) and `subject_own` (subject sharpness at the crop's own size); blank in other modes. Last, `reads`: the car numbers tagging read on the frame as `number:confidence`, best first, joined by `|`, only when *Break Close Calls on the Number Read* is on. Then `judge`: the sharpness judge's score for the frame, only for frames it judged with *Break Close Calls with the Sharpness Judge* on. Then `view` (which view of the car the frame shows, a number per burst; blank with no detector or no car) and `motion_look` (`yes` when the frame shows enough of the car to keep for its motion look), which let `eval_culling.py` replay the other-angle and motion-look keepers. The allowance counts every frame of the burst, including frames that couldn't be read. Open it in a spreadsheet to see why a frame lost, or to tune thresholds from evidence. It is overwritten by the next run, but each run's copy is also kept as `assisted_culling/reports/YYYYMMDD-HHMMSS.csv` (newest 20), so two runs can be compared.
 
-While a run is going, **Clear culling marks**, **Restore previous ratings**, **Reset ratings to 0** and the culling shortcut queue behind it instead of refusing. Each queued job keeps the selection and settings from when you clicked, and starts when the run before it finishes. Cancelling drops the queue. (The panel button turns into **Cancel culling** during a run, so a second culling run can only be queued with the shortcut.)
+While a run is going, **Clear Culling Marks**, **Restore Previous Ratings**, **Reset Ratings to 0** and the culling shortcut queue behind it instead of refusing. Each queued job keeps the selection and settings from when you clicked, and starts when the run before it finishes. Cancelling drops the queue. (The panel button turns into **Cancel Culling** during a run, so a second culling run can only be queued with the shortcut.)
 
-In the panel, **Open last report** opens `last-run.csv` in your spreadsheet app. **Why these ratings?** explains the selected images from that report (stars, rank in the burst, flags) without changing anything: one image shows its line on screen, several show a count with the full text in the log.
+In the panel, **Open Last Report** opens `last-run.csv` in your spreadsheet app. **Why These Ratings?** explains the selected images from that report (stars, rank in the burst, flags) without changing anything: one image shows its line on screen, several show a count with the full text in the log.
 
 To protect a frame, tag it `Assisted Culling|Locked` yourself (create the tag in the **tagging** module). Runs then leave it out entirely: its stars and tags stay as they are, and it doesn't take a keeper slot in its burst, so another frame from that burst can be kept as well. The done message counts the locked frames it left alone.
 
-**Clear culling marks** removes all the plugin's tags from the selection without touching star ratings. It still clears `Keeper`/`Rejected`/flag tags on locked frames, but never removes `Locked` itself. Colour labels are never read or written, so any you apply by hand are yours.
+**Clear Culling Marks** removes all the plugin's tags from the selection without touching star ratings. It still clears `Keeper`/`Rejected`/flag tags on locked frames, but never removes `Locked` itself. Colour labels are never read or written, so any you apply by hand are yours.
 
-**Restore previous ratings** undoes the star ratings the plugin wrote. Select the images and click it:
+**Restore Previous Ratings** undoes the star ratings the plugin wrote. Select the images and click it:
 
 - each image goes back to the rating it had before the first run that changed it, even after several runs
 - an image you rated again since the last run that changed it is left alone
-- tags are not changed; use **Clear culling marks** for those
+- tags are not changed; use **Clear Culling Marks** for those
 - the saved ratings are in `assisted_culling.previous-ratings.csv` in darktable's config folder; each run adds the images it changed. A cancelled or failed run saves what it had changed. Delete the file to start the history again.
 
-**Reset ratings to 0** sets the selected images to 0 stars. Select the images and click it:
+**Reset Ratings to 0** sets the selected images to 0 stars. Select the images and click it:
 
 - images are set one after the other, a few per step, so darktable stays usable while it works
 - the panel line shows `resetting ratings 120 / 800` with the time left, and a job bar shows the same progress
 - the job bar's **x** stops it after the current step; images already set stay at 0, the rest keep their rating
 - a rejected image is set to 0 stars too; an image already at 0 is skipped
-- tags and the selection are not changed, and the saved ratings for **Restore previous ratings** are not updated
+- tags and the selection are not changed, and the saved ratings for **Restore Previous Ratings** are not updated
 
-Older versions used red/yellow colour labels and a `Culled` tag. The tag comes off the next time an image is re-scored (or with **Clear culling marks**); the labels stay. To remove them once, collect by the `Assisted Culling` tag, select all, and toggle the labels off.
+Older versions used red/yellow colour labels and a `Culled` tag. The tag comes off the next time an image is re-scored (or with **Clear Culling Marks**); the labels stay. To remove them once, collect by the `Assisted Culling` tag, select all, and toggle the labels off.
 
 ## Presets
 
-The **preset** picker at the top of the panel saves every panel setting (everything but the buttons) under a name, so a shoot type is one click away.
+The **Preset** picker at the top of the panel saves every panel setting (everything but the buttons) under a name, so a shoot type is one click away.
 
-- **preset**: `template` first, then your presets by name. Picking one loads its values into the panel. The panel opens on the last one you picked.
+- **Preset**: `template` first, then your presets by name. Picking one loads its values into the panel. The panel opens on the last one you picked.
 - **template**: the built-in defaults. It can't be updated, renamed or deleted; use it as the starting point for a new preset.
-- **actions** beside it: **update preset "<name>"** saves the panel into the selected preset; **store new preset…** asks for a name (type it, then **OK**) and saves the panel as a new preset; **rename preset…**; **delete preset** asks first. On `template` only **store new preset…** is offered.
-- **unsaved changes** shows under the picker when the panel differs from the saved preset. Switching presets drops them. Text fields have no change signal, so their edits show when **actions** is opened or a run starts.
+- **Actions** beside it: **update preset "<name>"** saves the panel into the selected preset; **store new preset…** asks for a name (type it, then **OK**) and saves the panel as a new preset; **rename preset…**; **delete preset** asks first. On `template` only **store new preset…** is offered.
+- **Unsaved Changes** shows under the picker when the panel differs from the saved preset. Switching presets drops them. Text fields have no change signal, so their edits show when **Actions** is opened or a run starts.
 - Each preset is `assisted_culling/presets/<name>.json` in darktable's config folder. A name can't be `template` or use characters a Windows file name can't hold.
 - A setting missing from a file uses its default; **update preset** writes every setting, so older files fill in. A value that's no longer valid uses the default and logs one line naming the preset and setting.
 - A file that can't be read or parsed: the panel says so, names the file, and keeps its current values. The plugin never rewrites a broken file; fix or delete it.
@@ -271,13 +271,13 @@ The **preset** picker at the top of the panel saves every panel setting (everyth
 
 ## Panel options
 
-Below the [preset](#presets) picker are the page buttons **1 scoring ▸** (genre to first picks, below), **2 bursts ▸**, **3 penalties & speed ▸**, **4 tags written ▸**, **5 run ▸** and **6 tools ▸**: clicking one opens its contents below it (its label ends in **▾**) and folds the others; clicking the open one folds it. The open page is remembered across restarts. Below the pages sit the [To check](#to-check) box and the progress line. darktable's reset button (↺ in the panel header) puts every setting back to the template defaults; nothing is saved until you update a preset.
+Below the [preset](#presets) picker are the page buttons **1 Scoring ▸** (genre to first picks, below), **2 Bursts ▸**, **3 Penalties & Speed ▸**, **4 Tags Written ▸**, **5 Run ▸** and **6 Tools ▸**: clicking one opens its contents below it (its label ends in **▾**) and folds the others; clicking the open one folds it. The open page is remembered across restarts. Below the pages sit the [To check](#to-check) box and the progress line. darktable's reset button (↺ in the panel header) puts every setting back to the template defaults; nothing is saved until you update a preset.
 
-Page 1 has four headings: **how frames are scored** (genre, ranking mode, sharpness, exposure), **keepers per burst** (keepers, keeper margin, spread keepers, keep the other angles, keep a motion-blur frame), **close calls** (the number-read and sharpness-judge tie-breaks) and **ratings** (non-keepers, rejects per burst, star strictness, rate keepers against each other, first picks).
+Page 1 has four headings: **How Frames Are Scored** (genre, ranking mode, sharpness, exposure), **Keepers per Burst** (keepers, keeper margin, spread keepers, keep the other angles, keep a motion-blur frame), **close calls** (the number-read and sharpness-judge tie-breaks) and **Ratings** (non-keepers, rejects per burst, star strictness, rate keepers against each other, first picks).
 
 ### Genre
 
-*landscape*, *portrait*, *sport* and *macro* set four of the options below in one click. *custom* is selected automatically the moment you change any of them by hand. Genres never change *non-keepers*. A [preset](#presets) saves the genre along with everything else.
+*landscape*, *portrait*, *sport* and *macro* set four of the options below in one click. *custom* is selected automatically the moment you change any of them by hand. Genres never change *Non-Keepers*. A [preset](#presets) saves the genre along with everything else.
 
 | Genre | Ranking mode | Sharpness | Exposure | Keepers |
 |--------|--------------|-----------|----------|---------|
@@ -290,13 +290,13 @@ Page 1 has four headings: **how frames are scored** (genre, ranking mode, sharpn
 
 ### Ranking mode
 
-In every mode, keepers are picked within their own burst and non-keepers follow the *non-keepers* setting. The mode only decides a keeper's stars.
+In every mode, keepers are picked within their own burst and non-keepers follow the *Non-Keepers* setting. The mode only decides a keeper's stars.
 
 - *universal absolute*: keepers are rated against fixed sharpness tiers, so the same frame gets the same stars in any shoot. Each sharpness scale has its own tiers: the variance modes (*subject focus*, *subject peak*, *center*, *face*, *SAM*) share one table, and *peak*, *tiles uniformity* and *motion aware* have their own, so the macro and landscape presets spread stars too. A burst that [switched mode from EXIF](#shooting-intent-from-exif) is rated on the tiers of the mode it was scored in.
 - *binary (keepers top)*: every keeper starts at 5 stars and only flags lower it (eyes closed, cut off and blocked −1, over/underexposed −3).
 - *relative to selection*: tiers scale to the selection you're culling, so its sharpest frames get 5 stars even on a soft lens or in low light. The 5-star mark is the 95th percentile of the frames that could keep, so one freak frame can't flatten everyone else. Each sharpness scale is judged on its own: bursts that switched mode from EXIF, and SAM bursts with and without masks, don't share a 5-star mark. A scale with fewer than 5 frames that could keep (a one-frame selection, say) has no mark worth 5 stars, so its bursts take the universal tiers of their mode instead, and the log says so; a scale where every frame scores 0 gives 0 stars. Ratings only appear once every burst is scored, even with *apply ratings while scoring* on.
 
-**Star strictness** (default *standard (×1)*) multiplies the sharpness every star needs in *universal* and *relative* ranking, how fast [graded non-keepers](#non-keepers) lose stars, and the far-behind line (30% of the burst's best). *Stricter (×1.25)* to *strictest (×2)* hand out fewer stars for the same frames; *more generous (×0.75)* and *much more generous (×0.5)* hand out more. Scores and keeper picks don't change, and neither do *binary* keepers' stars; which frames fall under the far-behind line does. With *Rate keepers against each other* on, the keepers of a *universal* run of 10 or more take their stars from that instead, and star strictness only sets how fast graded non-keepers lose stars. Changing it re-applies from the [score cache](#score-cache) without decoding again.
+**Star strictness** (default *standard (×1)*) multiplies the sharpness every star needs in *universal* and *relative* ranking, how fast [graded non-keepers](#non-keepers) lose stars, and the far-behind line (30% of the burst's best). *Stricter (×1.25)* to *strictest (×2)* hand out fewer stars for the same frames; *more generous (×0.75)* and *much more generous (×0.5)* hand out more. Scores and keeper picks don't change, and neither do *binary* keepers' stars; which frames fall under the far-behind line does. With *Rate Keepers Against Each Other* on, the keepers of a *universal* run of 10 or more take their stars from that instead, and star strictness only sets how fast graded non-keepers lose stars. Changing it re-applies from the [score cache](#score-cache) without decoding again.
 
 ### Sharpness
 
@@ -354,7 +354,7 @@ Vehicle boxes are cached in `assisted_plugins/detections.sqlite` in darktable's 
 
 #### Car boxes from tagging
 
-The detector also boxes trucks, vans and parked cars, and the most prominent box can be one of those rather than the race car. The tagging plugin's car check already throws those boxes out, and its last run writes the boxes it kept to `assisted_tagging/last-run/<collection>.boxes.json` in darktable's config directory. With **Only car boxes (from tagging)** on, culling reads that file (`--car-boxes`) and drops any detector box that overlaps none of tagging's boxes by at least `CAR_BOX_MIN_IOU` (0.5). The motorsport detail then says `car box … from tagging (N other boxes dropped)`, and a frame left with no box says `tagging's car check dropped N`.
+The detector also boxes trucks, vans and parked cars, and the most prominent box can be one of those rather than the race car. The tagging plugin's car check already throws those boxes out, and its last run writes the boxes it kept to `assisted_tagging/last-run/<collection>.boxes.json` in darktable's config directory. With **Only Car Boxes (From Tagging)** on, culling reads that file (`--car-boxes`) and drops any detector box that overlaps none of tagging's boxes by at least `CAR_BOX_MIN_IOU` (0.5). The motorsport detail then says `car box … from tagging (N other boxes dropped)`, and a frame left with no box says `tagging's car check dropped N`.
 
 - Run tagging on the same collection first. The file is tagging's last run, picked by tagging's last collection; frames not in it use every detector box, as with the setting off.
 - A frame edited (its file modified) after that tagging run, or one tagging failed on, uses every box too. The log counts these.
@@ -374,25 +374,25 @@ A flagged frame is tagged `Overexposed` or `Underexposed` and loses one star (se
 
 How many frames per burst survive: *single best only*, *portrait (1 or 2)*, *dynamic (1 to 5)* (scales with burst size), or *keep all (focus stack)* for frames you'll merge rather than cull.
 
-**Keeper margin** (default *off*) keeps more: every frame scoring within 95%, 90%, 85%, 80% or 75% of its burst's sharpest frame is kept too, on top of the *keepers* count. A burst of near-identical sharp frames then keeps all of them, and a burst with one clear winner still keeps one. The extra keepers count as lower keepers, so they lose one star like any keeper outside the burst's top 40%. `last-run.csv` says "within the keeper margin of the best" for them.
+**Keeper margin** (default *off*) keeps more: every frame scoring within 95%, 90%, 85%, 80% or 75% of its burst's sharpest frame is kept too, on top of the *Keepers* count. A burst of near-identical sharp frames then keeps all of them, and a burst with one clear winner still keeps one. The extra keepers count as lower keepers, so they lose one star like any keeper outside the burst's top 40%. `last-run.csv` says "within the keeper margin of the best" for them.
 
-**Spread keepers over the burst** (default *off*, unproven) picks the keepers per stretch of the burst instead of by score alone. The burst's frames, in capture order (darktable's image id), are cut into as many equal stretches as keepers allowed, and each stretch keeps its sharpest frame. A car through a corner then keeps its entry and exit rather than three near-copies of the sharpest moment. A stretch whose best frame scores under 95% (`CLOSE_CALL_SHARE`) of the burst's best keeps nothing, and the next-sharpest frame overall is kept instead, so a mostly blurred burst still keeps its sharp frames. A keeper picked over a sharper frame gets `Why|Spread`. It does nothing when one keeper is allowed. The keeper margin still adds frames on top. Check it against your picks before relying on it: run once with it on and once off, then `eval_culling.py` each report.
+**Spread Keepers Over the Burst** (default *off*, unproven) picks the keepers per stretch of the burst instead of by score alone. The burst's frames, in capture order (darktable's image id), are cut into as many equal stretches as keepers allowed, and each stretch keeps its sharpest frame. A car through a corner then keeps its entry and exit rather than three near-copies of the sharpest moment. A stretch whose best frame scores under 95% (`CLOSE_CALL_SHARE`) of the burst's best keeps nothing, and the next-sharpest frame overall is kept instead, so a mostly blurred burst still keeps its sharp frames. A keeper picked over a sharper frame gets `Why|Spread`. It does nothing when one keeper is allowed. The keeper margin still adds frames on top. Check it against your picks before relying on it: run once with it on and once off, then `eval_culling.py` each report.
 
-**Keep the other angles** (default *on*; needs the detector, so *motorsport* sharpness) keeps a second view of the car. Each frame's view comes from the shape of the detector's box (width over height): in capture order, a frame whose shape is 1.3 times or more off the current view's median starts the next view (`VIEW_ASPECT_STEP`). One odd box between two frames that agree is treated as a wrong box. The best frame of each view the sharpest keeper is not in keeps when it scores at least 70% of the burst's best (`ANGLE_KEEP_SHARE`), on top of the keepers allowed, with `Why|Other angle` and one star below the sharpest keeper (never under 1). That view's other keepers are capped at the same stars. With the detector on, a frame flagged cut off never keeps while the burst has a frame showing the whole car, whatever this setting says.
+**Keep the Other Angles** (default *on*; needs the detector, so *motorsport* sharpness) keeps a second view of the car. Each frame's view comes from the shape of the detector's box (width over height): in capture order, a frame whose shape is 1.3 times or more off the current view's median starts the next view (`VIEW_ASPECT_STEP`). One odd box between two frames that agree is treated as a wrong box. The best frame of each view the sharpest keeper is not in keeps when it scores at least 70% of the burst's best (`ANGLE_KEEP_SHARE`), on top of the keepers allowed, with `Why|Other angle` and one star below the sharpest keeper (never under 1). That view's other keepers are capped at the same stars. With the detector on, a frame flagged cut off never keeps while the burst has a frame showing the whole car, whatever this setting says.
 
-**Keep a motion-blur frame** (default *on*; needs the detector) keeps a frame for its look, not its sharpness. Per burst, the frame whose blur runs most nearly in one straight line keeps when its straightness is 0.75 or more (`MOTION_LOOK_STRAIGHT`), the car is detected, is not cut off and its box is at least half the burst's typical box (`MOTION_LOOK_MIN_BOX`). Blurred objects in front of the car do not rule the frame out. It is added to the keepers, never swapped for one, with `Why|Motion look` and stars from its straightness (`MOTION_LOOK_TIERS`): 3 from 0.75, 4 from 0.80, 5 from 0.85. Flags still cost their stars.
+**Keep a Motion-Blur Frame** (default *on*; needs the detector) keeps a frame for its look, not its sharpness. Per burst, the frame whose blur runs most nearly in one straight line keeps when its straightness is 0.75 or more (`MOTION_LOOK_STRAIGHT`), the car is detected, is not cut off and its box is at least half the burst's typical box (`MOTION_LOOK_MIN_BOX`). Blurred objects in front of the car do not rule the frame out. It is added to the keepers, never swapped for one, with `Why|Motion look` and stars from its straightness (`MOTION_LOOK_TIERS`): 3 from 0.75, 4 from 0.80, 5 from 0.85. Flags still cost their stars.
 
-**Break close calls on the number read** (default *off*, unproven) settles a close call (the last keeper and the best frame that lost score within 5%) on the car number instead of a few percent of sharpness. It needs a tagging run on the same collection: the reads come from tagging's `boxes.json`, and frames changed since that run, or missing from it, keep the sharpness ranking. Both frames must read the same number, and the dropped frame must read it at least 0.10 (`NUMBER_READ_MIN_GAP`) more confidently; then it is kept in place of the keeper and gets `Why|Number clearer`. When several numbers are shared, the one with the highest combined confidence decides. A keeper inside the keeper margin stays kept as well. Check it against your picks: after a run with it on, `eval_culling.py --sharp-mode <mode>` prints the hit rate with it off and on.
+**Break Close Calls on the Number Read** (default *off*, unproven) settles a close call (the last keeper and the best frame that lost score within 5%) on the car number instead of a few percent of sharpness. It needs a tagging run on the same collection: the reads come from tagging's `boxes.json`, and frames changed since that run, or missing from it, keep the sharpness ranking. Both frames must read the same number, and the dropped frame must read it at least 0.10 (`NUMBER_READ_MIN_GAP`) more confidently; then it is kept in place of the keeper and gets `Why|Number clearer`. When several numbers are shared, the one with the highest combined confidence decides. A keeper inside the keeper margin stays kept as well. Check it against your picks: after a run with it on, `eval_culling.py --sharp-mode <mode>` prints the hit rate with it off and on.
 
-**Break close calls with the sharpness judge** (default *off*, unproven; *motorsport* sharpness only) settles a close call with a learned image-quality model (HyperIQA) instead of a few percent of Laplacian sharpness, which a busy background or noise can tip. It needs the [sharpness judge](#2-models) model files; with the setting on and the files missing, the run stops and says so. Per burst it scores at most 3 (`JUDGE_FRAMES`) frames, those within the close-call share of the best, on 3×3 tiles of the car crop at 224 px, averaged. When the dropped frame scores at least 5% (`JUDGE_MIN_GAP`) above the last keeper, it is kept instead and gets `Why|Subject clearer`. The number read decides first when it is on and settles the call; the judge only sees close calls the reads left. Judge scores are cached with the other scores. Runtime per judged frame is not measured yet. Check it against your picks: after a run with it on, `eval_culling.py --sharp-mode motion_aware` prints the hit rate with it off and on.
+**Break Close Calls with the Sharpness Judge** (default *off*, unproven; *motorsport* sharpness only) settles a close call with a learned image-quality model (HyperIQA) instead of a few percent of Laplacian sharpness, which a busy background or noise can tip. It needs the [sharpness judge](#2-models) model files; with the setting on and the files missing, the run stops and says so. Per burst it scores at most 3 (`JUDGE_FRAMES`) frames, those within the close-call share of the best, on 3×3 tiles of the car crop at 224 px, averaged. When the dropped frame scores at least 5% (`JUDGE_MIN_GAP`) above the last keeper, it is kept instead and gets `Why|Subject clearer`. The number read decides first when it is on and settles the call; the judge only sees close calls the reads left. Judge scores are cached with the other scores. Runtime per judged frame is not measured yet. Check it against your picks: after a run with it on, `eval_culling.py --sharp-mode motion_aware` prints the hit rate with it off and on.
 
 ### Non-keepers
 
-What happens to the frames that aren't kept: *leave alone*, *reject bad frames (-1)*, a fixed star count from 0 to 5, or *graded by burst*. A frame far behind its burst's best (under 30% of its sharpness, times *star strictness*) is rejected whatever is picked here: rating -1 and the `Rejected` tag (`Why|Far behind`). *leave alone* still leaves its rating and writes only the tags. *reject bad frames* rejects only those and leaves the other frames not kept alone; they get no `Rejected` tag.
+What happens to the frames that aren't kept: *leave alone*, *reject bad frames (-1)*, a fixed star count from 0 to 5, or *graded by burst*. A frame far behind its burst's best (under 30% of its sharpness, times *Star Strictness*) is rejected whatever is picked here: rating -1 and the `Rejected` tag (`Why|Far behind`). *leave alone* still leaves its rating and writes only the tags. *reject bad frames* rejects only those and leaves the other frames not kept alone; they get no `Rejected` tag.
 
-**rejects per burst** (no limit, 1, 2, 3, 5; default 2) caps the far-behind rejects in one burst to its worst frames. The other far-behind frames get the *non-keepers* rating as frames that lost (`Why|Outranked` or `Graded`). Blank frames are always rejected and never count toward it.
+**Rejects per Burst** (no limit, 1, 2, 3, 5; default 2) caps the far-behind rejects in one burst to its worst frames. The other far-behind frames get the *Non-Keepers* rating as frames that lost (`Why|Outranked` or `Graded`). Blank frames are always rejected and never count toward it.
 
-**first picks** (off, 10, 15, 20, 30; default *off*) is for a quick delivery before the full cull. The whole selection is scored as usual, then only the N best keepers are rated, at most one per burst: each burst's best keeper, by stars then score. Every other frame is left alone, keeper or not: no rating change, no reject, and `Why|Not a first pick`. darktable shows nothing until the picks are chosen, so *Apply ratings while scoring* has no effect; the log line reads `first picks: X of Y keepers rated`. Run the cull again with it off for the full cull.
+**First Picks** (off, 10, 15, 20, 30; default *off*) is for a quick delivery before the full cull. The whole selection is scored as usual, then only the N best keepers are rated, at most one per burst: each burst's best keeper, by stars then score. Every other frame is left alone, keeper or not: no rating change, no reject, and `Why|Not a first pick`. darktable shows nothing until the picks are chosen, so *Apply Ratings While Scoring* has no effect; the log line reads `first picks: X of Y keepers rated`. Run the cull again with it off for the full cull.
 
 *graded by burst* rates each non-keeper below the burst's lowest keeper, by how sharp it is next to the burst's best frame:
 
@@ -406,63 +406,63 @@ What happens to the frames that aren't kept: *leave alone*, *reject bad frames (
 
 Flags still cost a star each. **Star strictness** scales these steps too: stricter drops non-keepers faster, more generous keeps them closer to the keeper. For a spread of ratings around each burst's best frame, use *graded by burst* with a keeper margin of 90%.
 
-**Rate keepers against each other** (default *on*; *universal* ranking only) rates the run's keepers against each other, so a shoot uses all five stars instead of bunching at two or three. It changes stars only, never which frames are kept, and *star strictness* does not move the stars of keepers rated this way. The keepers are ranked by sharpness and cut into five equal groups (`SLOPE_STARS`): the sharpest group gets 5 stars, the next 4, down to 1. Equal scores share the higher group. Other angle keepers stay one star below their burst's best, Motion look keepers keep their own rating, and flags still cost their stars. A run with fewer than 10 keepers (`SLOPE_MIN_KEEPERS`) uses the fixed star steps, as do the *binary* and *relative* ranking modes. Every burst is rated after the last one is scored, so with *Apply ratings while scoring* on the ratings still arrive at the end of scoring.
+**Rate Keepers Against Each Other** (default *on*; *universal* ranking only) rates the run's keepers against each other, so a shoot uses all five stars instead of bunching at two or three. It changes stars only, never which frames are kept, and *Star Strictness* does not move the stars of keepers rated this way. The keepers are ranked by sharpness and cut into five equal groups (`SLOPE_STARS`): the sharpest group gets 5 stars, the next 4, down to 1. Equal scores share the higher group. Other angle keepers stay one star below their burst's best, Motion look keepers keep their own rating, and flags still cost their stars. A run with fewer than 10 keepers (`SLOPE_MIN_KEEPERS`) uses the fixed star steps, as do the *binary* and *relative* ranking modes. Every burst is rated after the last one is scored, so with *Apply Ratings While Scoring* on the ratings still arrive at the end of scoring.
 
-### 2 bursts
+### 2 Bursts
 
-- **Cull by native groups** (checkbox, default on). darktable's own image groups form the groups keepers are picked in, see [Grouping support](#grouping-support).
-- Under the heading **extra grouping by tags**: **tag node 1**, **tag node 2**, **tag node 3** (blank = not used). Tag nodes whose children cut the groups further, in that order, e.g. the collection prefix from [Assisted Tagging](../darktable-assisted-tagging/README.md) for one keeper per number. With the checkbox off, the first filled node forms the groups. Type `Assisted Grouping` for each photo's latest Assisted Grouping run.
+- **Cull by Native Groups** (checkbox, default on). darktable's own image groups form the groups keepers are picked in, see [Grouping support](#grouping-support).
+- Under the heading **Extra Grouping by Tags**: **tag node 1**, **tag node 2**, **tag node 3** (blank = not used). Tag nodes whose children cut the groups further, in that order, e.g. the collection prefix from [Assisted Tagging](../darktable-assisted-tagging/README.md) for one keeper per number. With the checkbox off, the first filled node forms the groups. Type `Assisted Grouping` for each photo's latest Assisted Grouping run.
 
-### 3 penalties & speed
+### 3 Penalties & Speed
 
-Three headings: **speed**, **penalties (each lowers stars by one)**, **blank frames and vehicles**.
+Three headings: **Speed**, **Penalties (Each Lowers Stars by One)**, **Blank Frames and Vehicles**.
 
-- **Apply ratings while scoring** (default off). Applies results as they arrive instead of all at the end. Faster on big batches, but darktable's UI shares the CPU with the scorer; turn off if it lags. No effect with *first picks* on.
-- **Fast JPEG decoding** (default on). Decodes JPEGs and raw previews at reduced size. Several times faster; scores shift slightly, which matters little since keepers are ranked within each burst. It speeds up the whole-frame checks only: with *motorsport* sharpness, each frame is still decoded once more at full size to cut the car, so that mode gains less.
-- **blank frames** (off, 99%, 97%, 95%, 90% one colour; default 95%). A frame at least this share one flat colour is tagged `Blank` and rejected. Off rates blank frames like any other.
+- **Apply Ratings While Scoring** (default off). Applies results as they arrive instead of all at the end. Faster on big batches, but darktable's UI shares the CPU with the scorer; turn off if it lags. No effect with *First Picks* on.
+- **Fast JPEG Decoding** (default on). Decodes JPEGs and raw previews at reduced size. Several times faster; scores shift slightly, which matters little since keepers are ranked within each burst. It speeds up the whole-frame checks only: with *motorsport* sharpness, each frame is still decoded once more at full size to cut the car, so that mode gains less.
+- **Blank Frames** (off, 99%, 97%, 95%, 90% one colour; default 95%). A frame at least this share one flat colour is tagged `Blank` and rejected. Off rates blank frames like any other.
 - ***Flag* lowers stars** (default on, one per flag). Off = that flag never costs stars; it's still tagged if its tag switch is on. See [Flags cost stars](#flags-cost-stars-never-the-keeper).
-- **Leave frames with no vehicle** (default off). *Motorsport* and *subject tracking (SAM)* sharpness with the [vehicle detector](#vehicle-detector) installed: a frame where it finds no car is never a keeper, keeps its rating and gets `Why|No vehicle`. A burst with no car in any frame is left alone.
-- **Only car boxes (from tagging)** (default on). In *motorsport* and *subject tracking (SAM)* sharpness with the [vehicle detector](#vehicle-detector) installed, sharpness and framing use only the detector boxes that the tagging plugin's last run kept as cars. See [Car boxes from tagging](#car-boxes-from-tagging).
+- **Leave Frames with No Vehicle** (default off). *Motorsport* and *subject tracking (SAM)* sharpness with the [vehicle detector](#vehicle-detector) installed: a frame where it finds no car is never a keeper, keeps its rating and gets `Why|No vehicle`. A burst with no car in any frame is left alone.
+- **Only Car Boxes (From Tagging)** (default on). In *motorsport* and *subject tracking (SAM)* sharpness with the [vehicle detector](#vehicle-detector) installed, sharpness and framing use only the detector boxes that the tagging plugin's last run kept as cars. See [Car boxes from tagging](#car-boxes-from-tagging).
 
-### 4 tags written
+### 4 Tags Written
 
 One switch per row (default on), under three headings:
 
-- **outputs**: `Keeper`, `Rejected`, `Overexposed`, `Underexposed`, `Eyes Closed`, `Cut Off`, `Blocked`, `Blank`.
-- **check by hand**: `Subject guessed` (writes `Subject|Vehicle|Guessed`: frames to look at by hand).
-- **how it decided**: `Subject` (writes `Subject|Vehicle|Detected`), `Technique`, `Scored`, `Why`.
+- **Outputs**: `Keeper`, `Rejected`, `Overexposed`, `Underexposed`, `Eyes Closed`, `Cut Off`, `Blocked`, `Blank`.
+- **Check by Hand**: `Subject guessed` (writes `Subject|Vehicle|Guessed`: frames to look at by hand).
+- **How It Decided**: `Subject` (writes `Subject|Vehicle|Detected`), `Technique`, `Scored`, `Why`.
 
-A check is written whatever the diagnostics say; only its own switch stops it. Off = runs stop writing that row and remove it from the images they process; images outside the run keep it until **Clear culling marks**. Ratings and keeper picks don't change. Fewer tag writes also apply results faster. A preset saved before `Subject guessed` existed loads with it set to whatever `Subject` was, is saved back that way, and the log says so once (`preset <name>: tag_subject_guessed filled from the old preset's settings`). See [Choosing which tags are written](#choosing-which-tags-are-written).
+A check is written whatever the diagnostics say; only its own switch stops it. Off = runs stop writing that row and remove it from the images they process; images outside the run keep it until **Clear Culling Marks**. Ratings and keeper picks don't change. Fewer tag writes also apply results faster. A preset saved before `Subject guessed` existed loads with it set to whatever `Subject` was, is saved back that way, and the log says so once (`preset <name>: tag_subject_guessed filled from the old preset's settings`). See [Choosing which tags are written](#choosing-which-tags-are-written).
 
-### 5 run
+### 5 Run
 
-One heading, **cull (writes ratings and tags)**.
+One heading, **Cull (Writes Ratings and Tags)**.
 
-- **Tag each run** (default off). Stamps every frame a run writes with `Assisted Culling|Run|YYYY-MM-DD HH:MM`.
-- **Cull selection.** Scores the selected images and rates/tags them. Click again to cancel.
-- **Verify selection.** Scores the selected images as **Cull selection** would and changes nothing: no rating, no tag, and the last run's report (used by **Why these ratings?**) stays. [To check](#to-check) then lists what a cull would change. Scores come from the [score cache](#score-cache), so a repeat is quick. While a run is going it is queued; **Cancel culling** stops it.
+- **Tag Each Run** (default off). Stamps every frame a run writes with `Assisted Culling|Run|YYYY-MM-DD HH:MM`.
+- **Cull Selection.** Scores the selected images and rates/tags them. Click again to cancel.
+- **Verify Selection.** Scores the selected images as **Cull Selection** would and changes nothing: no rating, no tag, and the last run's report (used by **Why These Ratings?**) stays. [To check](#to-check) then lists what a cull would change. Scores come from the [score cache](#score-cache), so a repeat is quick. While a run is going it is queued; **Cancel Culling** stops it.
 
-### 6 tools
+### 6 Tools
 
-Two headings: **explain the last run (changes nothing)** over the first two buttons, and **undo**.
+Two headings: **Explain the Last Run (Changes Nothing)** over the first two buttons, and **Undo**.
 
-- **Why these ratings?** Explains the selected images from the last run's report. Changes nothing.
-- **Open last report.** Opens `last-run.csv` in your spreadsheet app.
-- **Clear culling marks.** Removes the plugin's tags from the selected images (see [Re-running and clearing](#re-running-and-clearing)).
-- **Restore previous ratings.** Sets the selected images back to the star rating they had before the last run that changed a rating (same section).
-- **Reset ratings to 0.** Sets the selected images to 0 stars one after the other, with progress and a cancellable job bar (same section).
+- **Why These Ratings?** Explains the selected images from the last run's report. Changes nothing.
+- **Open Last Report.** Opens `last-run.csv` in your spreadsheet app.
+- **Clear Culling Marks.** Removes the plugin's tags from the selected images (see [Re-running and clearing](#re-running-and-clearing)).
+- **Restore Previous Ratings.** Sets the selected images back to the star rating they had before the last run that changed a rating (same section).
+- **Reset Ratings to 0.** Sets the selected images to 0 stars one after the other, with progress and a cancellable job bar (same section).
 
-### To check
+### To Check
 
-A box headed **To check**, above the progress line, lists what a run leaves for you to look at, so a toast that went by unseen isn't lost. It shows only when it has items. Each item reads `<action>: <what happened>` in full, wrapped over as many lines as it needs, with its buttons below. The newest run's items sit on top. Older runs' items move below an *Earlier runs (before HH:MM): may not hold any more* line, since a later run can have settled them; they stay until you remove them, so a Fix still works. It lists:
+A box headed **To Check**, above the progress line, lists what a run leaves for you to look at, so a toast that went by unseen isn't lost. It shows only when it has items. Each item reads `<action>: <what happened>` in full, wrapped over as many lines as it needs, with its buttons below. The newest run's items sit on top. Older runs' items move below an *Earlier runs (before HH:MM): may not hold any more* line, since a later run can have settled them; they stay until you remove them, so a Fix still works. It lists:
 
 - **Cull**: errors, subject tracking that outlined only some frames, a cancel after some images were rated, photos with a guessed subject, photos in close calls, images that couldn't be updated or read, detail tags that failed or were stopped.
-- **Verify**: photos whose stars differ from what a cull gives now, with one line per photo (`DSC00023.JPG: 0 stars, a cull now gives 5`); ratings you changed by hand since the last cull (`1 stars, the last cull wrote 4`), on their own line with no **Fix**; and, with the *Keeper* tag on, bursts with no `Keeper` tag or more than a cull gives. **Fix** on the stars line and the Keeper line runs **Cull selection** on those bursts' photos.
+- **Verify**: photos whose stars differ from what a cull gives now, with one line per photo (`DSC00023.JPG: 0 stars, a cull now gives 5`); ratings you changed by hand since the last cull (`1 stars, the last cull wrote 4`), on their own line with no **Fix**; and, with the *Keeper* tag on, bursts with no `Keeper` tag or more than a cull gives. **Fix** on the stars line and the Keeper line runs **Cull Selection** on those bursts' photos.
 - **Clear**, **Restore ratings**, **Reset ratings**: a cancel that left photos not reached, and images that couldn't be changed.
 
 - **Fix** beside a line makes the change it describes to those photos only, and removes the line.
 - **Select** beside a line selects its photos in the lighttable. Photos removed from the library since are skipped, and a toast counts them. Lines about photos darktable couldn't read or update have no **Select**: those photos may be gone.
-- The next run of the same action replaces that action's lines; other actions' lines stay. **Clear list**, under the items, empties the box.
+- The next run of the same action replaces that action's lines; other actions' lines stay. **Clear List**, under the items, empties the box.
 - Six lines show; more add `and N more (see the log)`. The list is saved to `assisted_culling.checks.txt` in darktable's config folder, so it survives a restart.
 
 ## Preferences
@@ -491,7 +491,7 @@ score_images.py scores sharpness and exposure, picks the keepers per burst, writ
 assisted_culling.lua reads results.csv and applies ratings and tags
 ```
 
-**One shot, one rating.** A RAW+JPEG pair (same folder and file name, e.g. `DSC01.ARW` + `DSC01.JPG`) and darktable duplicates of one file count as a single shot: it's scored once, and every image in it gets the same stars, tags and keeper decision. A pair is scored from the JPEG, TIFF or PNG (full size; the RAW only offers its embedded preview). These count as RAW: 3FR, ARI, ARW, BAY, CR2, CR3, CRW, DCR, DCS, DNG, ERF, FFF, IIQ, K25, KDC, MDC, MEF, MOS, MRW, NEF, NRW, ORF, ORI, PEF, RAF, RAW, RW2, RWL, SR2, SRF, SRW and X3F. `last-run.csv` has one row per shot, under the scored file; **Why these ratings?** finds it from either file.
+**One shot, one rating.** A RAW+JPEG pair (same folder and file name, e.g. `DSC01.ARW` + `DSC01.JPG`) and darktable duplicates of one file count as a single shot: it's scored once, and every image in it gets the same stars, tags and keeper decision. A pair is scored from the JPEG, TIFF or PNG (full size; the RAW only offers its embedded preview). These count as RAW: 3FR, ARI, ARW, BAY, CR2, CR3, CRW, DCR, DCS, DNG, ERF, FFF, IIQ, K25, KDC, MDC, MEF, MOS, MRW, NEF, NRW, ORF, ORI, PEF, RAF, RAW, RW2, RWL, SR2, SRF, SRW and X3F. `last-run.csv` has one row per shot, under the scored file; **Why These Ratings?** finds it from either file.
 
 Two small processes talking through CSV files. The Lua side is split into pure logic (time parsing, group keys, CSV) with no darktable dependency, and the darktable integration proper; only the second half needs darktable to run.
 
@@ -501,9 +501,9 @@ Sharpness is the variance of the Laplacian of a downscaled grayscale copy, a sta
 
 ### Grouping support
 
-Culling does not cluster photos by capture time. Keepers are picked within groups that something else already made. The panel's **2 bursts** page has a **Cull by native groups** checkbox and three **tag node** boxes:
+Culling does not cluster photos by capture time. Keepers are picked within groups that something else already made. The panel's **2 bursts** page has a **Cull by Native Groups** checkbox and three **tag node** boxes:
 
-- **Cull by native groups** (default on): darktable's own image groups form the groups. A photo's group is its group leader; members share one group even when the leader isn't in the selection.
+- **Cull by Native Groups** (default on): darktable's own image groups form the groups. A photo's group is its group leader; members share one group even when the leader isn't in the selection.
 - **tag node 1 to 3** (blank = not used): each filled node cuts the groups further, in order 1, 2, 3. Photos in a group that carry different children of the node go to separate pools, each with its own keepers. A photo without a child of the node stays in the group's shared pool, and so does a photo with several children (the log lists those ids).
 - **Checkbox off**: the first filled node forms the groups instead. A photo without a child of that node is judged alone, and a photo with several takes the first by name. The later nodes cut as above.
 - **Checkbox off and every box blank**: every photo is its own group and is judged alone.
@@ -601,30 +601,30 @@ The grouping-support changes have not run in darktable yet. Work through these s
 **Setup**
 
 1. **Install Python** as in [Install](#1-python-side). *Expect:* the requirements install with no errors.
-2. **Install the plugin** as in [Install](#3-darktable-side) and start darktable. *Expect:* an **Assisted Culling** panel on the right in lighttable, with the page buttons *1 scoring ▾* (open, its settings below it) to *6 tools ▸*; opening *5 run* shows a **Cull selection** button. No `LUA ERROR` in the darktable log.
+2. **Install the plugin** as in [Install](#3-darktable-side) and start darktable. *Expect:* an **Assisted Culling** panel on the right in lighttable, with the page buttons *1 scoring ▾* (open, its settings below it) to *6 tools ▸*; opening *5 run* shows a **Cull Selection** button. No `LUA ERROR` in the darktable log.
 3. **Set the plugins folder** in **preferences → lua options → plugins folder (holds the three assisted-* folders)** to the folder holding the repo. *Expect:* runs find the repo's `.venv`.
 
 **One run per grouping mechanism**
 
 Use a selection with at least two bursts of 3+ frames each.
 
-4. **Native groups.** Group each burst in darktable (ctrl+g), tick **Cull by native groups**, leave the tag node boxes blank, and click **Cull selection**. *Expect:* one `Keeper` per burst (more if *keepers* allows), the rest rated per *non-keepers*, with `Rejected` only on frames far behind their burst's best. The log at `%LOCALAPPDATA%\darktable\assisted_culling.log` shows `run started`, the `settings:` line, `grouping: native groups on, N of M photos in groups of 2+` and `run finished`.
+4. **Native groups.** Group each burst in darktable (ctrl+g), tick **Cull by Native Groups**, leave the tag node boxes blank, and click **Cull Selection**. *Expect:* one `Keeper` per burst (more if *Keepers* allows), the rest rated per *Non-Keepers*, with `Rejected` only on frames far behind their burst's best. The log at `%LOCALAPPDATA%\darktable\assisted_culling.log` shows `run started`, the `settings:` line, `grouping: native groups on, N of M photos in groups of 2+` and `run finished`.
 5. **Tag node cuts the groups.** Tag two frames of one burst with different children of a node (e.g. `Rally|2026|37` and `Rally|2026|86`), type the node in **tag node 1**, and cull. *Expect:* that burst keeps a frame of each child; untagged frames in it share one pool. The `grouping:` log line ends with `tag node Rally|2026: N grouped photos tagged, 1 groups split`.
-6. **Tag node forms the groups.** Run Assisted Grouping with **Group tags** on, untick **Cull by native groups**, type `Assisted Grouping` in **tag node 1**, and cull. *Expect:* the same per-burst keepers as step 4. The log line reads `grouping: native groups off, … tag node Assisted Grouping forms the groups`. Then type a node that doesn't exist on these photos and cull again. *Expect:* every photo is judged alone, and the log line ends with `(matches no selected photo)`.
-7. **Nothing set.** Untick **Cull by native groups**, blank all three boxes, and cull. *Expect:* every photo is judged alone; each frame can be a keeper, and no "No groups found" notice shows.
+6. **Tag node forms the groups.** Run Assisted Grouping with **Group tags** on, untick **Cull by Native Groups**, type `Assisted Grouping` in **tag node 1**, and cull. *Expect:* the same per-burst keepers as step 4. The log line reads `grouping: native groups off, … tag node Assisted Grouping forms the groups`. Then type a node that doesn't exist on these photos and cull again. *Expect:* every photo is judged alone, and the log line ends with `(matches no selected photo)`.
+7. **Nothing set.** Untick **Cull by Native Groups**, blank all three boxes, and cull. *Expect:* every photo is judged alone; each frame can be a keeper, and no "No groups found" notice shows.
 
 **Panel**
 
-8. **Cancel.** Start a run on a large selection and click the button while it shows **Cancel culling**. *Expect:* the run stops; frames already done keep their changes. Repeat with the X on the job in darktable's job area. *Expect:* the button shows **Cancelling...** until the run has stopped, then **Cull selection** again; a new run started straight after works normally.
-9. **Why these ratings?** with nothing selected. *Expect:* "Assisted Culling: select some images first".
-10. **Clear culling marks** on the selection. *Expect:* the plugin's tags are gone; star ratings are unchanged.
-11. **Tag switches.** Cull a batch with every tag on and note the stars. Under **tags written** in the panel, turn off *Subject* and *Rejected*, then cull the same batch again. *Expect:* the stars and keepers are the same as before; no image in the batch has an `Assisted Culling|Subject|Vehicle|Detected` or `Assisted Culling|Rejected` tag; `Keeper`, the flags, `Subject|Vehicle|Guessed`, `Technique`, `Scored` and `Why` are still there. Filter on `Assisted Culling|Why|Outranked`: every match is a non-keeper. Turn off *Why* and cull again: the `Why` tags are gone from the batch. No `LUA ERROR`.
+8. **Cancel.** Start a run on a large selection and click the button while it shows **Cancel Culling**. *Expect:* the run stops; frames already done keep their changes. Repeat with the X on the job in darktable's job area. *Expect:* the button shows **Cancelling...** until the run has stopped, then **Cull Selection** again; a new run started straight after works normally.
+9. **Why These Ratings?** with nothing selected. *Expect:* "Assisted Culling: select some images first".
+10. **Clear Culling Marks** on the selection. *Expect:* the plugin's tags are gone; star ratings are unchanged.
+11. **Tag switches.** Cull a batch with every tag on and note the stars. Under **Tags Written** in the panel, turn off *Subject* and *Rejected*, then cull the same batch again. *Expect:* the stars and keepers are the same as before; no image in the batch has an `Assisted Culling|Subject|Vehicle|Detected` or `Assisted Culling|Rejected` tag; `Keeper`, the flags, `Subject|Vehicle|Guessed`, `Technique`, `Scored` and `Why` are still there. Filter on `Assisted Culling|Why|Outranked`: every match is a non-keeper. Turn off *Why* and cull again: the `Why` tags are gone from the batch. No `LUA ERROR`.
 12. **Checks survive diagnostics off.** Turn off *Subject*, *Technique*, *Scored* and *Why* (leave *Subject guessed* on) and cull a burst where the vehicle detector finds nothing. *Expect:* `Assisted Culling|Subject|Vehicle|Guessed` is still written and no `Detected`, `Technique`, `Scored` or `Why` tags appear.
-13. **Restore previous ratings.** Give three frames ratings by hand and note them, cull them, then change one frame's rating by hand. Select all three and click **Restore previous ratings**. *Expect:* the two untouched frames are back to the ratings you noted; the one you changed keeps your new rating; the plugin's tags are unchanged; the message counts 2 restored and 1 rated since the run. Try it on a few hundred frames and note how long it takes.
-14. **Reset ratings to 0.** Give a few hundred frames 3 stars and reject one. Select them all and click **Reset ratings to 0**. *Expect:* the panel line counts up (`resetting ratings 120 / 300`), a job bar appears, and the thumbnails lose their stars as it goes. Click the job bar's **x** part-way. *Expect:* it stops within a second or two; the message says how many were set and how many were not reached; the frames not reached still have 3 stars. Click the button again. *Expect:* it finishes the rest, counts the first part as "already at 0", the rejected frame is at 0 stars, tags and the selection are unchanged. Note how long the full reset takes next to darktable's own `0` key on the same selection.
+13. **Restore Previous Ratings.** Give three frames ratings by hand and note them, cull them, then change one frame's rating by hand. Select all three and click **Restore Previous Ratings**. *Expect:* the two untouched frames are back to the ratings you noted; the one you changed keeps your new rating; the plugin's tags are unchanged; the message counts 2 restored and 1 rated since the run. Try it on a few hundred frames and note how long it takes.
+14. **Reset Ratings to 0.** Give a few hundred frames 3 stars and reject one. Select them all and click **Reset Ratings to 0**. *Expect:* the panel line counts up (`resetting ratings 120 / 300`), a job bar appears, and the thumbnails lose their stars as it goes. Click the job bar's **x** part-way. *Expect:* it stops within a second or two; the message says how many were set and how many were not reached; the frames not reached still have 3 stars. Click the button again. *Expect:* it finishes the rest, counts the first part as "already at 0", the rejected frame is at 0 stars, tags and the selection are unchanged. Note how long the full reset takes next to darktable's own `0` key on the same selection.
 15. **Detail tags after the ratings.** Cull a few hundred frames that were never culled, with *Why* on. *Expect:* the stars and `Keeper` / `Rejected` appear first and the message ends `Ratings are ready. Now writing N detail tags`; a second job bar (*writing detail tags*) counts up and darktable still scrolls and opens images meanwhile; at the end `Assisted Culling: detail tags written (N).`. Cull again and click the detail job bar's **x** partway (clear the marks first): the message says how many images still miss theirs, and one more cull writes the rest. No crash, no `LUA ERROR`.
 16. **Export and import a preset.** Store a preset named `Rally`, then pick **export preset…** in the actions menu, choose an empty folder and click **Export**. *Expect:* `preset "Rally" exported to <folder>\Rally.atpreset`; that folder holds `manifest.json` and `preset.json`. Pick **import preset…**, choose the `Rally.atpreset` folder, click **Import**. *Expect:* `imported "Rally (2)" …`; picking `Rally (2)` shows the same settings as `Rally`.
-17. **Verify selection.** Cull a burst, change one frame's stars by hand, remove `Keeper` from another burst's keeper, and select both bursts plus a frame never culled. Click **Verify selection**. *Expect:* `verify started on N images…`, then `verify only, nothing changed. …`; no star or tag changed; **Open last report** shows the cull's report, not the verify. To check lists the never-culled frame under *would get other stars* (with **Fix**), your hand change under *you changed 1 ratings* (no **Fix**), and the burst without `Keeper` under *bursts have no Keeper tag*. Click **Fix** on that line. *Expect:* only that burst is culled again and gets its `Keeper`; your hand rating stays. Verify again: only the hand-changed line is left.
+17. **Verify Selection.** Cull a burst, change one frame's stars by hand, remove `Keeper` from another burst's keeper, and select both bursts plus a frame never culled. Click **Verify Selection**. *Expect:* `verify started on N images…`, then `verify only, nothing changed. …`; no star or tag changed; **Open Last Report** shows the cull's report, not the verify. To check lists the never-culled frame under *would get other stars* (with **Fix**), your hand change under *you changed 1 ratings* (no **Fix**), and the burst without `Keeper` under *bursts have no Keeper tag*. Click **Fix** on that line. *Expect:* only that burst is culled again and gets its `Keeper`; your hand rating stays. Verify again: only the hand-changed line is left.
 
 ## Development
 

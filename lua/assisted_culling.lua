@@ -363,16 +363,16 @@ for _, f in ipairs(M.PRESET_SCHEMA) do
     if f.key:sub(1, 4) == "tag_" then tag_keys[#tag_keys + 1] = f.key end
 end
 M.PANEL_PAGES = {
-    { number = 1, title = "scoring", keys = { "genre", "rank_mode", "sharp_mode", "exp_mode", "keep_mode",
+    { number = 1, title = "Scoring", keys = { "genre", "rank_mode", "sharp_mode", "exp_mode", "keep_mode",
         "keep_margin", "spread_keepers", "keep_angles", "motion_look", "number_reads", "sharp_judge", "non_keeper",
         "reject_cap", "star_scale", "star_slope", "first_picks" } },
-    { number = 2, title = "bursts", keys = { "group_native", "group_tag_1", "group_tag_2", "group_tag_3" } },
-    { number = 3, title = "penalties & speed", keys = { "apply_while_scoring", "fast_jpeg_decode",
+    { number = 2, title = "Bursts", keys = { "group_native", "group_tag_1", "group_tag_2", "group_tag_3" } },
+    { number = 3, title = "Penalties & Speed", keys = { "apply_while_scoring", "fast_jpeg_decode",
         "penalise_overexposed", "penalise_underexposed", "penalise_eyes_closed", "penalise_cut_off",
         "penalise_blocked", "blank_share", "no_vehicle_leave", "car_boxes_only" } },
-    { number = 4, title = "tags written", keys = tag_keys },
-    { number = 5, title = "run", keys = { "run_tag" } },
-    { number = 6, title = "tools", keys = {} },
+    { number = 4, title = "Tags Written", keys = tag_keys },
+    { number = 5, title = "Run", keys = { "run_tag" } },
+    { number = 6, title = "Tools", keys = {} },
 }
 M.PANEL_OTHER_KEYS = {}
 
@@ -410,14 +410,14 @@ M.TAG_TOGGLES = {
       writes = { "Why|Keeper", "Why|Keeper by margin", "Why|Outranked", "Why|Graded", "Why|Not shortlisted",
           "Why|No vehicle", "Why|Close call", "Why|Blank", "Why|Spread", "Why|Number clearer", "Why|Subject clearer",
           "Why|Other angle", "Why|Motion look", "Why|Far behind", "Why|Not a first pick" },
-      when = "every scored frame, saying how it was decided. Keeper: kept by rank. Keeper by margin: kept by the keeper margin. Outranked: lost to a sharper frame. Far behind: lost and scored under 30% of its burst's best (times star strictness), so it is rejected (at most rejects per burst, worst first). Graded: lost and rated by burst. Not shortlisted: subject tracking (SAM) left it out of the shortlist. No vehicle: the detector found no car, so the frame kept its rating (only with \"Leave frames with no vehicle\" on). Blank: the frame is one flat colour, so it was rejected. Close call: the last keeper and the best frame that lost scored within 5% of each other; the keeper is still kept, but check both. Spread: kept as its stretch of the burst's best frame over a sharper frame elsewhere (only with \"Spread keepers over the burst\" on). Number clearer: kept over the sharper frame of a close call because tagging read the car's number clearer in it (only with \"Break close calls on the number read\" on). Subject clearer: kept over the sharper frame of a close call because the sharpness judge scored its car clearer (only with \"Break close calls with the sharpness judge\" on). Other angle: the best frame of a view of the car the sharpest keeper does not show, kept one star below it (only with \"Keep the other angles\" on). Motion look: the burst's straightest motion blur with the car in view, kept as well as the sharp keepers (only with \"Keep a motion-blur frame\" on). Not a first pick: left alone because it is not one of the run's first picks (only with first picks on). Filter on one to step through, say, every frame that lost to the margin." },
+      when = "every scored frame, saying how it was decided. Keeper: kept by rank. Keeper by margin: kept by the keeper margin. Outranked: lost to a sharper frame. Far behind: lost and scored under 30% of its burst's best (times star strictness), so it is rejected (at most rejects per burst, worst first). Graded: lost and rated by burst. Not shortlisted: subject tracking (SAM) left it out of the shortlist. No vehicle: the detector found no car, so the frame kept its rating (only with \"Leave Frames with No Vehicle\" on). Blank: the frame is one flat colour, so it was rejected. Close call: the last keeper and the best frame that lost scored within 5% of each other; the keeper is still kept, but check both. Spread: kept as its stretch of the burst's best frame over a sharper frame elsewhere (only with \"Spread Keepers Over the Burst\" on). Number clearer: kept over the sharper frame of a close call because tagging read the car's number clearer in it (only with \"Break Close Calls on the Number Read\" on). Subject clearer: kept over the sharper frame of a close call because the sharpness judge scored its car clearer (only with \"Break Close Calls with the Sharpness Judge\" on). Other angle: the best frame of a view of the car the sharpest keeper does not show, kept one star below it (only with \"Keep the Other Angles\" on). Motion look: the burst's straightest motion blur with the car in view, kept as well as the sharp keepers (only with \"Keep a Motion-Blur Frame\" on). Not a first pick: left alone because it is not one of the run's first picks (only with first picks on). Filter on one to step through, say, every frame that lost to the margin." },
 }
 
 -- Headings of the tags-written page, in order; each TAG_TOGGLES row's `kind` is one of these.
 M.TAG_KINDS = {
-    { kind = "output", label = "outputs" },
-    { kind = "check", label = "check by hand" },
-    { kind = "diag", label = "how it decided" },
+    { kind = "output", label = "Outputs" },
+    { kind = "check", label = "Check by Hand" },
+    { kind = "diag", label = "How It Decided" },
 }
 
 -- TAG_TOGGLES rows grouped by TAG_KINDS order, file order within a kind.
@@ -1115,7 +1115,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             say(string.format("Assisted Culling: %d image(s) share a shot with another (a duplicate, or the RAW of a RAW+JPEG pair); each shot is scored once and its result copied to all of it.", n_dups))
         end
         if n_primary > 1000 then
-            say(_("Assisted Culling: large selection, this can take several minutes. Click Cancel culling to stop at any time."))
+            say(_("Assisted Culling: large selection, this can take several minutes. Click Cancel Culling to stop at any time."))
         end
         show_status(_("starting analysis…"))
 
@@ -1308,7 +1308,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             if settings.sharp_judge then
                 local judge = plugin_root(sc_script) .. "/models/" .. JUDGE_FILE
                 if not file_exists(judge) then
-                    error("\"Break close calls with the sharpness judge\" is on but " .. judge
+                    error("\"Break Close Calls with the Sharpness Judge\" is on but " .. judge
                         .. " is missing: download " .. JUDGE_FILE .. " and " .. JUDGE_FILE
                         .. ".data (see the README), or turn it off", 0)
                 end
@@ -1691,9 +1691,9 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
 
         if M.cancel_requested then
             if applied_total > 0 and not verify then
-                say(string.format("Assisted Culling: cancelled. %d of %d images were already rated and keep their changes. Run again to finish, or use Clear culling marks to remove the tags%s.",
+                say(string.format("Assisted Culling: cancelled. %d of %d images were already rated and keep their changes. Run again to finish, or use Clear Culling Marks to remove the tags%s.",
                     applied_total, #images,
-                    next(previous_ratings) and " and Restore previous ratings to put the star ratings back" or ""))
+                    next(previous_ratings) and " and Restore Previous Ratings to put the star ratings back" or ""))
                 alerts.add(string.format("cancelled: %d of %d images were rated; run again to finish", applied_total, #images))
             else
                 say(_("Assisted Culling: cancelled. No images were changed."))
@@ -1859,7 +1859,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
 
     is_running = false
     if action_button then
-        action_button.label = _("Cull selection")
+        action_button.label = _("Cull Selection")
     end
     show_status("")
 
@@ -2148,7 +2148,7 @@ local function launch_score(images, s, verify)
     is_running = true
     M.cancel_requested = false
     settings = s
-    if action_button then action_button.label = _("Cancel culling") end
+    if action_button then action_button.label = _("Cancel Culling") end
     M.score_images(images, s.rank_mode, s.sharp_mode, s.exp_mode, s.keep_mode, s.non_keeper, verify)
 end
 
@@ -2193,7 +2193,7 @@ local function start_culling(allow_cancel, images, verify)
         else
             local queued, s = copy_images(images or dt.gui.action_images), read_panel()
             if not queue_if_busy(verify and _("Verify") or _("Culling"), #queued > 0, function() launch_score(queued, s, verify) end) then
-                dt.print(_("Assisted Culling: already running. Click Cancel culling in the panel to stop it."))
+                dt.print(_("Assisted Culling: already running. Click Cancel Culling in the panel to stop it."))
             end
         end
         return
@@ -2255,48 +2255,48 @@ local function install_panel()
         return c
     end
 
-    local genre_combo = choice_combo("genre", _("genre"),
+    local genre_combo = choice_combo("genre", _("Genre"),
         _("Fills in ranking mode, sharpness, exposure and keepers for a photography genre. Changing any of those four switches this to custom."),
         { _("landscape"), _("portrait"), _("sport"), _("macro"), _("custom") })
 
-    local rank_combo = choice_combo("rank_mode", _("ranking mode"),
+    local rank_combo = choice_combo("rank_mode", _("Ranking Mode"),
         _("universal: keepers get stars from fixed sharpness tiers.\nbinary: keepers get top stars; only flags lower them.\nrelative: tiers scale to this selection, so its sharpest frames get 5 stars.\nIn every mode, the rest follow the non-keepers setting."),
         { _("universal absolute"), _("binary (keepers top)"), _("relative to selection") })
 
-    local sharp_combo = choice_combo("sharp_mode", _("sharpness"),
+    local sharp_combo = choice_combo("sharp_mode", _("Sharpness"),
         _("How sharpness is measured.\ncenter crop: the middle half of the frame only.\nedge-to-edge: scores the softest areas of the frame (ignoring plain sky), so a soft corner costs a frame.\nabsolute peak 1%: the sharpest 1% of edges anywhere in the frame, for a small sharp subject (macro).\nface & eyes: falls back to subject bias when no face is found; tags a frame Eyes Closed (one star lower) when a clear face shows no open eyes.\nsubject bias: a 3×3 grid weighted toward the centre, for a subject roughly mid-frame.\nsubject tracking (SAM): outlines the subject with darktable's AI mask model before scoring; slower than the rest, since each burst's top few frames go through the model.\nmotorsport: finds the car, scores it at full resolution so overcast light isn't punished, and reads each frame's motion. Good pans score higher (Panning), a whole frame blurred in one straight line is kept with its burst (Motion Blur), a car blurred across the pan scores lower (Missed Pan), streaks running out from the frame centre read as Zoom Burst."),
         { _("center crop"), _("edge-to-edge uniformity"), _("absolute peak 1%"), _("face & eyes (OpenCV)"), _("subject bias (center-weighted)"), _("subject tracking (SAM)"), _("motorsport (subject & motion)") })
 
-    local exp_combo = choice_combo("exp_mode", _("exposure"),
+    local exp_combo = choice_combo("exp_mode", _("Exposure"),
         _("Flags clipped highlights or shadows (Overexposed / Underexposed tag, one star lower; the penalty can be turned off on the penalties & speed page).\nwhole frame: flags a frame with over 2% of it clipped.\nsubject only: the same, ignoring the top fifth of the frame (sky).\nstrict histogram: flags from 1% of the frame at or near clipping.\nignore exposure: no exposure flags."),
         { _("whole frame"), _("subject only (ignore sky)"), _("strict histogram"), _("ignore exposure") })
 
-    local keep_combo = choice_combo("keep_mode", _("keepers"),
+    local keep_combo = choice_combo("keep_mode", _("Keepers"),
         _("How many of each burst are kept (the sharpest ones).\nsingle best: 1.\nportrait: 1 in a burst of up to 3 frames, else 2.\ndynamic: 1 in a burst of up to 4 frames, 2 up to 8, 3 up to 12, 4 up to 18, else 5.\nkeep all: every frame (focus stacks)."),
         { _("single best only"), _("portrait (1 or 2)"), _("dynamic (1 to 5)"), _("keep all (focus stack)") })
 
-    local keep_margin_combo = choice_combo("keep_margin", _("keeper margin"),
+    local keep_margin_combo = choice_combo("keep_margin", _("Keeper Margin"),
         _("Also keeps every frame scoring within this share of its burst's sharpest frame, on top of the keepers count. 90% keeps any frame at least 90% as sharp as the best."),
         { _("off"), _("within 95% of best"), _("within 90% of best"), _("within 85% of best"), _("within 80% of best"), _("within 75% of best") })
 
-    local non_keeper_combo = choice_combo("non_keeper", _("non-keepers"),
+    local non_keeper_combo = choice_combo("non_keeper", _("Non-Keepers"),
         _("The rating of frames that are not kept.\nleave alone: keeps their rating and writes only the tags.\nreject bad frames: rejects only the far-behind frames and leaves the rest alone, except stars an earlier run wrote, which go to 0.\n0 to 5 stars: that rating.\ngraded: stars below the burst's lowest keeper by how close each frame is to the burst's best: 90%+ one star less, 75%+ two, 60%+ three, 45%+ four, else 0.\nWhatever is picked, a frame under 30% of its burst's best (times star strictness) is far behind and rejected (-1, Rejected tag), up to rejects per burst: with the best at 400, a frame at 100 is far behind."),
         { _("leave alone"), _("reject bad frames (-1)"), _("0 stars"), _("1 star"), _("2 stars"), _("3 stars"), _("4 stars"), _("5 stars"), _("graded by burst") })
 
-    local reject_cap_combo = choice_combo("reject_cap", _("rejects per burst"),
+    local reject_cap_combo = choice_combo("reject_cap", _("Rejects per Burst"),
         _("The most far-behind frames rejected in one burst, worst first. The others far behind get the non-keepers rating. Blank frames are always rejected."),
         { _("no limit"), _("1"), _("2"), _("3"), _("5") })
 
-    local star_scale_combo = choice_combo("star_scale", _("star strictness"),
-        _("Scales the sharpness every star needs, in universal and relative ranking, how fast graded non-keepers lose stars, and the far-behind line (30% of the burst's best). Stricter: fewer stars for the same frame. More generous: more stars. The scores themselves don't change. With Rate keepers against each other on, keepers in a universal run of 10 or more take their stars from that instead; this still sets how fast graded non-keepers lose stars."),
+    local star_scale_combo = choice_combo("star_scale", _("Star Strictness"),
+        _("Scales the sharpness every star needs, in universal and relative ranking, how fast graded non-keepers lose stars, and the far-behind line (30% of the burst's best). Stricter: fewer stars for the same frame. More generous: more stars. The scores themselves don't change. With Rate Keepers Against Each Other on, keepers in a universal run of 10 or more take their stars from that instead; this still sets how fast graded non-keepers lose stars."),
         { _("much more generous (×0.5)"), _("more generous (×0.75)"), _("standard (×1)"), _("stricter (×1.25)"), _("much stricter (×1.5)"), _("strictest (×2)") })
 
-    local first_picks_combo = choice_combo("first_picks", _("first picks"),
+    local first_picks_combo = choice_combo("first_picks", _("First Picks"),
         _("For a quick delivery: rates only this many of the run's best keepers, at most one per burst (the burst's best keeper, most stars first, then sharpness). Every other frame keeps its rating and gets Why|Not a first pick; nothing is rejected. Run a normal cull later for the full set.\nDefault: off."),
         { _("off"), _("10"), _("15"), _("20"), _("30") })
 
     action_button = new_widget("button") {
-        label = _("Cull selection"),
+        label = _("Cull Selection"),
         tooltip = _("Score the selected images in bursts and rate/tag them. Click again to cancel."),
     }
 
@@ -2306,8 +2306,8 @@ local function install_panel()
     end)
 
     local verify_button = new_widget("button") {
-        label = _("Verify selection"),
-        tooltip = _("Score the selected images as Cull selection would and change nothing. To check lists the photos whose stars a cull would change, ratings you changed by hand since the last cull, and bursts whose Keeper tags don't match; Fix culls those bursts. Scores come from the cache, so a repeat is quick."),
+        label = _("Verify Selection"),
+        tooltip = _("Score the selected images as Cull Selection would and change nothing. To check lists the photos whose stars a cull would change, ratings you changed by hand since the last cull, and bursts whose Keeper tags don't match; Fix culls those bursts. Scores come from the cache, so a repeat is quick."),
     }
     verify_button.clicked_callback = C.guarded_callback(guard, "button verify", function()
         changed()
@@ -2339,40 +2339,40 @@ local function install_panel()
     end
 
     local group_widgets = {
-        check("group_native", _("Cull by native groups"),
+        check("group_native", _("Cull by Native Groups"),
             _("On: darktable's image groups are the groups keepers are picked within. Off: the first filled tag node below forms the groups; with none filled, every photo is judged alone.\nDefault: on. Turn off after an Assisted Grouping run you have not applied as darktable groups, and type Assisted Grouping in tag node 1.")),
-        new_widget("section_label") { label = _("extra grouping by tags") },
+        new_widget("section_label") { label = _("Extra Grouping by Tags") },
     }
     for n, entry in ipairs(group_tag_entries) do
         group_widgets[#group_widgets + 1] = new_widget("label") { label = string.format(_("tag node %d"), n), halign = "start" }
         group_widgets[#group_widgets + 1] = entry
     end
 
-    local run_tag_check = check("run_tag", _("Tag each run"),
-        _("Add a timestamp tag (Assisted Culling|Run|YYYY-MM-DD HH:MM) to every image a run writes, so the latest run's photos can be filtered apart from earlier ones. Stamps accumulate; remove old ones in darktable's tag manager. Clear culling marks leaves them.\nDefault: off. Turn on when re-running a shoot and you want to review only what changed."))
+    local run_tag_check = check("run_tag", _("Tag Each Run"),
+        _("Add a timestamp tag (Assisted Culling|Run|YYYY-MM-DD HH:MM) to every image a run writes, so the latest run's photos can be filtered apart from earlier ones. Stamps accumulate; remove old ones in darktable's tag manager. Clear Culling Marks leaves them.\nDefault: off. Turn on when re-running a shoot and you want to review only what changed."))
 
     local option_checks = {
-        new_widget("section_label") { label = _("speed") },
-        check("apply_while_scoring", _("Apply ratings while scoring"),
+        new_widget("section_label") { label = _("Speed") },
+        check("apply_while_scoring", _("Apply Ratings While Scoring"),
             _("Faster overall on big batches, but darktable's UI shares the CPU with the scorer; turn off if the UI lags. No effect with first picks on: ratings wait until the picks are chosen.\nDefault: off. Turn on for batches of several hundred frames.")),
-        check("fast_jpeg_decode", _("Fast JPEG decoding"),
+        check("fast_jpeg_decode", _("Fast JPEG Decoding"),
             _("Decodes JPEGs and RAW previews at reduced size, several times faster. Sharpness scores shift slightly, but keepers are ranked within each burst, so picks rarely change.\nDefault: on. Turn off when frames are close in sharpness and you want full-size scores.")),
     }
-    option_checks[#option_checks + 1] = new_widget("section_label") { label = _("penalties (each lowers stars by one)") }
+    option_checks[#option_checks + 1] = new_widget("section_label") { label = _("Penalties (Each Lowers Stars by One)") }
     for _i, f in ipairs(FLAGS) do
         if not f.rejects then
             local label = f.tag:match("|(.+)$")
-            option_checks[#option_checks + 1] = check("penalise_" .. f.name, string.format(_("%s lowers stars"), label),
+            option_checks[#option_checks + 1] = check("penalise_" .. f.name, string.format(_("%s Lowers Stars"), label),
                 string.format(_("On: %s images get one star less. Off: they're still tagged %s (if it's on under tags written) but keep their rating.\nDefault: on. Turn off when the flag is the look you want, e.g. low-key or high-key for the exposure flags."), label, label))
         end
     end
-    option_checks[#option_checks + 1] = new_widget("section_label") { label = _("blank frames and vehicles") }
-    option_checks[#option_checks + 1] = choice_combo("blank_share", _("blank frames"),
+    option_checks[#option_checks + 1] = new_widget("section_label") { label = _("Blank Frames and Vehicles") }
+    option_checks[#option_checks + 1] = choice_combo("blank_share", _("Blank Frames"),
         _("Rejects a frame when at least this share of it is one flat colour (lens cap, black barrier, blown sky, fog), and tags it Blank and Why|Blank. It is never a keeper, even when the whole burst is blank. A dark frame with lit headlights is not blank.\nDefault: 95%. Pick off to rate blank frames like any other."),
         { _("off"), _("99% one colour"), _("97% one colour"), _("95% one colour"), _("90% one colour") })
-    option_checks[#option_checks + 1] = check("no_vehicle_leave", _("Leave frames with no vehicle"),
+    option_checks[#option_checks + 1] = check("no_vehicle_leave", _("Leave Frames with No Vehicle"),
         _("Motorsport and subject tracking (SAM) sharpness only, when the vehicle detector is installed. A frame where it finds no car is never a keeper, keeps its rating and gets Why|No vehicle, instead of being scored on the centre of the frame. A burst with no car in any frame is left alone.\nDefault: off. Turn on for car shoots once you've checked a run's No vehicle frames really are empty."))
-    option_checks[#option_checks + 1] = check("car_boxes_only", _("Only car boxes (from tagging)"),
+    option_checks[#option_checks + 1] = check("car_boxes_only", _("Only Car Boxes (From Tagging)"),
         _("Motorsport and subject tracking (SAM) sharpness only, when the vehicle detector is installed. Once Assisted Tagging has run on these images with its car check, sharpness is judged only on the boxes it kept as cars, so a marshal, shed or railing box is never the subject. A frame whose boxes it all dropped counts as no vehicle. Images tagging hasn't run on, or that changed since, use every detector box.\nDefault: on. Turn off to judge every detector box."))
 
     local tag_checks = {}
@@ -2404,13 +2404,13 @@ local function install_panel()
     end
 
     clear_button = new_widget("button") {
-        label = _("Clear culling marks"),
+        label = _("Clear Culling Marks"),
         tooltip = _("Remove the Assisted Culling tags from the selected images, with progress in the panel and a job bar you can cancel. Star ratings and colour labels are not changed."),
     }
 
     clear_button.clicked_callback = C.guarded_callback(guard, "button clear", function()
         local selected = copy_images(dt.gui.action_images)
-        if queue_if_busy(_("Clear culling marks"), #selected > 0, function()
+        if queue_if_busy(_("Clear Culling Marks"), #selected > 0, function()
             is_clearing = true
             local ok_q, err_q = pcall(M.clear_marks, selected)
             is_clearing = false
@@ -2428,13 +2428,13 @@ local function install_panel()
     end)
 
     local restore_button = new_widget("button") {
-        label = _("Restore previous ratings"),
-        tooltip = _("Set the selected images back to the star rating they had before the last run that changed a rating. An image you rated since that run is left alone. Tags are not changed; use Clear culling marks for those."),
+        label = _("Restore Previous Ratings"),
+        tooltip = _("Set the selected images back to the star rating they had before the last run that changed a rating. An image you rated since that run is left alone. Tags are not changed; use Clear Culling Marks for those."),
     }
 
     restore_button.clicked_callback = C.guarded_callback(guard, "button restore", function()
         local selected = copy_images(dt.gui.action_images)
-        if queue_if_busy(_("Restore previous ratings"), #selected > 0, function()
+        if queue_if_busy(_("Restore Previous Ratings"), #selected > 0, function()
             is_clearing = true
             local ok_q, err_q = pcall(M.restore_ratings, selected)
             is_clearing = false
@@ -2452,13 +2452,13 @@ local function install_panel()
     end)
 
     local reset_button = new_widget("button") {
-        label = _("Reset ratings to 0"),
+        label = _("Reset Ratings to 0"),
         tooltip = _("Set the selected images to 0 stars, a few at a time, with progress in the panel and a job bar you can cancel. A rejected image is set to 0 stars too. Tags are not changed."),
     }
 
     reset_button.clicked_callback = C.guarded_callback(guard, "button reset", function()
         local selected = copy_images(dt.gui.action_images)
-        if queue_if_busy(_("Reset ratings to 0"), #selected > 0, function()
+        if queue_if_busy(_("Reset Ratings to 0"), #selected > 0, function()
             is_clearing = true
             local ok_q, err_q = pcall(M.reset_ratings, selected)
             is_clearing = false
@@ -2476,7 +2476,7 @@ local function install_panel()
     end)
 
     local why_button = new_widget("button") {
-        label = _("Why these ratings?"),
+        label = _("Why These Ratings?"),
         tooltip = _("Explain the selected images from the last run's report: stars, rank in the burst, flags. Changes nothing."),
     }
 
@@ -2507,7 +2507,7 @@ local function install_panel()
     end)
 
     local report_button = new_widget("button") {
-        label = _("Open last report"),
+        label = _("Open Last Report"),
         tooltip = _("Open last-run.csv (every frame's rank, score, stars and why) in your spreadsheet app. The newest 20 runs are kept in assisted_culling/reports in darktable's config folder."),
     }
 
@@ -2558,34 +2558,34 @@ local function install_panel()
     })
 
     local page_widgets = {
-        { new_widget("section_label") { label = _("how frames are scored") },
+        { new_widget("section_label") { label = _("How Frames Are Scored") },
           genre_combo, rank_combo, sharp_combo, exp_combo,
-          new_widget("section_label") { label = _("keepers per burst") },
+          new_widget("section_label") { label = _("Keepers per Burst") },
           keep_combo, keep_margin_combo,
-          check("spread_keepers", _("Spread keepers over the burst"),
+          check("spread_keepers", _("Spread Keepers Over the Burst"),
               _("Cuts each burst into as many equal stretches of capture order as keepers allowed and keeps the sharpest frame of each, so a car through a corner keeps its entry and exit, not three near-copies of one moment. A stretch whose best frame scores under 95% of the burst's best keeps nothing; the next-sharpest frame overall is kept instead. A keeper picked this way over a sharper frame gets Why|Spread. Needs more than one keeper allowed.\nDefault: off. Unproven: compare a run with it on and off against your picks (eval_culling.py) before relying on it.")),
-          check("keep_angles", _("Keep the other angles"),
+          check("keep_angles", _("Keep the Other Angles"),
               _("When a burst shows the car from more than one side (the detector's box changes shape by 1.3 times or more), also keeps the best frame of each other view that scores at least 70% of the burst's best, one star below the sharpest keeper. A frame with the car cut off by the frame edge never keeps while the burst has a frame showing the whole car. The frame kept this way gets Why|Other angle. Needs the detector (motorsport sharpness).\nDefault: on.")),
-          check("motion_look", _("Keep a motion-blur frame"),
+          check("motion_look", _("Keep a Motion-Blur Frame"),
               _("Also keeps the one frame per burst whose blur runs most nearly in a single straight line (straightness 0.75 or more) with the car in view and not cut off, on top of the sharp keepers and never in place of one. Blurred objects in front of the car do not rule it out. Rated by how straight the blur is: 3 stars from 0.75, 4 from 0.80, 5 from 0.85. The frame kept this way gets Why|Motion look. Needs the detector (motorsport sharpness).\nDefault: on.")),
-          new_widget("section_label") { label = _("close calls (best frame that lost within 5% of the last keeper)") },
-          check("number_reads", _("Break close calls on the number read"),
+          new_widget("section_label") { label = _("Close Calls (Best Frame That Lost Within 5% of the Last Keeper)") },
+          check("number_reads", _("Break Close Calls on the Number Read"),
               _("In a close call (the last keeper and the best frame that lost score within 5%), keeps the frame where tagging read the car's number clearly: both frames must read the same number and the dropped one read it at least 0.10 more confidently. Reads come from tagging's last run on this collection (its boxes.json); frames changed since, or missing from it, keep the sharpness ranking. The frame kept this way gets Why|Number clearer.\nDefault: off. Unproven: compare a run with it on and off against your picks (eval_culling.py) before relying on it.")),
-          check("sharp_judge", _("Break close calls with the sharpness judge"),
+          check("sharp_judge", _("Break Close Calls with the Sharpness Judge"),
               _("In a close call that the number read left alone, scores the car crop of the burst's top frames (up to 3 within 5% of the best) with a learned image-quality model (HyperIQA) and keeps the frame it scores at least 5% clearer. Motorsport sharpness only. Needs hyperiqa_model.onnx and hyperiqa_model.onnx.data in the plugin's models folder (see the README); each judged frame is decoded again, so a run takes longer. The frame kept this way gets Why|Subject clearer.\nDefault: off. Unproven: compare a run with it on and off against your picks (eval_culling.py) before relying on it.")),
-          new_widget("section_label") { label = _("ratings") },
+          new_widget("section_label") { label = _("Ratings") },
           non_keeper_combo, reject_cap_combo, star_scale_combo,
-          check("star_slope", _("Rate keepers against each other"),
+          check("star_slope", _("Rate Keepers Against Each Other"),
               _("Rates the run's keepers against each other instead of against fixed score steps: ranked by sharpness and cut into five equal groups, the sharpest group 5 stars, the next 4, down to 1. Changes stars only, never which frames are kept. Star strictness does not move these keepers' stars. Other angle keepers stay one star below their burst's best, Motion look keepers keep their own rating, and a flag still costs its stars. Runs with fewer than 10 keepers, and the relative and binary ranking, use the fixed steps.\nDefault: on.")),
           first_picks_combo },
         group_widgets,
         option_checks,
         tag_checks,
-        { new_widget("section_label") { label = _("cull (writes ratings and tags)") },
+        { new_widget("section_label") { label = _("Cull (Writes Ratings and Tags)") },
           run_tag_check, action_button, verify_button },
-        { new_widget("section_label") { label = _("explain the last run (changes nothing)") },
+        { new_widget("section_label") { label = _("Explain the Last Run (Changes Nothing)") },
           why_button, report_button,
-          new_widget("section_label") { label = _("undo") },
+          new_widget("section_label") { label = _("Undo") },
           clear_button, restore_button, reset_button },
     }
     local pages = {}
