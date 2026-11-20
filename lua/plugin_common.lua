@@ -461,6 +461,81 @@ function C.ledger_prune(ledger, exists)
     return #gone, false
 end
 
+-- Plugin helpers ---------------------------------------------------------------
+-- Used identically by the three plugins; each passes in the darktable handles it holds.
+
+-- An EXIF "YYYY:MM:DD HH:MM:SS" as epoch seconds, nil when absent, malformed or before 1970.
+function C.exif_time_to_epoch(s)
+    if not s then return nil end
+    local y, mo, d, h, mi, se = s:match("(%d+):(%d+):(%d+) (%d+):(%d+):(%d+)")
+    -- Before 1970 (a zero date, an old scan) os.time raises on Windows: undated.
+    if not y or tonumber(y) < 1970 then return nil end
+    local ok, epoch = pcall(os.time, {
+        year = tonumber(y), month = tonumber(mo), day = tonumber(d),
+        hour = tonumber(h), min = tonumber(mi), sec = tonumber(se),
+        isdst = false, -- constant offset, so a DST change can't split a burst
+    })
+    return ok and epoch or nil
+end
+
+-- " | ~4m 05s left" for a run `done` of `total` after `elapsed` seconds; "" while too early or finished.
+function C.fmt_eta(elapsed, done, total)
+    if elapsed < 3 or done <= 0 or done >= total then return "" end
+    local remaining = math.ceil(elapsed * (total - done) / done)
+    return string.format(" | ~%dm %02ds left", remaining // 60, remaining % 60)
+end
+
+-- Whether image `id` is still in the library (`dt` is darktable's module). A get_image error counts as
+-- gone, as does a stale image whose fields can't be read.
+function C.image_exists(dt, id)
+    local ok, name = pcall(function()
+        local img = dt.database.get_image(id)
+        return img and img.filename
+    end)
+    return ok and name ~= nil
+end
+
+-- Writes `rows` (field lists) to `path` as CSV lines; false when the file can't be opened.
+function C.write_rows(path, rows)
+    local f = io.open(path, "w")
+    if not f then return false end
+    for _, r in ipairs(rows) do f:write(C.csv_line(r), "\n") end
+    f:close()
+    return true
+end
+
+-- { [tag name] = true } for image `img` (`tags` is darktable's dt.tags).
+function C.tags_of(tags, img)
+    local have = {}
+    for _, t in ipairs(tags.get_tags(img)) do have[t.name] = true end
+    return have
+end
+
+-- The plugin's folder: the preference `folder` when set, else the parent of the python/ folder
+-- holding `script`, else the folder of `script` (`this_dir` when there is no script).
+function C.plugin_root(folder, script, this_dir)
+    if folder ~= "" then return folder end
+    local script_dir = (script and script:match("^(.*)[/\\]")) or this_dir
+    return script_dir:match("^(.*)[/\\]python$") or script_dir
+end
+
+-- The Python to run: the plugin's .venv when it has one, else the system python (`df` is
+-- lib/dtutils.file).
+function C.python_bin(root, this_dir, is_windows, df)
+    local found = C.first_existing({
+        root .. "/.venv/Scripts/python.exe",
+        root .. "/.venv/bin/python",
+        this_dir .. "/../.venv/Scripts/python.exe",
+        this_dir .. "/../.venv/bin/python",
+    })
+    if found then return found end
+    local v = df.check_if_bin_exists(is_windows and "python" or "python3")
+    if not v then
+        v = is_windows and "python" or "python3"
+    end
+    return v
+end
+
 -- CSV --------------------------------------------------------------------------
 -- The manifests and results the plugins trade with their Python helpers.
 

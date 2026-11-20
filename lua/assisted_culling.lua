@@ -612,12 +612,7 @@ local function score_script()
     return found or (THIS_DIR .. "/score_images.py")
 end
 
-local function plugin_root(script)
-    local folder = plugin_folder_pref()
-    if folder ~= "" then return folder end
-    local script_dir = (script and script:match("^(.*)[/\\]")) or THIS_DIR
-    return script_dir:match("^(.*)[/\\]python$") or script_dir
-end
+local function plugin_root(script) return C.plugin_root(plugin_folder_pref(), script, THIS_DIR) end
 
 -- The best installed vehicle detector in models/ (M.pick_detector), logged; "" when none is.
 local function detector_path(script)
@@ -628,22 +623,7 @@ local function detector_path(script)
     return dir .. file
 end
 
-local function python_bin(script)
-    local root = plugin_root(script)
-    local found = first_existing({
-        root .. "/.venv/Scripts/python.exe",
-        root .. "/.venv/bin/python",
-        THIS_DIR .. "/../.venv/Scripts/python.exe",
-        THIS_DIR .. "/../.venv/bin/python",
-    })
-    if found then return found end
-
-    local v = df.check_if_bin_exists(IS_WINDOWS and "python" or "python3")
-    if not v then
-        v = IS_WINDOWS and "python" or "python3"
-    end
-    return v
-end
+local function python_bin(script) return C.python_bin(plugin_root(script), THIS_DIR, IS_WINDOWS, df) end
 
 local shell_quote, command_line, run_async_python = C.shell_quote, C.command_line, C.run_async_python
 
@@ -830,11 +810,7 @@ local function tag_only_flags()
     return table.concat(names, ",")
 end
 
-local function fmt_eta(elapsed, done, total)
-    if elapsed < 3 or done <= 0 or done >= total then return "" end
-    local remaining = math.ceil(elapsed * (total - done) / done)
-    return string.format(" | ~%dm %02ds left", remaining // 60, remaining % 60)
-end
+local fmt_eta = C.fmt_eta
 
 -- Lines reach disk at once, except while a scorer process appends its stderr to
 -- the same file (run_log.hold to run_log.release).
@@ -886,11 +862,7 @@ local function pretty(s)
     return (tostring(s):gsub("_", " "))
 end
 
-local function tags_of(img)
-    local have = {}
-    for _, t in ipairs(tags.get_tags(img)) do have[t.name] = true end
-    return have
-end
+local function tags_of(img) return C.tags_of(tags, img) end
 
 -- Returns 1 if a write was needed (attach/detach), else 0. Creates the tag only
 -- to attach it, so a branch that is turned off never appears in the tag list.
