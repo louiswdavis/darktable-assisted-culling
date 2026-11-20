@@ -327,7 +327,7 @@ PYTHON.progress = "2,3,1,2"
 
 -- Cull Selection --------------------------------------------------------------------
 click("Cull Selection", {})
-check("cull, nothing selected: asks for a selection", last_print(), "Assisted Culling: select some images first")
+check("cull, nothing selected: asks for a selection", last_print(), "Assisted Culling: Select some images first.")
 check("cull, nothing selected: no job bar", #jobs, 0)
 check("cull, nothing selected: the scorer is not started", #PYTHON.runs, 0)
 
@@ -336,7 +336,7 @@ click("Cull Selection", all)
 check("cull: tags were attached", #selected_at_attach > 0, true)
 check("cull: the selection stays while tags are attached", math.min(table.unpack(selected_at_attach)), #all)
 check("cull: the selection is the same at the end", #dt.gui.action_images, #all)
-check("cull: says it started as soon as it is clicked", prints[1], "Assisted Culling: started on 3 images…")
+check("cull: says it started as soon as it is clicked", prints[1], "Assisted Culling: Started on 3 images…")
 check("cull: one job bar", #jobs, 1)
 check("cull: the job bar is titled", jobs[1] and jobs[1].title, "Assisted Culling")
 check("cull: the job bar is closed at the end", jobs[1] and jobs[1].valid, false)
@@ -354,7 +354,7 @@ check("cull: the keeper is tagged", has_tag(jpeg1, "Assisted Culling|Keeper"), t
 check("cull: the keeper tag stays off the other frame", has_tag(jpeg2, "Assisted Culling|Keeper"), false)
 check("cull: the unreadable frame is untouched", jpeg3.rating, 0)
 check("cull: the locked frame is untouched", jpeg4.rating, 0)
-check("cull: the end message", last_print(), "Assisted Culling: done. 1 keepers, 1 not kept."
+check("cull: the end message", last_print(), "Assisted Culling: Done. 1 keepers, 1 not kept."
     .. " Left out: 1 unreadable; 1 locked (see log)."
     .. " No groups found: every frame judged alone (group first for keepers).")
 check("cull: the button is back to its label", button(panel, "Cull Selection") ~= nil, true)
@@ -457,8 +457,8 @@ sharp_combo.changed_callback(sharp_combo)
 jpeg1.rating, jpeg2.rating = 0, 0
 PYTHON.exit = 1
 click("Cull Selection", { jpeg1, jpeg2 })
-check("cull, scorer fails: says so", printed("Assisted Culling: the scorer stopped with exit code 1")
-    or printed("Assisted Culling: failed. "), true)
+check("cull, scorer fails: says so", printed("Assisted Culling: The scorer stopped with exit code 1")
+    or printed("Assisted Culling: Failed. "), true)
 check("cull, scorer fails: the panel line is cleared", status_label.label, "")
 check("cull, scorer fails: the job bar is closed", jobs[1] and jobs[1].valid, false)
 -- a crash: the log ends in a traceback, cut to its tail in the toast
@@ -477,7 +477,7 @@ PYTHON.log = nil
 PYTHON.exit = 0
 
 click("Cull Selection", { jpeg4 })
-check("cull, all locked: explains", last_print():find("every selected image is tagged Assisted Culling|Locked", 1, true) ~= nil, true)
+check("cull, all locked: explains", last_print():find("Every selected image is tagged Assisted Culling|Locked", 1, true) ~= nil, true)
 
 -- a collapsed group: darktable reports only jpeg1 as selected, the act-on list also holds the hidden jpeg2
 jpeg1.rating, jpeg2.rating = 0, 0
@@ -496,7 +496,7 @@ dt.tags.find = function() error("tag list unavailable") end
 click("Cull Selection", { jpeg1, jpeg2 })
 dt.tags.find = real_find
 check("cull, error before the run starts: says so and the button is back to its label",
-    tostring(printed("Assisted Culling: couldn't run. ")) .. "; " .. tostring(button(panel, "Cull Selection") ~= nil), "true; true")
+    tostring(printed("Assisted Culling: Couldn't run. ")) .. "; " .. tostring(button(panel, "Cull Selection") ~= nil), "true; true")
 jpeg1.rating = 0
 if button(panel, "Cull Selection") then click("Cull Selection", { jpeg1, jpeg2 }) end
 check("cull, error before the run starts: the next click starts a run", #PYTHON.runs .. " run, keeper rated " .. jpeg1.rating, "1 run, keeper rated 3")
@@ -507,7 +507,7 @@ on_sleep = function() if status_now ~= "" then error("darktable is closing") end
 click("Cull Selection", { jpeg1, jpeg2 })
 on_sleep = nil
 check("cull, error during the run: says so, the panel line is cleared and the button is back to its label",
-    tostring(printed("Assisted Culling: couldn't run. ")) .. "; '" .. status_label.label .. "'; "
+    tostring(printed("Assisted Culling: Couldn't run. ")) .. "; '" .. status_label.label .. "'; "
     .. tostring(button(panel, "Cull Selection") ~= nil), "true; ''; true")
 
 -- Cancelled partway with "Apply Ratings While Scoring": the scorer is still going, the job bar's X is clicked
@@ -526,8 +526,8 @@ PYTHON.hang = false
 while_scoring.value = false
 while_scoring.clicked_callback(while_scoring)
 check("cull, cancelled while scoring: the message names the way to undo what was written", cancelled_rated .. " / " .. last_print(),
-    "Assisted Culling: cancelled. 2 of 2 images were already rated and keep their changes. Run again to finish, or use Clear Culling Marks to remove the tags and Restore Previous Ratings to put the star ratings back."
-    .. " / Assisted Culling: cancelled. 2 of 2 images were already rated and keep their changes. Run again to finish, or use Clear Culling Marks to remove the tags.")
+    "Assisted Culling: Cancelled. 2 of 2 images were already rated and keep their changes. Run again to finish, or use Clear Culling Marks to remove the tags and Restore Previous Ratings to put the star ratings back."
+    .. " / Assisted Culling: Cancelled. 2 of 2 images were already rated and keep their changes. Run again to finish, or use Clear Culling Marks to remove the tags.")
 check("cull, cancelled while scoring: no Lua error", lua_errors(), nil)
 
 -- Bursts page: native groups and tag nodes ------------------------------------------
@@ -587,10 +587,10 @@ check("bursts page: native off, node 2 cuts node 1's groups",
 check("bursts page: native off, Assisted Grouping groups by each frame's latest run",
     pools(false, "Assisted Grouping", "", ""), "1 2 3 4 4")
 check("bursts page: nothing set, every frame alone", pools(false, "", "", ""), "1 2 3 4 5")
-check("bursts page: nothing set, the end message has no grouping notice", last_print(), "Assisted Culling: done. 1 keepers, 4 not kept.")
+check("bursts page: nothing set, the end message has no grouping notice", last_print(), "Assisted Culling: Done. 1 keepers, 4 not kept.")
 check("bursts page: a node that matches no frame leaves every frame alone", pools(false, "No|Such", "", ""), "1 2 3 4 5")
 check("bursts page: a node that matches no frame ends with the grouping notice", last_print(),
-    "Assisted Culling: done. 1 keepers, 4 not kept. No groups found: every frame judged alone (group first for keepers).")
+    "Assisted Culling: Done. 1 keepers, 4 not kept. No groups found: every frame judged alone (group first for keepers).")
 check("timing line splits the progress updates into job bar, panel line and toast",
     (read_file(ROOT .. "/config/assisted_culling.log") or ""):find(
         "in progress updates %(job bar [%d.]+s, panel line [%d.]+s, toast [%d.]+s%); %d+ rating writes, %d+ Keeper / Rejected tag writes; final drain took") ~= nil, true)
@@ -630,16 +630,16 @@ check("bursts page: no Lua error", lua_errors(), nil)
 
 -- Clear Culling Marks ---------------------------------------------------------------
 click("Clear Culling Marks", {})
-check("clear, nothing selected: asks for a selection", last_print(), "Assisted Culling: select some images first")
+check("clear, nothing selected: asks for a selection", last_print(), "Assisted Culling: Select some images first.")
 
 click("Clear Culling Marks", { jpeg1, jpeg2, jpeg3 })
-check("clear: says it started", prints[1], "Assisted Culling: clearing marks on 3 images…")
+check("clear: says it started", prints[1], "Assisted Culling: Clearing marks on 3 images…")
 check("clear: progress goes to the panel line", status_shown("clearing marks 3 / 3"), true)
 check("clear: the panel line is cleared at the end", status_label.label, "")
 check("clear: the keeper tag is gone", has_tag(jpeg1, "Assisted Culling|Keeper"), false)
 check("clear: no culling tags left", #jpeg1.tags + #jpeg2.tags, 0)
 check("clear: the end message", last_print(),
-    "Assisted Culling: removed culling tags from 1 of 3 images. Star ratings were not changed.")
+    "Assisted Culling: Removed culling tags from 1 of 3 images. Star ratings were not changed.")
 check("clear: the hinter is never used", hinter_calls, 0)
 check("clear: one job bar, closed at the end", #jobs .. " " .. tostring(jobs[1] and jobs[1].valid), "1 false")
 check("clear: the log has the timing line",
@@ -662,7 +662,7 @@ on_sleep = nil
 check("clear, cancelled: the first image is cleared, the next keeps its tag",
     tostring(has_tag(jpeg1, "Assisted Culling|Keeper")) .. " " .. tostring(has_tag(jpeg2, "Assisted Culling|Keeper")), "false true")
 check("clear, cancelled: the message counts both", last_print(),
-    "Assisted Culling: clear cancelled. Removed culling tags from 1 of 3 images; 2 not reached keep their tags.")
+    "Assisted Culling: Clear cancelled. Removed culling tags from 1 of 3 images; 2 not reached keep their tags.")
 check("clear, cancelled: the panel line is cleared", status_label.label, "")
 
 -- To check: the photos the cancelled clear didn't reach
@@ -683,9 +683,9 @@ check("To check: the cancelled clear shows in the box", to_check.visible, true)
 check("To check: no ratings back, the line names no log fragment",
     (read_file(CHECKS_FILE) or ""):find("Cull\tno ratings came back from the scorer (see the log)\t\t\t\t", 1, true) ~= nil, true)
 check("To check: the row names the action and the count",
-    (clear_row()[1].text or ""):gsub("\n", " "), "Clear: clear cancelled: 2 photos not reached keep their tags")
+    (clear_row()[1].text or ""):gsub("\n", " "), "Clear: Clear cancelled: 2 photos not reached keep their tags.")
 check("To check: the item is saved for a restart",
-    (read_file(CHECKS_FILE) or ""):find("Clear\tclear cancelled: 2 photos not reached keep their tags\t2,3\t", 1, true) ~= nil, true)
+    (read_file(CHECKS_FILE) or ""):find("Clear\tClear cancelled: 2 photos not reached keep their tags.\t2,3\t", 1, true) ~= nil, true)
 selection_sets = 0
 ;(button(clear_row(), "Select") or { clicked_callback = function() end }).clicked_callback()
 check("To check: Select selects the photos not reached", selection_sets .. " " .. #dt.gui.action_images, "1 2")
@@ -708,12 +708,12 @@ click("Clear Culling Marks", { jpeg2 })
 -- Restore Previous Ratings ----------------------------------------------------------
 local PREVIOUS_RATINGS = ROOT .. "/config/assisted_culling.previous-ratings.csv"
 click("Restore Previous Ratings", {})
-check("restore, nothing selected: asks for a selection", last_print(), "Assisted Culling: select some images first")
+check("restore, nothing selected: asks for a selection", last_print(), "Assisted Culling: Select some images first.")
 
 os.remove(PREVIOUS_RATINGS)
 click("Restore Previous Ratings", { jpeg1, jpeg2 })
 check("restore, no run yet: says so", last_print(),
-    "Assisted Culling: no run has changed a rating yet, so there is nothing to restore.")
+    "Assisted Culling: No run has changed a rating yet, so there is nothing to restore.")
 
 jpeg1.rating, jpeg2.rating, jpeg3.rating = 5, 4, 2
 click("Cull Selection", { jpeg1, jpeg2, jpeg3 })
@@ -737,11 +737,11 @@ check("restore: the panel line is cleared at the end", status_label.label, "")
 check("restore: the selection is never changed", selection_sets, 0)
 check("restore: tags are kept", has_tag(jpeg1, "Assisted Culling|Keeper"), true)
 check("restore: the end message", last_print(),
-    "Assisted Culling: restored the previous rating of 1 of 3 images, 1 rated since the run left alone. Tags were not changed.")
+    "Assisted Culling: Restored the previous rating of 1 of 3 images, 1 rated since the run left alone. Tags were not changed.")
 
 click("Restore Previous Ratings", { jpeg1 })
 check("restore, twice: the second click changes nothing", jpeg1.rating .. "; " .. last_print(),
-    "5; Assisted Culling: restored the previous rating of 0 of 1 images, 1 rated since the run left alone. Tags were not changed.")
+    "5; Assisted Culling: Restored the previous rating of 0 of 1 images, 1 rated since the run left alone. Tags were not changed.")
 
 -- another file with the same image id (a different library) is not touched
 write_file(PREVIOUS_RATINGS, "1,0,5,/elsewhere/DSC00001.JPG\n")
@@ -763,7 +763,7 @@ click("Cull Selection", { jpeg1, jpeg2 })
 local removed = setmetatable({}, { __index = function() error("image no longer in the library") end })
 click("Restore Previous Ratings", { jpeg1, removed, jpeg2 })
 check("restore, an image removed from the library: the others are back", jpeg1.rating .. " " .. jpeg2.rating .. "; " .. last_print(),
-    "5 4; Assisted Culling: restored the previous rating of 2 of 3 images, 1 couldn't be updated. Tags were not changed.")
+    "5 4; Assisted Culling: Restored the previous rating of 2 of 3 images, 1 couldn't be updated. Tags were not changed.")
 check("restore: no Lua error", lua_errors(), nil)
 
 -- Reject mode: a frame that is no longer a keeper loses the stars a run wrote, not the user's own
@@ -813,7 +813,7 @@ local function verify_row(text)
 end
 PYTHON.results = "21,0.90,,,1,3,\n22,0.90,,,1,4,\n23,0.90,,,1,5,\n24,0.90,,,1,2,\n"
 click("Verify Selection", verify_set)
-check("verify: says it started", printed("Assisted Culling: verify started on 4 images…"), true)
+check("verify: says it started", printed("Assisted Culling: Verify started on 4 images…"), true)
 check("verify: the scorer is not asked for a report", #PYTHON.runs .. " "
     .. tostring(table.concat((PYTHON.runs[1] or { argv = {} }).argv, " "):find("--report", 1, true)), "1 nil")
 check("verify: no rating and no Keeper tag is written",
@@ -823,23 +823,23 @@ check("verify: no rating and no Keeper tag is written",
 check("verify: the last cull's report and saved ratings are kept", read_file(REPORT) .. tostring(read_file(PREVIOUS_RATINGS) == ratings_file),
     "the last cull's report\ntrue")
 check("verify: the toast counts what differs", last_print(),
-    "Assisted Culling: verify only, nothing changed. 1 of 4 images would get other stars from a cull now, 1 ratings were changed by hand, 2 bursts have the wrong Keeper tags. See To check.")
+    "Assisted Culling: Verify only, nothing changed. 1 of 4 images would get other stars from a cull now, 1 ratings were changed by hand, 2 bursts have the wrong Keeper tags. See To check.")
 local differ = verify_row("photos would get other stars")
 check("verify: one row for the photos a cull would rate differently, with Fix",
     (differ[1].text or ""):gsub("\n", " ") .. "; " .. tostring(differ[2].text):gsub("\n%s*", " ") .. "; " .. tostring(differ[3][2].visible),
-    "Verify: 1 photos would get other stars from a cull now; Fix culls their 1 bursts (1 photos); • DSC00023.JPG: 0 stars, a cull now gives 5; true")
-local by_hand = verify_row("you changed")
+    "Verify: 1 photos would get other stars from a cull now; Fix culls their 1 bursts (1 photos).; • DSC00023.JPG: 0 stars, a cull now gives 5; true")
+local by_hand = verify_row("You changed")
 check("verify: ratings changed by hand get their own row, with no Fix",
     tostring(by_hand[2].text):gsub("\n%s*", " ") .. "; " .. tostring(by_hand[3][1].visible) .. " " .. tostring(by_hand[3][2].visible),
     "• DSC00022.JPG: 1 stars, the last cull wrote 4; true false")
 check("verify: the Keeper row lists the bursts' photos, Fix = cull",
-    (read_file(CHECKS_FILE) or ""):find("Verify\t2 bursts have no Keeper tag or more than a cull gives; Fix culls them (2 photos)\t23,24\tcull\t", 1, true) ~= nil, true)
+    (read_file(CHECKS_FILE) or ""):find("Verify\t2 bursts have no Keeper tag or more than a cull gives; Fix culls them (2 photos).\t23,24\tcull\t", 1, true) ~= nil, true)
 ;(button(verify_row("bursts have no Keeper tag"), "Fix") or { clicked_callback = function() end }).clicked_callback()
 check("verify, Fix: Cull Selection ran on those bursts only",
     never_culled.rating .. " " .. tostring(has_tag(untagged, "Assisted Culling|Keeper")) .. " " .. hand_changed.rating, "5 true 1")
 click("Verify Selection", verify_set)
 check("verify again, after Fix: only the hand-changed rating is left", last_print(),
-    "Assisted Culling: verify only, nothing changed. 0 of 4 images would get other stars from a cull now, 1 ratings were changed by hand, 0 bursts have the wrong Keeper tags. See To check.")
+    "Assisted Culling: Verify only, nothing changed. 0 of 4 images would get other stars from a cull now, 1 ratings were changed by hand, 0 bursts have the wrong Keeper tags. See To check.")
 check("verify again: the Keeper row is gone", verify_row("bursts have no Keeper tag")[1].text, nil)
 check("verify: no Lua error", lua_errors(), nil)
 
@@ -856,12 +856,12 @@ check("detail tags: every Keeper / Rejected tag is attached before the first det
     .. " Assisted Culling|Cut Off, Assisted Culling|Why|Far behind, Assisted Culling|Why|Far behind")
 check("detail tags: a second job bar, both closed at the end",
     #jobs .. " " .. tostring(jobs[2] and jobs[2].title) .. " " .. tostring(jobs[1].valid) .. " " .. tostring(jobs[2] and jobs[2].valid),
-    "2 Assisted Culling: writing detail tags false false")
+    "2 Assisted Culling: Writing detail tags false false")
 check("detail tags: the end message says the ratings are ready and how many tags follow",
-    printed("Assisted Culling: done. 1 keepers, 2 not kept (2 rejected), 1 cut off. No groups found: every frame judged alone (group first for keepers). Ratings are ready. Now writing 4 detail tags; the job bar's x stops them."), true)
+    printed("Assisted Culling: Done. 1 keepers, 2 not kept (2 rejected), 1 cut off. No groups found: every frame judged alone (group first for keepers). Ratings are ready. Now writing 4 detail tags; the job bar's x stops them."), true)
 check("detail tags: progress goes to the panel line", status_shown("writing detail tags: image 3 / 3"), true)
 check("detail tags: the panel line is cleared at the end", status_label.label, "")
-check("detail tags: the last message counts them", last_print(), "Assisted Culling: detail tags written (4).")
+check("detail tags: the last message counts them", last_print(), "Assisted Culling: Detail tags written (4).")
 local detail_log = read_file(ROOT .. "/config/assisted_culling.log") or ""
 check("detail tags: the log has the stage's line",
     detail_log:find("apply: detail tags: 4 of 4 tag writes on 3 of 3 images in %d+s %(waited [%d.]+s for darktable, paused [%d.]+s%)\n") ~= nil, true)
@@ -870,7 +870,7 @@ check("detail tags: the tally has them", detail_log:find("2 +Assisted Culling|Wh
 
 click("Cull Selection", { detail1, detail2, detail3 })
 check("detail tags, same images again: nothing to write, no second job bar", #jobs .. " " .. last_print(),
-    "1 Assisted Culling: done. 1 keepers, 2 not kept (2 rejected), 1 cut off. No groups found: every frame judged alone (group first for keepers).")
+    "1 Assisted Culling: Done. 1 keepers, 2 not kept (2 rejected), 1 cut off. No groups found: every frame judged alone (group first for keepers).")
 
 -- the detail job bar's x after the first image: ratings and Keeper / Rejected are complete, the rest wait for a rerun
 local detail4, detail5, detail6 = image(204, "DSC00204.JPG"), image(205, "DSC00205.JPG"), image(206, "DSC00206.JPG")
@@ -883,17 +883,17 @@ check("detail tags, stopped: the first image has its tag, an outranked frame has
     .. " " .. detail5.rating .. " " .. tostring(has_tag(detail5, "Assisted Culling|Rejected")) .. " " .. tostring(has_tag(detail6, "Assisted Culling|Rejected")),
     "true false 1 false true")
 check("detail tags, stopped: the message says what is left", last_print(),
-    "Assisted Culling: detail tags stopped. 2 images still miss theirs; ratings and Keeper / Rejected are complete. Cull the same images again to write the rest.")
+    "Assisted Culling: Detail tags stopped. 2 images still miss theirs; ratings and Keeper / Rejected are complete. Cull the same images again to write the rest.")
 check("detail tags, stopped: the panel line is cleared", status_label.label, "")
 click("Cull Selection", { detail4, detail5, detail6 })
 check("detail tags, culled again after a stop: the rest are written",
     tostring(has_tag(detail5, "Assisted Culling|Why|Outranked")) .. " " .. tostring(has_tag(detail6, "Assisted Culling|Why|Far behind")) .. " " .. last_print(),
-    "true true Assisted Culling: detail tags written (2).")
+    "true true Assisted Culling: Detail tags written (2).")
 check("detail tags: no Lua error", lua_errors(), nil)
 
 -- Reset Ratings to 0 ------------------------------------------------------------------
 click("Reset Ratings to 0", {})
-check("reset, nothing selected: asks for a selection", last_print(), "Assisted Culling: select some images first")
+check("reset, nothing selected: asks for a selection", last_print(), "Assisted Culling: Select some images first.")
 check("reset, nothing selected: no job bar", #jobs, 0)
 
 jpeg1.rating, jpeg2.rating, jpeg3.rating = 5, -1, 0
@@ -906,7 +906,7 @@ check("reset: one job bar, closed at the end", #jobs .. " " .. tostring(jobs[1] 
 check("reset: the selection is never changed", selection_sets, 0)
 check("reset: tags are kept", has_tag(jpeg1, "Assisted Culling|Keeper"), true)
 check("reset: the end message", last_print(),
-    "Assisted Culling: set 2 of 3 images to 0 stars, 1 already at 0. Tags were not changed.")
+    "Assisted Culling: Set 2 of 3 images to 0 stars, 1 already at 0. Tags were not changed.")
 
 -- the job bar's x during the first slice: the frames not reached keep their rating
 local many = {}
@@ -920,7 +920,7 @@ on_sleep = nil
 check("reset, cancelled: the first slice is at 0, the rest keep their rating",
     many[1].rating .. " " .. many[12].rating .. " " .. many[13].rating .. " " .. many[30].rating, "0 0 3 3")
 check("reset, cancelled: the message counts both", last_print(),
-    "Assisted Culling: reset cancelled. 12 of 30 images were set to 0 stars; 18 not reached keep their rating.")
+    "Assisted Culling: Reset cancelled. 12 of 30 images were set to 0 stars; 18 not reached keep their rating.")
 check("reset, cancelled: the panel line is cleared", status_label.label, "")
 
 click("Reset Ratings to 0", { many[13] })
@@ -929,7 +929,7 @@ check("reset, after a cancel: the next reset runs, the panel isn't left busy", m
 jpeg1.rating, jpeg2.rating = 5, 4
 click("Reset Ratings to 0", { jpeg1, removed, jpeg2 })
 check("reset, an image removed from the library: the others are at 0", jpeg1.rating .. " " .. jpeg2.rating .. "; " .. last_print(),
-    "0 0; Assisted Culling: set 2 of 3 images to 0 stars, 1 couldn't be updated. Tags were not changed.")
+    "0 0; Assisted Culling: Set 2 of 3 images to 0 stars, 1 couldn't be updated. Tags were not changed.")
 check("reset: no Lua error", lua_errors(), nil)
 check("no job bar is closed twice", double_closes, 0)
 

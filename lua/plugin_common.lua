@@ -90,7 +90,7 @@ function C.latest_group_keys(items)
     return key_of, n_runs
 end
 
-C.GROUP_TAGS_HINT = "grouping tags found but no native groups; set grouping support to grouping tags to use them"
+C.GROUP_TAGS_HINT = "Grouping tags found but no native groups. Set grouping support to grouping tags to use them."
 
 -- GROUP_TAGS_HINT when native grouping put no photo in a group of 2+ but an item carries a
 -- grouping tag (grouping ran with Group tags on but not native groups), else nil.
@@ -963,7 +963,12 @@ function C.make_preset_controls(o)
     local export_box, export_chooser, import_box, import_chooser
     local export_checks = {} -- key -> check_button, one per store.export_options entry
 
-    local function say(msg) dt.print(o.prefix .. ": " .. msg) end
+    -- Store and preset messages start lowercase; a toast reads as a sentence after the prefix.
+    local function say(msg)
+        msg = msg:gsub("^%l", string.upper)
+        if not msg:find("[.?!…]$") then msg = msg .. "." end
+        dt.print(o.prefix .. ": " .. msg)
+    end
 
     local function index_of(name)
         for i, n in ipairs(names) do
@@ -1249,7 +1254,7 @@ function C.make_preset_controls(o)
         ctl.refresh()
         local msg = string.format('imported "%s" from %s', name, bundle)
         o.log(msg)
-        say(msg .. (name ~= m.preset and string.format(' ("%s" was taken)', m.preset) or "") .. "; pick it in the preset list")
+        say(msg .. (name ~= m.preset and string.format(' ("%s" was taken)', m.preset) or "") .. ". Pick it in the preset list.")
     end
 
     picker = dt.new_widget("combobox") {
@@ -1452,7 +1457,7 @@ function C.alerts_box(new_widget, path, log, fixes)
         local images = {}
         for _, id in ipairs(ids) do images[#images + 1] = dt.database.get_image(id) end
         if #images < #ids then
-            dt.print(string.format("%d of these photos are no longer in the library", #ids - #images))
+            dt.print(string.format("%d of these photos are no longer in the library.", #ids - #images))
         end
         return images
     end
@@ -1462,12 +1467,12 @@ function C.alerts_box(new_widget, path, log, fixes)
                       details = new_widget("text_view") { editable = false, text = "" } }
         row.button = new_widget("button") {
             label = "Select",
-            tooltip = "Select these photos in the lighttable",
+            tooltip = "Select these photos in the lighttable.",
             clicked_callback = function() dt.gui.selection(images_of(row.item.ids)) end,
         }
         row.fix = new_widget("button") {
             label = "Fix",
-            tooltip = "Make the change this line describes, to these photos only",
+            tooltip = "Make the change this line describes, to these photos only.",
             clicked_callback = function()
                 local item = row.item
                 for k, other in ipairs(alerts.items) do

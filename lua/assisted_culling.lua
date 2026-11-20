@@ -258,7 +258,7 @@ local first_picks_opts = {"off", "10", "15", "20", "30"}
 local GROUP_TAG_KEYS = { "group_tag_1", "group_tag_2", "group_tag_3" }
 -- Typed in a tag node box, it stands for each photo's own latest Assisted Grouping run.
 M.LATEST_GROUPING_NODE = "Assisted Grouping"
-M.TAG_NODE_HINT = "grouping tags found but no native groups; type Assisted Grouping in a tag node box to use them"
+M.TAG_NODE_HINT = "Grouping tags found but no native groups. Type Assisted Grouping in a tag node box to use them."
 M.CHOICES = { genre = genre_opts, rank_mode = rank_opts, sharp_mode = sharp_opts, exp_mode = exp_opts,
     keep_mode = keep_opts, keep_margin = keep_margin_opts, non_keeper = nk_opts, reject_cap = reject_cap_opts,
     star_scale = star_scale_opts, blank_share = blank_share_opts, first_picks = first_picks_opts }
@@ -383,34 +383,34 @@ M.PANEL_OTHER_KEYS = {}
 -- Keys match FLAGS names for the flag rows.
 M.TAG_TOGGLES = {
     { key = "keeper", label = "Keeper", kind = "output", writes = { "Keeper" },
-      when = "the best frame (or frames) of its burst." },
+      when = "The best frame (or frames) of its burst." },
     { key = "rejected", label = "Rejected", kind = "output", writes = { "Rejected" },
-      when = "far behind its burst's best (Why|Far behind, at most rejects per burst) or blank (Why|Blank); rated -1 whatever the non-keepers setting. A frame that only lost to a sharper one is not tagged Rejected." },
+      when = "Far behind its burst's best (Why|Far behind, at most rejects per burst) or blank (Why|Blank); rated -1 whatever the non-keepers setting. A frame that only lost to a sharper one is not tagged Rejected." },
     { key = "overexposed", label = "Overexposed", kind = "output", writes = { "Overexposed" },
-      when = "blown highlights, judged by the exposure setting." },
+      when = "Blown highlights, judged by the exposure setting." },
     { key = "underexposed", label = "Underexposed", kind = "output", writes = { "Underexposed" },
-      when = "crushed shadows, judged by the exposure setting." },
+      when = "Crushed shadows, judged by the exposure setting." },
     { key = "eyes_closed", label = "Eyes Closed", kind = "output", writes = { "Eyes Closed" },
-      when = "face & eyes sharpness only: a face big enough to judge shows no open eyes. Dark sunglasses trigger it too." },
+      when = "Face & eyes sharpness only: a face big enough to judge shows no open eyes. Dark sunglasses trigger it too." },
     { key = "cut_off", label = "Cut Off", kind = "output", writes = { "Cut Off" },
-      when = "motorsport sharpness with a vehicle detector only: the car touches the frame edge it is driving towards, or runs well past another edge. Not when every frame of the burst is cut off, or the car fills most of the frame." },
+      when = "Motorsport sharpness with a vehicle detector only: the car touches the frame edge it is driving towards, or runs well past another edge. Not when every frame of the burst is cut off, or the car fills most of the frame." },
     { key = "blocked", label = "Blocked", kind = "output", writes = { "Blocked" },
-      when = "motorsport sharpness with a vehicle detector only: a nearer vehicle covers over a quarter of the car. Not when every frame of the burst is blocked." },
+      when = "Motorsport sharpness with a vehicle detector only: a nearer vehicle covers over a quarter of the car. Not when every frame of the burst is blocked." },
     { key = "blank", label = "Blank", kind = "output", writes = { "Blank" },
-      when = "nearly the whole frame is one flat colour (lens cap, black barrier, blown sky, fog), judged by the blank frames setting. Always rejected, even when every frame of the burst is blank." },
+      when = "Nearly the whole frame is one flat colour (lens cap, black barrier, blown sky, fog), judged by the blank frames setting. Always rejected, even when every frame of the burst is blank." },
     { key = "subject_guessed", label = "Subject guessed", kind = "check", writes = { "Subject|Vehicle|Guessed" },
-      when = "subject tracking (SAM) only. The vehicle detector found nothing, so SAM got the guessed subject point: check these frames by hand." },
+      when = "Subject tracking (SAM) only. The vehicle detector found nothing, so SAM got the guessed subject point: check these frames by hand." },
     { key = "subject", label = "Subject", kind = "diag", writes = { "Subject|Vehicle|Detected" },
-      when = "subject tracking (SAM) only. Detected: the vehicle detector found the car SAM was pointed at." },
+      when = "Subject tracking (SAM) only. Detected: the vehicle detector found the car SAM was pointed at." },
     { key = "technique", label = "Technique", kind = "diag", writes = { "Technique|Panning", "Technique|Shallow DoF", "Technique|Motion Blur", "Technique|Missed Pan", "Technique|Zoom Burst", "Technique|Creative Burst" },
-      when = "the burst's EXIF switched its sharpness mode: panning at 1/125 s or slower, shallow DoF at f/4 or wider. Motorsport mode tags each frame instead: Panning (car sharp, background streaked), Motion Blur (whole frame blurred in one line), Missed Pan (car blurred across the pan), Zoom Burst (streaks run out from the frame centre). Creative Burst: most of the burst is zoom bursts or motion blur at 1/8 s or slower, so none of it is rejected as cut off or far behind." },
+      when = "The burst's EXIF switched its sharpness mode: panning at 1/125 s or slower, shallow DoF at f/4 or wider. Motorsport mode tags each frame instead: Panning (car sharp, background streaked), Motion Blur (whole frame blurred in one line), Missed Pan (car blurred across the pan), Zoom Burst (streaks run out from the frame centre). Creative Burst: most of the burst is zoom bursts or motion blur at 1/8 s or slower, so none of it is rejected as cut off or far behind." },
     { key = "scored", label = "Scored", kind = "diag", writes = { "Scored|Masked", "Scored|Subject bias" },
-      when = "subject tracking (SAM) only. Masked: the burst was ranked on SAM masks. Subject bias: a shortlisted frame got no mask, so the burst fell back." },
+      when = "Subject tracking (SAM) only. Masked: the burst was ranked on SAM masks. Subject bias: a shortlisted frame got no mask, so the burst fell back." },
     { key = "why", label = "Why", kind = "diag",
       writes = { "Why|Keeper", "Why|Keeper by margin", "Why|Outranked", "Why|Graded", "Why|Not shortlisted",
           "Why|No vehicle", "Why|Close call", "Why|Blank", "Why|Spread", "Why|Number clearer", "Why|Subject clearer",
           "Why|Other angle", "Why|Motion look", "Why|Far behind", "Why|Not a first pick" },
-      when = "every scored frame, saying how it was decided. Keeper: kept by rank. Keeper by margin: kept by the keeper margin. Outranked: lost to a sharper frame. Far behind: lost and scored under 30% of its burst's best (times star strictness), so it is rejected (at most rejects per burst, worst first). Graded: lost and rated by burst. Not shortlisted: subject tracking (SAM) left it out of the shortlist. No vehicle: the detector found no car, so the frame kept its rating (only with \"Leave Frames with No Vehicle\" on). Blank: the frame is one flat colour, so it was rejected. Close call: the last keeper and the best frame that lost scored within 5% of each other; the keeper is still kept, but check both. Spread: kept as its stretch of the burst's best frame over a sharper frame elsewhere (only with \"Spread Keepers Over the Burst\" on). Number clearer: kept over the sharper frame of a close call because tagging read the car's number clearer in it (only with \"Break Close Calls on the Number Read\" on). Subject clearer: kept over the sharper frame of a close call because the sharpness judge scored its car clearer (only with \"Break Close Calls with the Sharpness Judge\" on). Other angle: the best frame of a view of the car the sharpest keeper does not show, kept one star below it (only with \"Keep the Other Angles\" on). Motion look: the burst's straightest motion blur with the car in view, kept as well as the sharp keepers (only with \"Keep a Motion-Blur Frame\" on). Not a first pick: left alone because it is not one of the run's first picks (only with first picks on). Filter on one to step through, say, every frame that lost to the margin." },
+      when = "Every scored frame, saying how it was decided. Keeper: kept by rank. Keeper by margin: kept by the keeper margin. Outranked: lost to a sharper frame. Far behind: lost and scored under 30% of its burst's best (times star strictness), so it is rejected (at most rejects per burst, worst first). Graded: lost and rated by burst. Not shortlisted: subject tracking (SAM) left it out of the shortlist. No vehicle: the detector found no car, so the frame kept its rating (only with \"Leave Frames with No Vehicle\" on). Blank: the frame is one flat colour, so it was rejected. Close call: the last keeper and the best frame that lost scored within 5% of each other; the keeper is still kept, but check both. Spread: kept as its stretch of the burst's best frame over a sharper frame elsewhere (only with \"Spread Keepers Over the Burst\" on). Number clearer: kept over the sharper frame of a close call because tagging read the car's number clearer in it (only with \"Break Close Calls on the Number Read\" on). Subject clearer: kept over the sharper frame of a close call because the sharpness judge scored its car clearer (only with \"Break Close Calls with the Sharpness Judge\" on). Other angle: the best frame of a view of the car the sharpest keeper does not show, kept one star below it (only with \"Keep the Other Angles\" on). Motion look: the burst's straightest motion blur with the car in view, kept as well as the sharp keepers (only with \"Keep a Motion-Blur Frame\" on). Not a first pick: left alone because it is not one of the run's first picks (only with first picks on). Filter on one to step through, say, every frame that lost to the margin." },
 }
 
 -- Headings of the tags-written page, in order; each TAG_TOGGLES row's `kind` is one of these.
@@ -659,18 +659,18 @@ local SAM_STD = { 58.395, 57.12, 57.375 }
 -- Returns the enabled mask model's id, or nil and a reason the user can act on.
 local function sam_model_id()
     if not dt.ai then
-        return nil, "this darktable has no AI support; subject tracking needs darktable 5.6 or newer"
+        return nil, "this darktable has no AI support; subject tracking needs darktable 5.6 or newer."
     end
     local id = dt.ai.model_for_task("mask")
     if not id then
-        return nil, "no AI mask model is enabled; turn one on in preferences → AI"
+        return nil, "no AI mask model is enabled; turn one on in preferences → AI."
     end
     local ok_list, models = pcall(dt.ai.models)
     for _, m in ipairs(ok_list and models or {}) do
         if m.id == id then
             local about = ((m.id or "") .. " " .. (m.name or "") .. " " .. (m.description or "")):lower()
             if about:find("segnext", 1, true) then
-                return nil, "the enabled mask model is SegNext; subject tracking needs a SAM or SAM 2 mask model"
+                return nil, "the enabled mask model is SegNext; subject tracking needs a SAM or SAM 2 mask model."
             end
         end
     end
@@ -950,8 +950,8 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         end
 
         if not images or #images == 0 then
-            dt.print(n_locked > 0 and _("Assisted Culling: every selected image is tagged Assisted Culling|Locked, so there's nothing to cull. Remove that tag from images you want scored.")
-                or _("Assisted Culling: select some images first"))
+            dt.print(n_locked > 0 and _("Assisted Culling: Every selected image is tagged Assisted Culling|Locked, so there's nothing to cull. Remove that tag from images you want scored.")
+                or _("Assisted Culling: Select some images first."))
             return
         end
 
@@ -970,13 +970,13 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             culling_job = dt.gui.create_job(_("Assisted Culling"), true, stop_job)
             culling_job.percent = 0.0
         end
-        say(string.format("Assisted Culling: %s on %s…", verify and "verify started" or "started",
+        say(string.format("Assisted Culling: %s on %s…", verify and "Verify started" or "Started",
             #images == 1 and "1 image" or #images .. " images"))
         local sam_model
         if sharp_mode == "sam_subject" then
             local why
             sam_model, why = sam_model_id()
-            if not sam_model then error("subject tracking (SAM) can't run: " .. why, 0) end
+            if not sam_model then error("Subject tracking (SAM) can't run: " .. why, 0) end
         end
 
         -- Each shot (duplicates, RAW+JPEG pair) is scored once; the result is applied to all of it.
@@ -1108,14 +1108,14 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
 
         log(string.format("fast JPEG %s, apply while scoring %s, SAM model %s",
             tostring(fast_jpeg), tostring(overlap), tostring(sam_model or "none")))
-        say(string.format("Assisted Culling: scoring %d images in %d groups (%s keepers, %s ranking, %s grouping)",
+        say(string.format("Assisted Culling: Scoring %d images in %d groups (%s keepers, %s ranking, %s grouping).",
             n_primary, n_bursts, pretty(keep_mode), pretty(rank_mode),
             settings.group_native and (#nodes > 0 and "native + tag" or "native") or (#nodes > 0 and "tag" or "no")))
         if n_dups > 0 then
             say(string.format("Assisted Culling: %d image(s) share a shot with another (a duplicate, or the RAW of a RAW+JPEG pair); each shot is scored once and its result copied to all of it.", n_dups))
         end
         if n_primary > 1000 then
-            say(_("Assisted Culling: large selection, this can take several minutes. Click Cancel Culling to stop at any time."))
+            say(_("Assisted Culling: Large selection, this can take several minutes. Click Cancel Culling to stop at any time."))
         end
         show_status(_("starting analysis…"))
 
@@ -1260,9 +1260,9 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                 if made < #points and not cancelled() then
                     local why = first_sam_error == "empty mask" and "no subject found"
                         or ("first error: " .. tostring(first_sam_error))
-                    say(string.format("Assisted Culling: subject tracking outlined %d of %d frames (%s). Bursts without an outline use center-weighted subject bias instead; the run continues.",
+                    say(string.format("Assisted Culling: Subject tracking outlined %d of %d frames (%s). Bursts without an outline use center-weighted subject bias instead; the run continues.",
                         made, #points, why))
-                    alerts.add(string.format("subject tracking outlined %d of %d frames (%s); the rest used subject bias", made, #points, why))
+                    alerts.add(string.format("Subject tracking outlined %d of %d frames (%s); the rest used subject bias.", made, #points, why))
                 end
             end
 
@@ -1637,8 +1637,8 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             local start_idx = pending_idx - 1
             local remaining = total_lines - start_idx
             if remaining > 0 then
-                say(string.format(overlap and "Assisted Culling: analysis done, applying ratings to the last %d images..."
-                    or "Assisted Culling: applying ratings to %d images...", remaining))
+                say(string.format(overlap and "Assisted Culling: Analysis done, applying ratings to the last %d images..."
+                    or "Assisted Culling: Applying ratings to %d images...", remaining))
             end
             local started = os.time()
             local last_toast_pct = 0
@@ -1673,7 +1673,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                 local milestone = math.floor(((pending_idx - 1) / total_lines) * 4) * 25
                 if milestone > last_toast_pct and milestone < 100 then
                     last_toast_pct = milestone
-                    dt.print(string.format("Assisted Culling: ratings %d%% applied", milestone))
+                    dt.print(string.format("Assisted Culling: Ratings %d%% applied", milestone))
                 end
                 toast_s = toast_s + os.clock() - toast_start
             end
@@ -1691,28 +1691,28 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
 
         if M.cancel_requested then
             if applied_total > 0 and not verify then
-                say(string.format("Assisted Culling: cancelled. %d of %d images were already rated and keep their changes. Run again to finish, or use Clear Culling Marks to remove the tags%s.",
+                say(string.format("Assisted Culling: Cancelled. %d of %d images were already rated and keep their changes. Run again to finish, or use Clear Culling Marks to remove the tags%s.",
                     applied_total, #images,
                     next(previous_ratings) and " and Restore Previous Ratings to put the star ratings back" or ""))
-                alerts.add(string.format("cancelled: %d of %d images were rated; run again to finish", applied_total, #images))
+                alerts.add(string.format("Cancelled: %d of %d images were rated; run again to finish.", applied_total, #images))
             else
-                say(_("Assisted Culling: cancelled. No images were changed."))
+                say(_("Assisted Culling: Cancelled. No images were changed."))
             end
         elseif done_code ~= 0 then
             local tail = read_log_tail()
             local to_check = scorer_failure("failed", tail)
             if #tail > 300 then tail = tail:sub(#tail - 299) end
             if tail ~= "" then
-                notify_error(_("Assisted Culling: failed. ") .. tail, to_check)
+                notify_error(_("Assisted Culling: Failed. ") .. tail, to_check)
             else
-                notify_error(string.format("Assisted Culling: the scorer stopped with exit code %s. Details are in assisted_culling.log in darktable's config folder.",
+                notify_error(string.format("Assisted Culling: The scorer stopped with exit code %s. Details are in assisted_culling.log in darktable's config folder.",
                     tostring(done_code or "?")))
             end
         elseif applied_total == 0 then
             local tail = read_log_tail()
             local to_check = tail ~= "" and scorer_failure("no ratings came back from the scorer", tail) or nil
             if #tail > 300 then tail = tail:sub(#tail - 299) end
-            notify_error(_("Assisted Culling: no ratings came back from the scorer. ")
+            notify_error(_("Assisted Culling: No ratings came back from the scorer. ")
                 .. (tail ~= "" and tail or _("Check the plugins folder in preferences → Lua options, and that darktable-assisted-culling/.venv has python/requirements.txt installed.")), to_check)
         elseif verify then
             local differ_ids, keeper_ids, keeper_details, n_differ_bursts, n_keeper_bursts = {}, {}, {}, 0, 0
@@ -1729,29 +1729,29 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                 end
             end
             if #differ_details + #hand_ids + n_keeper_bursts == 0 then
-                say(string.format("Assisted Culling: verify only, nothing changed. All %d images match a cull now.", applied_total))
+                say(string.format("Assisted Culling: Verify only, nothing changed. All %d images match a cull now.", applied_total))
             else
-                say(string.format("Assisted Culling: verify only, nothing changed. %d of %d images would get other stars from a cull now, %d ratings were changed by hand, %d bursts have the wrong Keeper tags. See To check.",
+                say(string.format("Assisted Culling: Verify only, nothing changed. %d of %d images would get other stars from a cull now, %d ratings were changed by hand, %d bursts have the wrong Keeper tags. See To check.",
                     #differ_details, applied_total, #hand_ids, n_keeper_bursts))
             end
             if #differ_details > 0 then
-                alerts.add(string.format("%d photos would get other stars from a cull now; Fix culls their %d bursts (%d photos)",
+                alerts.add(string.format("%d photos would get other stars from a cull now; Fix culls their %d bursts (%d photos).",
                     #differ_details, n_differ_bursts, #differ_ids), differ_ids, "cull", differ_details)
             end
             if #hand_ids > 0 then
-                alerts.add(string.format("you changed %d ratings since the last cull; a cull keeps or overwrites them by its settings", #hand_ids),
+                alerts.add(string.format("You changed %d ratings since the last cull; a cull keeps or overwrites them by its settings.", #hand_ids),
                     hand_ids, nil, hand_details)
             end
             if n_keeper_bursts > 0 then
-                alerts.add(string.format("%d bursts have no Keeper tag or more than a cull gives; Fix culls them (%d photos)",
+                alerts.add(string.format("%d bursts have no Keeper tag or more than a cull gives; Fix culls them (%d photos).",
                     n_keeper_bursts, #keeper_ids), keeper_ids, "cull", keeper_details)
             end
-            if failed_total > 0 then alerts.add(string.format("%d images couldn't be read (see log)", failed_total)) end
-            if n_skipped > 0 then alerts.add(string.format("%d images unreadable (see log)", n_skipped)) end
+            if failed_total > 0 then alerts.add(string.format("%d images couldn't be read (see log).", failed_total)) end
+            if n_skipped > 0 then alerts.add(string.format("%d images unreadable (see log).", n_skipped)) end
             log(string.format("verify: %d of %d images differ from a cull now, %d changed by hand, %d bursts with wrong Keeper tags",
                 #differ_details, applied_total, #hand_ids, n_keeper_bursts))
         else
-            local msg = string.format("Assisted Culling: done. %d keepers, %d not kept", stats.keepers, stats.others)
+            local msg = string.format("Assisted Culling: Done. %d keepers, %d not kept", stats.keepers, stats.others)
             if stats.rejected > 0 then msg = msg .. string.format(" (%d rejected)", stats.rejected) end
             for _, f in ipairs(FLAGS) do
                 local n = stats.flagged[f.name]
@@ -1774,11 +1774,11 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             end
             say(msg)
             if #guessed_ids > 0 then
-                alerts.add(string.format("%d photos with a guessed subject: check them by hand", #guessed_ids), guessed_ids)
+                alerts.add(string.format("%d photos with a guessed subject: check them by hand.", #guessed_ids), guessed_ids)
             end
-            if #close_ids > 0 then alerts.add(string.format("%d photos in close calls: check both frames", #close_ids), close_ids) end
-            if failed_total > 0 then alerts.add(string.format("%d images couldn't be updated (see log)", failed_total)) end
-            if n_skipped > 0 then alerts.add(string.format("%d images unreadable (see log)", n_skipped)) end
+            if #close_ids > 0 then alerts.add(string.format("%d photos in close calls: check both frames.", #close_ids), close_ids) end
+            if failed_total > 0 then alerts.add(string.format("%d images couldn't be updated (see log).", failed_total)) end
+            if n_skipped > 0 then alerts.add(string.format("%d images unreadable (see log).", n_skipped)) end
             log(string.format("apply: timing: %.1fs in tag and rating writes, %.1fs paused, %.1fs in progress updates (job bar %.1fs, panel line %.1fs, toast %.1fs); %d rating writes, %d Keeper / Rejected tag writes; final drain took %ds",
                 write_s, pause_s, bar_s + label_s + toast_s, bar_s, label_s, toast_s, rating_writes, all_writes - rating_writes, drain_s))
             if demote_plugin_stars then
@@ -1787,7 +1787,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             -- Each tag write makes darktable rebuild its tagging lists (about 100ms). The panel
             -- line waits for darktable to catch up, then the pause leaves it as long again for the user.
             if detail_total > 0 then
-                local detail_job = dt.gui.create_job(_("Assisted Culling: writing detail tags"), true,
+                local detail_job = dt.gui.create_job(_("Assisted Culling: Writing detail tags"), true,
                     function(cancelled_job) cancelled_job.valid = false end)
                 local detail_started, detail_idx, detail_written, detail_failed = os.time(), 1, 0, 0
                 local detail_wait_s, detail_pause_s = 0, 0
@@ -1823,7 +1823,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                 end
                 local detail_left = #detail_queue - detail_idx + 1
                 if detail_failed > 0 then
-                    alerts.add(string.format("%d images couldn't get their detail tags (see log)", detail_failed))
+                    alerts.add(string.format("%d images couldn't get their detail tags (see log).", detail_failed))
                 end
                 if detail_job.valid then detail_job.valid = false end
                 show_status("")
@@ -1832,16 +1832,16 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                     detail_failed > 0 and (", " .. detail_failed .. " images couldn't be updated") or "",
                     detail_left > 0 and ", stopped at the job bar" or ""))
                 if detail_left > 0 then
-                    say(string.format("Assisted Culling: detail tags stopped. %d images still miss theirs; ratings and Keeper / Rejected are complete. Cull the same images again to write the rest.",
+                    say(string.format("Assisted Culling: Detail tags stopped. %d images still miss theirs; ratings and Keeper / Rejected are complete. Cull the same images again to write the rest.",
                         detail_left))
                     local unreached = {}
                     for k = detail_idx, #detail_queue do
                         local ok_id, id = pcall(function() return detail_queue[k].img.id end)
                         if ok_id then unreached[#unreached + 1] = id end
                     end
-                    alerts.add(string.format("detail tags stopped: %d photos still miss theirs; cull them again", #unreached), unreached)
+                    alerts.add(string.format("Detail tags stopped: %d photos still miss theirs; cull them again.", #unreached), unreached)
                 else
-                    say(string.format("Assisted Culling: detail tags written (%d)%s.", detail_written,
+                    say(string.format("Assisted Culling: Detail tags written (%d)%s.", detail_written,
                         detail_failed > 0 and (", " .. detail_failed .. " images couldn't be updated") or ""))
                 end
             end
@@ -1851,7 +1851,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             for index, tag_line in ipairs(tag_lines) do tag_lines[index] = tag_line.count .. " " .. tag_line.name end
             log("apply: tag writes by tag (+ attached, - detached): " .. (#tag_lines > 0 and table.concat(tag_lines, ", ") or "none"))
             if first_error then
-                dt.print_error("Assisted Culling: first apply error: " .. first_error)
+                dt.print_error("Assisted Culling: First apply error: " .. first_error)
                 log("first apply error: " .. first_error)
             end
         end
@@ -1865,7 +1865,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
 
     if not success then
         if culling_job then pcall(function() if culling_job.valid then culling_job.valid = false end end) end
-        notify_error(_("Assisted Culling: couldn't run. ") .. tostring(run_err))
+        notify_error(_("Assisted Culling: Couldn't run. ") .. tostring(run_err))
     end
     if not run_started then
         run_next()
@@ -1886,7 +1886,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             f:close()
         end)
         if not saved then
-            notify_error(_("Assisted Culling: couldn't save the previous ratings, so this run can't be undone: ")
+            notify_error(_("Assisted Culling: Couldn't save the previous ratings, so this run can't be undone: ")
                 .. tostring(save_err))
         end
     end
@@ -1918,10 +1918,10 @@ end
 -- Removes the plugin's tags. Ratings are NOT reverted.
 function M.clear_marks(images)
     if not images or #images == 0 then
-        dt.print(_("Assisted Culling: select some images first"))
+        dt.print(_("Assisted Culling: Select some images first."))
         return
     end
-    dt.print(string.format("Assisted Culling: clearing marks on %s…", #images == 1 and "1 image" or #images .. " images"))
+    dt.print(string.format("Assisted Culling: Clearing marks on %s…", #images == 1 and "1 image" or #images .. " images"))
     local found, saw_tag = {}, false
     for _, name in ipairs(ALL_TAGS) do
         local t = tags.find(name)
@@ -1931,7 +1931,7 @@ function M.clear_marks(images)
         if M.is_diag_tag(tags[i].name) then saw_tag = true; break end
     end
     if #found == 0 and not saw_tag then
-        dt.print("Assisted Culling: nothing to clear; no Assisted Culling tags exist yet.")
+        dt.print("Assisted Culling: Nothing to clear; no Assisted Culling tags exist yet.")
         return
     end
 
@@ -1939,7 +1939,7 @@ function M.clear_marks(images)
     local total, cleared, failed, writes = #images, 0, 0, 0
     local write_s, wait_s, pause_s = 0, 0, 0
     local diag_tags = {}
-    local job = dt.gui.create_job(_("Assisted Culling: clear culling marks"), true,
+    local job = dt.gui.create_job(_("Assisted Culling: Clear culling marks"), true,
         function(cancelled_job) cancelled_job.valid = false end)
     local started = os.time()
     local i = 1
@@ -1989,24 +1989,24 @@ function M.clear_marks(images)
     local cancelled = ok and i <= total
     pcall(function() if job.valid then job.valid = false end end)
     show_status("")
-    if not ok then notify_error("Assisted Culling: clearing marks failed: " .. tostring(err)); return end
+    if not ok then notify_error("Assisted Culling: Clearing marks failed: " .. tostring(err)); return end
     log(string.format("clear: timing: %d of %d images in %ds; %.1fs in tag writes, %.1fs waiting for darktable, %.1fs paused; %d tag writes%s",
         i - 1, total, os.time() - started, write_s, wait_s, pause_s, writes, cancelled and ", stopped at the job bar" or ""))
     local counts = failed > 0 and (", " .. failed .. " couldn't be updated") or ""
     if cancelled then
-        say(string.format("Assisted Culling: clear cancelled. Removed culling tags from %d of %d images%s; %d not reached keep their tags.",
+        say(string.format("Assisted Culling: Clear cancelled. Removed culling tags from %d of %d images%s; %d not reached keep their tags.",
             cleared, total, counts, total - i + 1))
         local unreached = {}
         for k = i, total do
             local ok_id, id = pcall(function() return images[k].id end)
             if ok_id then unreached[#unreached + 1] = id end
         end
-        alerts.add(string.format("clear cancelled: %d photos not reached keep their tags", #unreached), unreached)
+        alerts.add(string.format("Clear cancelled: %d photos not reached keep their tags.", #unreached), unreached)
     else
-        say(string.format("Assisted Culling: removed culling tags from %d of %d images%s. Star ratings were not changed.",
+        say(string.format("Assisted Culling: Removed culling tags from %d of %d images%s. Star ratings were not changed.",
             cleared, total, counts))
     end
-    if failed > 0 then alerts.add(string.format("%d images couldn't be cleared (see log)", failed)) end
+    if failed > 0 then alerts.add(string.format("%d images couldn't be cleared (see log).", failed)) end
     flush_log()
 end
 
@@ -2015,12 +2015,12 @@ end
 -- since and is left alone. Tags are not changed.
 function M.restore_ratings(images)
     if not images or #images == 0 then
-        dt.print(_("Assisted Culling: select some images first"))
+        dt.print(_("Assisted Culling: Select some images first."))
         return
     end
     local record_of = read_saved_ratings()
     if not next(record_of) then
-        dt.print(_("Assisted Culling: no run has changed a rating yet, so there is nothing to restore."))
+        dt.print(_("Assisted Culling: No run has changed a rating yet, so there is nothing to restore."))
         return
     end
 
@@ -2056,11 +2056,11 @@ function M.restore_ratings(images)
         end
     end)
     show_status("")
-    if not ok then notify_error("Assisted Culling: restoring ratings failed: " .. tostring(err)); return end
-    dt.print(string.format("Assisted Culling: restored the previous rating of %d of %d images%s%s. Tags were not changed.",
+    if not ok then notify_error("Assisted Culling: Restoring ratings failed: " .. tostring(err)); return end
+    dt.print(string.format("Assisted Culling: Restored the previous rating of %d of %d images%s%s. Tags were not changed.",
         restored, total, rated_since > 0 and (", " .. rated_since .. " rated since the run left alone") or "",
         failed > 0 and (", " .. failed .. " couldn't be updated") or ""))
-    if failed > 0 then alerts.add(string.format("%d images couldn't be restored", failed)) end
+    if failed > 0 then alerts.add(string.format("%d images couldn't be restored.", failed)) end
 end
 
 -- Sets each image to 0 stars, a few per slice, with a job bar whose x stops it between slices.
@@ -2068,12 +2068,12 @@ end
 -- or here at the end; closing a closed job crashes darktable.
 function M.reset_ratings(images)
     if not images or #images == 0 then
-        dt.print(_("Assisted Culling: select some images first"))
+        dt.print(_("Assisted Culling: Select some images first."))
         return
     end
     alerts.begin("Reset ratings")
     local total, reset, already, failed = #images, 0, 0, 0
-    local job = dt.gui.create_job(_("Assisted Culling: reset ratings to 0"), true,
+    local job = dt.gui.create_job(_("Assisted Culling: Reset ratings to 0"), true,
         function(cancelled_job) cancelled_job.valid = false end)
     local started = os.time()
     local i = 1
@@ -2109,23 +2109,23 @@ function M.reset_ratings(images)
     local cancelled = ok and i <= total
     pcall(function() if job.valid then job.valid = false end end)
     show_status("")
-    if not ok then notify_error("Assisted Culling: resetting ratings failed: " .. tostring(err)); return end
+    if not ok then notify_error("Assisted Culling: Resetting ratings failed: " .. tostring(err)); return end
     local counts = string.format("%s%s", already > 0 and (", " .. already .. " already at 0") or "",
         failed > 0 and (", " .. failed .. " couldn't be updated") or "")
     log(string.format("reset ratings: %d images, %ds", total, os.time() - started))
     if cancelled then
-        say(string.format("Assisted Culling: reset cancelled. %d of %d images were set to 0 stars%s; %d not reached keep their rating.",
+        say(string.format("Assisted Culling: Reset cancelled. %d of %d images were set to 0 stars%s; %d not reached keep their rating.",
             reset, total, counts, total - i + 1))
         local unreached = {}
         for k = i, total do
             local ok_id, id = pcall(function() return images[k].id end)
             if ok_id then unreached[#unreached + 1] = id end
         end
-        alerts.add(string.format("reset cancelled: %d photos not reached keep their rating", #unreached), unreached)
+        alerts.add(string.format("Reset cancelled: %d photos not reached keep their rating.", #unreached), unreached)
     else
-        say(string.format("Assisted Culling: set %d of %d images to 0 stars%s. Tags were not changed.", reset, total, counts))
+        say(string.format("Assisted Culling: Set %d of %d images to 0 stars%s. Tags were not changed.", reset, total, counts))
     end
-    if failed > 0 then alerts.add(string.format("%d images couldn't be reset (see log)", failed)) end
+    if failed > 0 then alerts.add(string.format("%d images couldn't be reset (see log).", failed)) end
     flush_log()
 end
 
@@ -2179,7 +2179,7 @@ end
 -- images: the photos to cull, the lighttable's action images when nil. verify: score without writing.
 local function start_culling(allow_cancel, images, verify)
     if is_clearing then
-        dt.print(_("Assisted Culling: busy clearing marks, try again in a moment."))
+        dt.print(_("Assisted Culling: Busy clearing marks, try again in a moment."))
         return
     end
     if is_running then
@@ -2189,11 +2189,11 @@ local function start_culling(allow_cancel, images, verify)
             if cf then cf:write("1"); cf:close() end
             clear_queue() -- a cancel means "stop what I started", not "run the rest"
             if action_button then action_button.label = _("Cancelling...") end
-            dt.print(_("Assisted Culling: cancelling, finishing the current step..."))
+            dt.print(_("Assisted Culling: Cancelling, finishing the current step..."))
         else
             local queued, s = copy_images(images or dt.gui.action_images), read_panel()
             if not queue_if_busy(verify and _("Verify") or _("Culling"), #queued > 0, function() launch_score(queued, s, verify) end) then
-                dt.print(_("Assisted Culling: already running. Click Cancel Culling in the panel to stop it."))
+                dt.print(_("Assisted Culling: Already running. Click Cancel Culling in the panel to stop it."))
             end
         end
         return
@@ -2414,17 +2414,17 @@ local function install_panel()
             is_clearing = true
             local ok_q, err_q = pcall(M.clear_marks, selected)
             is_clearing = false
-            if not ok_q then notify_error("Assisted Culling: clearing marks failed: " .. tostring(err_q)) end
+            if not ok_q then notify_error("Assisted Culling: Clearing marks failed: " .. tostring(err_q)) end
             run_next()
         end) then return end
         if is_running or is_clearing then
-            dt.print(_("Assisted Culling: busy with another job, try again when it finishes."))
+            dt.print(_("Assisted Culling: Busy with another job, try again when it finishes."))
             return
         end
         is_clearing = true
         local ok_c, err_c = pcall(M.clear_marks, dt.gui.action_images)
         is_clearing = false
-        if not ok_c then notify_error("Assisted Culling: clearing marks failed: " .. tostring(err_c)) end
+        if not ok_c then notify_error("Assisted Culling: Clearing marks failed: " .. tostring(err_c)) end
     end)
 
     local restore_button = new_widget("button") {
@@ -2438,17 +2438,17 @@ local function install_panel()
             is_clearing = true
             local ok_q, err_q = pcall(M.restore_ratings, selected)
             is_clearing = false
-            if not ok_q then notify_error("Assisted Culling: restoring ratings failed: " .. tostring(err_q)) end
+            if not ok_q then notify_error("Assisted Culling: Restoring ratings failed: " .. tostring(err_q)) end
             run_next()
         end) then return end
         if is_running or is_clearing then
-            dt.print(_("Assisted Culling: busy with another job, try again when it finishes."))
+            dt.print(_("Assisted Culling: Busy with another job, try again when it finishes."))
             return
         end
         is_clearing = true
         local ok_r, err_r = pcall(M.restore_ratings, selected)
         is_clearing = false
-        if not ok_r then notify_error("Assisted Culling: restoring ratings failed: " .. tostring(err_r)) end
+        if not ok_r then notify_error("Assisted Culling: Restoring ratings failed: " .. tostring(err_r)) end
     end)
 
     local reset_button = new_widget("button") {
@@ -2462,17 +2462,17 @@ local function install_panel()
             is_clearing = true
             local ok_q, err_q = pcall(M.reset_ratings, selected)
             is_clearing = false
-            if not ok_q then notify_error("Assisted Culling: resetting ratings failed: " .. tostring(err_q)) end
+            if not ok_q then notify_error("Assisted Culling: Resetting ratings failed: " .. tostring(err_q)) end
             run_next()
         end) then return end
         if is_running or is_clearing then
-            dt.print(_("Assisted Culling: busy with another job, try again when it finishes."))
+            dt.print(_("Assisted Culling: Busy with another job, try again when it finishes."))
             return
         end
         is_clearing = true
         local ok_r, err_r = pcall(M.reset_ratings, selected)
         is_clearing = false
-        if not ok_r then notify_error("Assisted Culling: resetting ratings failed: " .. tostring(err_r)) end
+        if not ok_r then notify_error("Assisted Culling: Resetting ratings failed: " .. tostring(err_r)) end
     end)
 
     local why_button = new_widget("button") {
@@ -2483,7 +2483,7 @@ local function install_panel()
     why_button.clicked_callback = C.guarded_callback(guard, "button why", function()
         local text = read_file(REPORT_PATH)
         if not text then
-            dt.print(_("Assisted Culling: no report yet. Run culling first."))
+            dt.print(_("Assisted Culling: No report yet. Run culling first."))
             return
         end
         local wanted, n = {}, 0
@@ -2492,7 +2492,7 @@ local function install_panel()
             if not wanted[path] then wanted[path] = true; n = n + 1 end
         end
         if n == 0 then
-            dt.print(_("Assisted Culling: select some images first"))
+            dt.print(_("Assisted Culling: Select some images first."))
             return
         end
         local lines, missing = M.explain_report(text, wanted)
@@ -2513,7 +2513,7 @@ local function install_panel()
 
     report_button.clicked_callback = C.guarded_callback(guard, "button report", function()
         if not file_exists(REPORT_PATH) then
-            dt.print(_("Assisted Culling: no report yet. Run culling first."))
+            dt.print(_("Assisted Culling: No report yet. Run culling first."))
             return
         end
         if IS_WINDOWS then
