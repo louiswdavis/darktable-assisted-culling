@@ -1459,12 +1459,14 @@ function C.alerts_box(new_widget, path, log, fixes)
     local current, current_run = "", alerts.items[1] and alerts.items[1].run or 0
     local header = new_widget("section_label") { label = "To Check" }
     local rows, more = {}, new_widget("label") { label = "", halign = "start", visible = false }
+    local plugin_title = (path:match("assisted_(%a+)%.checks") or "plugin"):gsub("^%l", string.upper)
+    plugin_title = "Assisted " .. plugin_title
     local save
     local function images_of(ids)
         local images = {}
         for _, id in ipairs(ids) do images[#images + 1] = dt.database.get_image(id) end
         if #images < #ids then
-            dt.print(string.format("Couldn't open %s: no longer in the library.", C.count(#ids - #images, "image")))
+            dt.print(string.format("%s: Couldn't open %s, no longer in the library.", plugin_title, C.count(#ids - #images, "image")))
         end
         return images
     end

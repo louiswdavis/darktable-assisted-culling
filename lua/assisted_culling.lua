@@ -1012,10 +1012,10 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         local function node_keys(node)
             if node == M.LATEST_GROUPING_NODE then
                 local tag_of, n_runs = M.latest_group_keys(tag_items)
-                return tag_of, {}, n_runs > 0 and string.format("latest run per photo (%d runs)", n_runs) or "no grouping tags found"
+                return tag_of, {}, n_runs > 0 and string.format("latest run per image (%d runs)", n_runs) or "no grouping tags found"
             end
             local tag_of, tag_multi = M.tag_group_keys(tag_items, node)
-            return tag_of, tag_multi, next(tag_of) == nil and "matches no selected photo" or nil
+            return tag_of, tag_multi, next(tag_of) == nil and "matches no selected image" or nil
         end
         local function cut_note(text, note, tag_multi)
             return text .. (note and " (" .. note .. ")" or "")
@@ -1059,7 +1059,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             key_of, n_split, n_tagged = M.split_by_tag(primary_ids, key_of, tag_of, tag_multi)
             split_of = split_of or {}
             for id, child in pairs(tag_of) do split_of[id] = split_of[id] and split_of[id] .. "/" .. child or child end
-            cut_notes[#cut_notes + 1] = cut_note(string.format("tag node %s: %d grouped photos tagged, %d groups split",
+            cut_notes[#cut_notes + 1] = cut_note(string.format("tag node %s: %d grouped images tagged, %d groups split",
                 nodes[n], n_tagged, n_split), note, tag_multi)
         end
         local burst_of = M.number_groups(primary_ids, key_of)
@@ -1072,7 +1072,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         for _, id in ipairs(primary_ids) do
             if size_of[burst_of[id]] >= 2 then grouped = grouped + 1 end
         end
-        local msg = string.format("grouping: native groups %s, %d of %d photos in groups of 2+",
+        local msg = string.format("grouping: native groups %s, %d of %d images in groups of 2+",
             settings.group_native and "on" or "off", grouped, #primaries)
         for _, note in ipairs(cut_notes) do msg = msg .. ", " .. note end
         log(msg)

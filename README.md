@@ -350,7 +350,7 @@ On each shortlisted frame, the detector finds cars, motorcycles and trucks (race
 
 It runs on the CPU. YOLOX adds about a tenth of a second per frame; D-FINE-X is slower, but a frame tagging already detected with the same file comes from the shared cache. If the picked file isn't a model, the run stops and says so. Remove every detector file from `models/` to switch it off.
 
-Vehicle boxes are cached in `assisted_plugins/detections.sqlite` in darktable's config directory, shared with the tagging plugin so a frame both plugins see with the same detector is detected once. The key is the file (path, modified time, size), the detector model (its name, size and content, not its folder) and a fingerprint of the shared detector code, so a new detector or a `vehicle_detect.py` change re-detects everything once; rows unused for 90 days are dropped. Delete the file to start over. The tagging plugin's `compare_detectors.py` measures two detectors against each other on your own photos.
+Vehicle boxes are cached in `assisted_plugins/detections.sqlite` in darktable's config directory, shared with the tagging plugin so a frame both plugins see with the same detector is detected once. The key is the file (path, modified time, size), the detector model (its name, size and content, not its folder) and a fingerprint of the shared detector code, so a new detector or a `vehicle_detect.py` change re-detects everything once; rows unused for 90 days are dropped. Delete the file to start over. The tagging plugin's `compare_detectors.py` measures two detectors against each other on your own images.
 
 #### Car boxes from tagging
 
@@ -411,7 +411,7 @@ Flags still cost a star each. **Star strictness** scales these steps too: strict
 ### 2 Bursts
 
 - **Cull by Native Groups** (checkbox, default on). darktable's own image groups form the groups keepers are picked in, see [Grouping support](#grouping-support).
-- Under the heading **Extra Grouping by Tags**: **tag node 1**, **tag node 2**, **tag node 3** (blank = not used). Tag nodes whose children cut the groups further, in that order, e.g. the collection prefix from [Assisted Tagging](../darktable-assisted-tagging/README.md) for one keeper per number. With the checkbox off, the first filled node forms the groups. Type `Assisted Grouping` for each photo's latest Assisted Grouping run.
+- Under the heading **Extra Grouping by Tags**: **tag node 1**, **tag node 2**, **tag node 3** (blank = not used). Tag nodes whose children cut the groups further, in that order, e.g. the collection prefix from [Assisted Tagging](../darktable-assisted-tagging/README.md) for one keeper per number. With the checkbox off, the first filled node forms the groups. Type `Assisted Grouping` for each image's latest Assisted Grouping run.
 
 ### 3 Penalties & Speed
 
@@ -456,12 +456,12 @@ Two headings: **Explain the Last Run (Changes Nothing)** over the first two butt
 
 A box headed **To Check**, above the progress line, lists what a run leaves for you to look at, so a toast that went by unseen isn't lost. It shows only when it has items. Each item reads `<action>: <what happened>` in full, wrapped over as many lines as it needs, with its buttons below. The newest run's items sit on top. Older runs' items move below an *Earlier runs (before HH:MM): may not hold any more* line, since a later run can have settled them; they stay until you remove them, so a Fix still works. It lists:
 
-- **Cull**: errors, subject tracking that outlined only some frames, a cancel after some images were rated, photos with a guessed subject, photos in close calls, images that couldn't be updated or read, detail tags that failed or were stopped.
-- **Verify**: photos whose stars differ from what a cull gives now, with one line per photo (`DSC00023.JPG: 0 stars, a cull now gives 5`); ratings you changed by hand since the last cull (`1 stars, the last cull wrote 4`), on their own line with no **Fix**; and, with the *Keeper* tag on, bursts with no `Keeper` tag or more than a cull gives. **Fix** on the stars line and the Keeper line runs **Cull Selection** on those bursts' photos.
-- **Clear**, **Restore ratings**, **Reset ratings**: a cancel that left photos not reached, and images that couldn't be changed.
+- **Cull**: errors, subject tracking that outlined only some frames, a cancel after some images were rated, images with a guessed subject, images in close calls, images that couldn't be updated or read, detail tags that failed or were stopped.
+- **Verify**: images whose stars differ from what a cull gives now, with one line per image (`DSC00023.JPG: 0 stars, a cull now gives 5`); ratings you changed by hand since the last cull (`1 stars, the last cull wrote 4`), on their own line with no **Fix**; and, with the *Keeper* tag on, bursts with no `Keeper` tag or more than a cull gives. **Fix** on the stars line and the Keeper line runs **Cull Selection** on those bursts' images.
+- **Clear**, **Restore ratings**, **Reset ratings**: a cancel that left images not reached, and images that couldn't be changed.
 
-- **Fix** beside a line makes the change it describes to those photos only, and removes the line.
-- **Select** beside a line selects its photos in the lighttable. Photos removed from the library since are skipped, and a toast counts them. Lines about photos darktable couldn't read or update have no **Select**: those photos may be gone.
+- **Fix** beside a line makes the change it describes to those images only, and removes the line.
+- **Select** beside a line selects its images in the lighttable. Images removed from the library since are skipped, and a toast counts them. Lines about images darktable couldn't read or update have no **Select**: those images may be gone.
 - The next run of the same action replaces that action's lines; other actions' lines stay. **Clear List**, under the items, empties the box.
 - Six lines show; more add `and N more (see the log)`. The list is saved to `assisted_culling.checks.txt` in darktable's config folder, so it survives a restart.
 
@@ -501,14 +501,14 @@ Sharpness is the variance of the Laplacian of a downscaled grayscale copy, a sta
 
 ### Grouping support
 
-Culling does not cluster photos by capture time. Keepers are picked within groups that something else already made. The panel's **2 bursts** page has a **Cull by Native Groups** checkbox and three **tag node** boxes:
+Culling does not cluster images by capture time. Keepers are picked within groups that something else already made. The panel's **2 bursts** page has a **Cull by Native Groups** checkbox and three **tag node** boxes:
 
-- **Cull by Native Groups** (default on): darktable's own image groups form the groups. A photo's group is its group leader; members share one group even when the leader isn't in the selection.
-- **tag node 1 to 3** (blank = not used): each filled node cuts the groups further, in order 1, 2, 3. Photos in a group that carry different children of the node go to separate pools, each with its own keepers. A photo without a child of the node stays in the group's shared pool, and so does a photo with several children (the log lists those ids).
-- **Checkbox off**: the first filled node forms the groups instead. A photo without a child of that node is judged alone, and a photo with several takes the first by name. The later nodes cut as above.
-- **Checkbox off and every box blank**: every photo is its own group and is judged alone.
+- **Cull by Native Groups** (default on): darktable's own image groups form the groups. An image's group is its group leader; members share one group even when the leader isn't in the selection.
+- **tag node 1 to 3** (blank = not used): each filled node cuts the groups further, in order 1, 2, 3. Images in a group that carry different children of the node go to separate pools, each with its own keepers. An image without a child of the node stays in the group's shared pool, and so does an image with several children (the log lists those ids).
+- **Checkbox off**: the first filled node forms the groups instead. An image without a child of that node is judged alone, and an image with several takes the first by name. The later nodes cut as above.
+- **Checkbox off and every box blank**: every image is its own group and is judged alone.
 
-A node is a tag path such as `Rally|2026`; its children are the tags one level below it, e.g. `Rally|2026|37`. Typing `Assisted Grouping` uses each photo's own latest [Assisted Grouping](../darktable-assisted-grouping/README.md) run (`Assisted Grouping|2026-01-01 12:00:00|Group|NNNN`), so after regrouping part of a shoot the regrouped photos use the new run and the rest keep the old one. Assisted Grouping must have **Group tags** on, or there is nothing to find. With the checkbox on and every box blank, if no photo is in a native group but grouping tags are present, the log and a notice say to type `Assisted Grouping` in a tag node box.
+A node is a tag path such as `Rally|2026`; its children are the tags one level below it, e.g. `Rally|2026|37`. Typing `Assisted Grouping` uses each image's own latest [Assisted Grouping](../darktable-assisted-grouping/README.md) run (`Assisted Grouping|2026-01-01 12:00:00|Group|NNNN`), so after regrouping part of a shoot the regrouped images use the new run and the rest keep the old one. Assisted Grouping must have **Group tags** on, or there is nothing to find. With the checkbox on and every box blank, if no image is in a native group but grouping tags are present, the log and a notice say to type `Assisted Grouping` in a tag node box.
 
 A node holding start-list entries splits per number only for entries tagged `<node>|<number>`; entries tagged `<node>|<team>|<name>` (imported start lists with teams) split per team, not per number.
 
@@ -516,7 +516,7 @@ Presets saved with the earlier **grouping support** dropdown load into the check
 
 The rally setup reads group tags; see [WORKFLOW.md](../darktable-assisted-grouping/WORKFLOW.md).
 
-A photo with no group is its own group, and a selection with no groups at all still runs. Groups are not size-checked: a coarse group (Assisted Grouping's burst gap set high, or its Camera or Parent layers joining different cars) makes culling pick one keeper across all of them. That is your grouping settings at work: tighten the grouping, add a tag node, or fix the group. The log's `grouping:` line records whether native groups were on, how many photos landed in groups of 2 or more, and for each node how many grouped photos it tagged and how many groups it split (or that it matched no selected photo).
+An image with no group is its own group, and a selection with no groups at all still runs. Groups are not size-checked: a coarse group (Assisted Grouping's burst gap set high, or its Camera or Parent layers joining different cars) makes culling pick one keeper across all of them. That is your grouping settings at work: tighten the grouping, add a tag node, or fix the group. The log's `grouping:` line records whether native groups were on, how many images landed in groups of 2 or more, and for each node how many grouped images it tagged and how many groups it split (or that it matched no selected image).
 
 ### How the SAM mode fits together
 
@@ -608,10 +608,10 @@ The grouping-support changes have not run in darktable yet. Work through these s
 
 Use a selection with at least two bursts of 3+ frames each.
 
-4. **Native groups.** Group each burst in darktable (ctrl+g), tick **Cull by Native Groups**, leave the tag node boxes blank, and click **Cull Selection**. *Expect:* one `Keeper` per burst (more if *Keepers* allows), the rest rated per *Non-Keepers*, with `Rejected` only on frames far behind their burst's best. The log at `%LOCALAPPDATA%\darktable\assisted_culling.log` shows `run started`, the `settings:` line, `grouping: native groups on, N of M photos in groups of 2+` and `run finished`.
-5. **Tag node cuts the groups.** Tag two frames of one burst with different children of a node (e.g. `Rally|2026|37` and `Rally|2026|86`), type the node in **tag node 1**, and cull. *Expect:* that burst keeps a frame of each child; untagged frames in it share one pool. The `grouping:` log line ends with `tag node Rally|2026: N grouped photos tagged, 1 groups split`.
-6. **Tag node forms the groups.** Run Assisted Grouping with **Group tags** on, untick **Cull by Native Groups**, type `Assisted Grouping` in **tag node 1**, and cull. *Expect:* the same per-burst keepers as step 4. The log line reads `grouping: native groups off, … tag node Assisted Grouping forms the groups`. Then type a node that doesn't exist on these photos and cull again. *Expect:* every photo is judged alone, and the log line ends with `(matches no selected photo)`.
-7. **Nothing set.** Untick **Cull by Native Groups**, blank all three boxes, and cull. *Expect:* every photo is judged alone; each frame can be a keeper, and no "No groups found" notice shows.
+4. **Native groups.** Group each burst in darktable (ctrl+g), tick **Cull by Native Groups**, leave the tag node boxes blank, and click **Cull Selection**. *Expect:* one `Keeper` per burst (more if *Keepers* allows), the rest rated per *Non-Keepers*, with `Rejected` only on frames far behind their burst's best. The log at `%LOCALAPPDATA%\darktable\assisted_culling.log` shows `run started`, the `settings:` line, `grouping: native groups on, N of M images in groups of 2+` and `run finished`.
+5. **Tag node cuts the groups.** Tag two frames of one burst with different children of a node (e.g. `Rally|2026|37` and `Rally|2026|86`), type the node in **tag node 1**, and cull. *Expect:* that burst keeps a frame of each child; untagged frames in it share one pool. The `grouping:` log line ends with `tag node Rally|2026: N grouped images tagged, 1 groups split`.
+6. **Tag node forms the groups.** Run Assisted Grouping with **Group tags** on, untick **Cull by Native Groups**, type `Assisted Grouping` in **tag node 1**, and cull. *Expect:* the same per-burst keepers as step 4. The log line reads `grouping: native groups off, … tag node Assisted Grouping forms the groups`. Then type a node that doesn't exist on these images and cull again. *Expect:* every image is judged alone, and the log line ends with `(matches no selected image)`.
+7. **Nothing set.** Untick **Cull by Native Groups**, blank all three boxes, and cull. *Expect:* every image is judged alone; each frame can be a keeper, and no "No groups found" notice shows.
 
 **Panel**
 
@@ -671,7 +671,7 @@ python python/score_images.py manifest.csv results.csv
    ```
    python python/eval_culling.py @rally-photos.txt --snapshot rally-truth.csv
    ```
-   `rally-photos.txt` holds one file or folder per line; folders are read for their photos, and a RAW with a JPEG beside it counts once. Plain paths work in place of the `@list`.
+   `rally-photos.txt` holds one file or folder per line; folders are read for their images, and a RAW with a JPEG beside it counts once. Plain paths work in place of the `@list`.
 3. Run the plugin with the settings under test.
 4. Score it:
    ```
@@ -679,7 +679,7 @@ python python/score_images.py manifest.csv results.csv
    ```
    Without `--truth` the sidecars are read directly, which only makes sense before the plugin has rated them. `--report PATH` points at a `last-run.csv` other than the one in darktable's config folder (an archived copy under `assisted_culling/reports/`, say). `--out FILE` also saves the text.
 
-It prints, overall and per group, per sharpness mode and per motion class: the hit rate (your picks the plugin kept), false keepers (plugin keepers you didn't pick) and Spearman's rank correlation between your stars and its stars (rejected counts as -1; frames the run left alone are excluded and counted). A pick is a photo you rated 1 star or more and didn't reject; `--pick-stars 3` raises the bar. The sharpness mode per burst is the one you pass, corrected where the run's `Technique` tag shows a burst switched (see [Shooting intent from EXIF](#shooting-intent-from-exif)). Only report rows for the given photos count, so one `last-run.csv` can cover more than the shoot. A truth CSV can also be written by hand: columns `file` (name or path), `stars` (or `rating`, -1 for a reject) and optionally `rejected`.
+It prints, overall and per group, per sharpness mode and per motion class: the hit rate (your picks the plugin kept), false keepers (plugin keepers you didn't pick) and Spearman's rank correlation between your stars and its stars (rejected counts as -1; frames the run left alone are excluded and counted). A pick is an image you rated 1 star or more and didn't reject; `--pick-stars 3` raises the bar. The sharpness mode per burst is the one you pass, corrected where the run's `Technique` tag shows a burst switched (see [Shooting intent from EXIF](#shooting-intent-from-exif)). Only report rows for the given images count, so one `last-run.csv` can cover more than the shoot. A truth CSV can also be written by hand: columns `file` (name or path), `stars` (or `rating`, -1 for a reject) and optionally `rejected`.
 
 Same inputs give the same output, so two runs with different settings are compared by diffing their `--out` files.
 
@@ -711,13 +711,13 @@ Each suggestion shows its hit rate, false keepers and Spearman, then the preset 
 
 - It needs `--sharp-mode`, because the replay rates each burst with the tiers of the mode the run used. The sharpness mode and the tier tables are not searched: `star_scale` covers "stricter or looser stars", and a different sharpness mode means different scores, so that is a new run.
 - One shoot overfits: the best settings for one rally are the ones that happen to fit that rally. Keep each run's `last-run.csv` and `--snapshot` CSV and add them with `--shoot REPORT TRUTH` (repeatable; all must be runs in the same `--sharp-mode`). Counts are pooled across shoots. With one shoot it says so.
-- The replay reads the report, not the photos: it uses the same scores, bursts and shortlist. Frames the run could not read are not in the report, and tag-only flags are not either, so every flag it lists costs a star. The ranking is hit rate minus false-keeper rate, then Spearman; when two choices give the same numbers the panel's default wins.
+- The replay reads the report, not the images: it uses the same scores, bursts and shortlist. Frames the run could not read are not in the report, and tag-only flags are not either, so every flag it lists costs a star. The ranking is hit rate minus false-keeper rate, then Spearman; when two choices give the same numbers the panel's default wins.
 - `python/rating.py` holds the keeper and star rules for both the plugin and the replay, so the two agree exactly.
 - A setting the reports cannot tell apart is not searched and stays at the panel's default: other angles with no `view` in any report, motion look with no `motion_look` frame, star slope when no shoot has 10 (`SLOPE_MIN_KEEPERS`) frames that can keep. The output names each one with the reason and says how many of the combinations it tried.
 
 #### Learning from what you did after a run
 
-`--learn` needs no snapshot and no photo list. It reads every archived report (the `reports` folder beside `last-run.csv`, or `--learn DIR`) and the sidecars as they are now, and takes what you changed as the truth:
+`--learn` needs no snapshot and no image list. It reads every archived report (the `reports` folder beside `last-run.csv`, or `--learn DIR`) and the sidecars as they are now, and takes what you changed as the truth:
 
 ```
 python python/eval_culling.py --learn
@@ -728,7 +728,7 @@ python python/eval_culling.py --learn --sharp-mode motion_aware --suggest
 - An edit: a frame you developed is a pick, stronger than any star rating, unless you rejected it. Edited means the sidecar's `darktable:history_current_hash` equals neither `history_basic_hash` nor `history_auto_hash`, which is darktable's own test for an altered image. A paired RAW's sidecar counts.
 - Only a burst with a correction or an edit counts, and then all its frames do, with their stars as they are now. A frame counts in the newest report that holds it. A frame with no rated sidecar is skipped.
 - It prints how many frames and bursts it learned from by source, what it left out, and `plugin kept N of the M frames you picked; you raised A, lowered B`. With `--suggest` these are the truth; `--shoot` adds more.
-- Run it on the machine that holds the photos, with darktable writing sidecars. The archive keeps the newest 20 reports, and all of them are read as runs in the `--sharp-mode` you pass.
+- Run it on the machine that holds the images, with darktable writing sidecars. The archive keeps the newest 20 reports, and all of them are read as runs in the `--sharp-mode` you pass.
 
 ### End-to-end without the GUI
 
