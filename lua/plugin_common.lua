@@ -885,7 +885,7 @@ function C.preset_order(names)
     return rest
 end
 
--- Preset bundles: export writes <folder>/<name>.atpreset/ holding manifest.json, preset.json
+-- Preset bundles: export writes <folder>/<name>.atpreset.zip holding manifest.json, preset.json
 -- and any files the plugin's store adds (tagging: entries.json). BUNDLE_VERSION goes up when
 -- the layout changes in a way an older plugin can't read.
 C.PRESET_BUNDLE_VERSION = 1
@@ -1002,6 +1002,26 @@ function C.remove_tree(path)
     return os.execute("rm -rf " .. C.shell_quote(path)) and true or false
 end
 
+-- Zips the contents of folder `dir` (not the folder itself) into `zip`, which must not exist yet.
+-- Windows 10+ tar and macOS/Linux zip; false when the tool is missing or fails.
+function C.zip_dir(dir, zip)
+    if C.IS_WINDOWS then
+        return os.execute('tar -a -c -f ' .. C.shell_quote((zip:gsub("/", "\\"))) .. ' -C '
+            .. C.shell_quote((dir:gsub("/", "\\"))) .. ' . 2>nul') and true or false
+    end
+    return os.execute('(cd ' .. C.shell_quote(dir) .. ' && zip -qr ' .. C.shell_quote(zip) .. ' .) 2>/dev/null') and true or false
+end
+
+-- Unzips `zip` into folder `dir` (made if missing); false when it isn't a readable zip.
+function C.unzip(zip, dir)
+    C.make_dir(dir)
+    if C.IS_WINDOWS then
+        return os.execute('tar -x -f ' .. C.shell_quote((zip:gsub("/", "\\"))) .. ' -C '
+            .. C.shell_quote((dir:gsub("/", "\\"))) .. ' 2>nul') and true or false
+    end
+    return os.execute('unzip -q -o ' .. C.shell_quote(zip) .. ' -d ' .. C.shell_quote(dir) .. ' 2>/dev/null') and true or false
+end
+
 -- `path`'s bytes, or nil when it can't be read as a file (missing, or a folder).
 local function read_bytes(path)
     local f = io.open(path, "rb")
@@ -1085,8 +1105,8 @@ end
 --       show = fn(settings), remember = fn(name), initial = name, log = fn(msg),
 --       on_change = fn(name, is_template) | nil, can_switch = fn() -> ok, why | nil,
 --       allow_store_new = bool, plugin_folder = fn() -> path or "" }
--- Export writes <plugin_folder()>/exports/<name>.atpreset; with no folder set, the folder above
--- this file's lua/ folder. Exporting a preset again replaces its bundle when anything differs and
+-- Export writes <plugin_folder()>/exports/<name>.atpreset.zip; with no folder set, the folder above
+-- this file's lua/ folder. Exporting a preset again replaces its zip when anything differs and
 -- leaves it alone when nothing does.
 -- Optional store.copy_note(from, to) -> confirm text | nil, why and store.copy(from, to) -> ok, err:
 -- store new then asks first, and copies the selected preset's store (e.g. a folder) before writing.
@@ -1331,12 +1351,14 @@ function C.make_preset_controls(o)
     end
 
     -- The saved preset, not the panel: unsaved changes stay out and the message says so.
-    local function export_clicked()
+    -- `step(fraction)` moves the export's progress bar.
+    local function export_bundle(step)
         local text = o.store.read(current)
         if not text then say("couldn't read " .. o.store.path(current)); return end
         local root = o.plugin_folder and o.plugin_folder() or ""
         local folder = (root ~= "" and root or PLUGIN_DIR) .. "/exports"
-        local bundle = folder .. "/" .. current .. ".atpreset"
+        local bundle = folder .. "/" .. current .. ".atpreset.zip"
+        local staging = folder .. "/.staging"
         local picked = {}
         for key, check in pairs(export_checks) do picked[key] = check.value and true or nil end
         local files = { { name = "preset.json", text = text } }
@@ -1349,12 +1371,18 @@ function C.make_preset_controls(o)
                 files[#files + 1] = { name = f.name, text = body }
             end
         end
+        step(0.1)
         local names = {}
         for _, f in ipairs(files) do names[#names + 1] = f.name end
         local manifest = C.preset_manifest(o.plugin, current, names, os.date("%Y-%m-%d"))
         local replaced = C.path_exists(bundle)
         if replaced then
-            if C.bundle_unchanged(bundle, files, manifest) then
+            local old = folder .. "/.previous"
+            C.remove_tree(old)
+            local unchanged = C.unzip(bundle, old) and C.bundle_unchanged(old, files, manifest)
+            C.remove_tree(old)
+            step(0.4)
+            if unchanged then
                 export_box.visible = false
                 local msg = string.format('preset "%s" is already exported and unchanged: %s', current, bundle)
                 o.log(msg)
@@ -1363,39 +1391,70 @@ function C.make_preset_controls(o)
             end
             if not C.remove_tree(bundle) then say("couldn't replace " .. bundle); return end
         end
-        C.make_dir(bundle)
+        step(0.5)
+        C.remove_tree(staging)
+        C.make_dir(staging)
+        local function fail(msg) C.remove_tree(staging); say(msg) end
         for _, f in ipairs(files) do
             local ok
-            if f.dir then ok = C.copy_tree(f.dir, bundle .. "/" .. f.name)
-            else ok = C.write_file_atomic(bundle .. "/" .. f.name, f.text) end
-            if not ok then
-                say("couldn't write " .. bundle .. "/" .. f.name)
-                return
-            end
+            if f.dir then ok = C.copy_tree(f.dir, staging .. "/" .. f.name)
+            else ok = C.write_file_atomic(staging .. "/" .. f.name, f.text) end
+            if not ok then fail("couldn't write " .. staging .. "/" .. f.name); return end
         end
-        if not C.write_file_atomic(bundle .. "/manifest.json", manifest) then
-            say("couldn't write " .. bundle .. "/manifest.json")
+        if not C.write_file_atomic(staging .. "/manifest.json", manifest) then
+            fail("couldn't write " .. staging .. "/manifest.json")
             return
         end
+        step(0.8)
+        local zipped = C.zip_dir(staging, bundle)
+        C.remove_tree(staging)
+        if not zipped then
+            os.remove(bundle)
+            say("couldn't zip " .. bundle .. " (needs tar on Windows, zip on Mac)")
+            return
+        end
+        step(1)
         export_box.visible = false
-        local msg = string.format('preset "%s" %s %s', current, replaced and "re-exported, replacing" or "exported to", bundle)
+        local msg = string.format('preset "%s" exported to %s%s', current, bundle, replaced and " (replaced the earlier export)" or "")
         o.log(msg .. " (" .. table.concat(names, ", ") .. ")")
         say(msg .. (ctl.check_dirty() and "; unsaved panel changes aren't in it" or ""))
     end
 
+    -- Puts the export on darktable's job list and says so before the first slow step: comparing and
+    -- copying the references takes long enough that the click looked ignored. Without dt.gui.create_job
+    -- (a test stub) only the toast shows.
+    local function export_clicked()
+        local started = os.time()
+        local job
+        if dt.gui and dt.gui.create_job then
+            local ok, made = pcall(dt.gui.create_job, o.prefix .. ": exporting preset", false)
+            if ok then job = made; job.percent = 0.0 end
+        end
+        say(string.format('exporting preset "%s"…', current))
+        if dt.control and dt.control.sleep then dt.control.sleep(50) end -- lets darktable paint the toast first
+        local ok, err = pcall(export_bundle, function(fraction)
+            if job and job.valid then job.percent = fraction end
+        end)
+        if job and job.valid then job.valid = false end -- once: a second set frees the object twice
+        o.log(string.format("export took %ds", os.time() - started))
+        if not ok then
+            o.log("export failed: " .. tostring(err))
+            say("export failed: " .. tostring(err))
+        end
+    end
+
     -- Adds the bundle as a new preset (renamed when the name is taken) without switching to it,
     -- so unsaved panel changes stay.
-    local function import_clicked()
-        local bundle = import_chooser.value
-        if not bundle or bundle == "" then say("pick the .atpreset folder first"); return end
+    -- `bundle` is the unzipped folder, `label` the zip the user picked.
+    local function import_bundle(bundle, label)
         local manifest_text = C.read_file(bundle .. "/manifest.json")
-        if not manifest_text then say(bundle .. " has no manifest.json: pick the .atpreset folder"); return end
+        if not manifest_text then say(label .. " has no manifest.json: pick a preset .zip"); return end
         local m, why = C.preset_bundle_check(manifest_text, o.plugin)
         if not m then say(why); return end
         local text = C.read_file(bundle .. "/preset.json")
         local decoded, err
         if text then decoded, err = C.preset_decode(text) else err = "is missing" end
-        if not decoded then say(bundle .. "/preset.json " .. err); return end
+        if not decoded then say(label .. " preset.json " .. err); return end
         local name, bad = C.preset_name_ok(m.preset)
         if not name then say("the bundle's preset name: " .. PRESET_WHY[bad]); return end
         name = C.preset_free_name(name, o.store.list())
@@ -1406,9 +1465,25 @@ function C.make_preset_controls(o)
         if not o.store.write(name, text) then say("couldn't write " .. o.store.path(name)); return end
         import_box.visible = false
         ctl.refresh()
-        local msg = string.format('imported "%s" from %s', name, bundle)
+        local msg = string.format('imported "%s" from %s', name, label)
         o.log(msg)
         say(msg .. (name ~= m.preset and string.format(' ("%s" was taken)', m.preset) or "") .. ". Pick it in the preset list.")
+    end
+
+    local function import_clicked()
+        local zip = import_chooser.value
+        if not zip or zip == "" then say("pick the preset .zip first"); return end
+        local root = o.plugin_folder and o.plugin_folder() or ""
+        local tmp = (root ~= "" and root or PLUGIN_DIR) .. "/exports/.import"
+        C.remove_tree(tmp)
+        if not C.unzip(zip, tmp) then
+            C.remove_tree(tmp)
+            say(zip .. " isn't a readable zip")
+            return
+        end
+        local ok, err = pcall(import_bundle, tmp, zip)
+        C.remove_tree(tmp)
+        if not ok then o.log("import failed: " .. tostring(err)); say("import failed: " .. tostring(err)) end
     end
 
     picker = dt.new_widget("combobox") {
@@ -1482,14 +1557,13 @@ function C.make_preset_controls(o)
     }
     export_box = dt.new_widget("box")(export_parts)
     import_chooser = dt.new_widget("file_chooser_button") {
-        title = "Preset Bundle (.atpreset Folder)",
-        is_directory = true,
-        tooltip = "A <name>.atpreset folder made by export preset. A preset with the same name is kept: the import gets (2) added.",
+        title = "Preset Bundle (.atpreset.zip)",
+        tooltip = "A <name>.atpreset.zip made by export preset. A preset with the same name is kept: the import gets (2) added.",
     }
     import_box = dt.new_widget("box") {
         orientation = "vertical",
         visible = false,
-        dt.new_widget("label") { label = "Import .atpreset Folder", halign = "start" },
+        dt.new_widget("label") { label = "Import .atpreset.zip", halign = "start" },
         import_chooser,
         dt.new_widget("box") {
             orientation = "horizontal",
