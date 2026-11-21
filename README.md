@@ -56,59 +56,46 @@ python3 -m venv .venv
 
 ### 2. darktable side
 
-Run these from the repo root, the folder holding `README.md`. darktable's config directory is `~/.config/darktable` on Linux/macOS and `%LOCALAPPDATA%\darktable` on Windows.
+Run the block for your system from the repo root, the folder holding `README.md`. It puts the two plugin files into darktable's `lua/contrib` folder and adds one `luarc` line. Run it again from each other Assisted plugin's repo that you install; nothing is added twice.
 
-Linux / macOS:
+Linux / macOS (links):
 
 ```
 mkdir -p ~/.config/darktable/lua/contrib
-ln -s "$(pwd)/lua/assisted_culling.lua" ~/.config/darktable/lua/contrib/assisted_culling.lua
-ln -s "$(pwd)/lua/plugin_common.lua" ~/.config/darktable/lua/contrib/plugin_common.lua
-echo 'do local ok, e = pcall(require, "contrib/assisted_culling"); local f = io.open(require("darktable").configuration.config_dir .. "/dt-lua-errors.txt", "a"); f:write("assisted_culling ", ok and "loaded" or ("FAILED " .. tostring(e)), "\n"); f:close() end' >> ~/.config/darktable/luarc
+ln -sf "$(pwd)/lua/assisted_culling.lua" ~/.config/darktable/lua/contrib/assisted_culling.lua
+ln -sf "$(pwd)/lua/plugin_common.lua" ~/.config/darktable/lua/contrib/plugin_common.lua
+grep -qs 'assisted-loop' ~/.config/darktable/luarc || echo 'do local d = require("darktable"); local f = io.open(d.configuration.config_dir .. "/dt-lua-errors.txt", "a"); for _, n in ipairs({"assisted_tagging", "assisted_culling", "assisted_grouping"}) do local h = io.open(d.configuration.config_dir .. "/lua/contrib/" .. n .. ".lua", "r"); if h then h:close(); local ok, e = pcall(require, "contrib/" .. n); f:write(n, " ", ok and "loaded" or ("FAILED " .. tostring(e)), "\n") end end f:close() end -- assisted-loop' >> ~/.config/darktable/luarc
 ```
 
-Windows (Command Prompt), links. These need Developer Mode on (`Win + R`, then `ms-settings:developers`) or an Administrator prompt:
-
-```
-if not exist "%LOCALAPPDATA%\darktable\lua\contrib" mkdir "%LOCALAPPDATA%\darktable\lua\contrib"
-mklink "%LOCALAPPDATA%\darktable\lua\contrib\assisted_culling.lua" "%CD%\lua\assisted_culling.lua"
-mklink "%LOCALAPPDATA%\darktable\lua\contrib\plugin_common.lua" "%CD%\lua\plugin_common.lua"
-```
-
-Windows (Command Prompt), copies instead of links. Use this with neither Developer Mode nor Administrator, and re-run it after every update:
+Windows (Command Prompt, copies; no Administrator or Developer Mode needed, re-run after every update):
 
 ```
 if not exist "%LOCALAPPDATA%\darktable\lua\contrib" mkdir "%LOCALAPPDATA%\darktable\lua\contrib"
 copy /Y lua\assisted_culling.lua "%LOCALAPPDATA%\darktable\lua\contrib\"
 copy /Y lua\plugin_common.lua "%LOCALAPPDATA%\darktable\lua\contrib\"
+findstr /C:"assisted-loop" "%LOCALAPPDATA%\darktable\luarc" >nul 2>&1 || echo do local d = require("darktable"); local f = io.open(d.configuration.config_dir .. "/dt-lua-errors.txt", "a"); for _, n in ipairs({"assisted_tagging", "assisted_culling", "assisted_grouping"}) do local h = io.open(d.configuration.config_dir .. "/lua/contrib/" .. n .. ".lua", "r"); if h then h:close(); local ok, e = pcall(require, "contrib/" .. n); f:write(n, " ", ok and "loaded" or ("FAILED " .. tostring(e)), "\n") end end f:close() end -- assisted-loop >> "%LOCALAPPDATA%\darktable\luarc"
 ```
 
-Windows (Command Prompt), the `luarc` line (after either of the two blocks above):
+Windows (Command Prompt, links; needs Developer Mode on, `Win + R` then `ms-settings:developers`, or an Administrator prompt; links follow the repo, so no re-run after an update):
 
 ```
-echo do local ok, e = pcall(require, "contrib/assisted_culling"); local f = io.open(require("darktable").configuration.config_dir .. "/dt-lua-errors.txt", "a"); f:write("assisted_culling ", ok and "loaded" or ("FAILED " .. tostring(e)), "\n"); f:close() end >> "%LOCALAPPDATA%\darktable\luarc"
+if not exist "%LOCALAPPDATA%\darktable\lua\contrib" mkdir "%LOCALAPPDATA%\darktable\lua\contrib"
+del "%LOCALAPPDATA%\darktable\lua\contrib\assisted_culling.lua" "%LOCALAPPDATA%\darktable\lua\contrib\plugin_common.lua" 2>nul
+mklink "%LOCALAPPDATA%\darktable\lua\contrib\assisted_culling.lua" "%CD%\lua\assisted_culling.lua"
+mklink "%LOCALAPPDATA%\darktable\lua\contrib\plugin_common.lua" "%CD%\lua\plugin_common.lua"
+findstr /C:"assisted-loop" "%LOCALAPPDATA%\darktable\luarc" >nul 2>&1 || echo do local d = require("darktable"); local f = io.open(d.configuration.config_dir .. "/dt-lua-errors.txt", "a"); for _, n in ipairs({"assisted_tagging", "assisted_culling", "assisted_grouping"}) do local h = io.open(d.configuration.config_dir .. "/lua/contrib/" .. n .. ".lua", "r"); if h then h:close(); local ok, e = pcall(require, "contrib/" .. n); f:write(n, " ", ok and "loaded" or ("FAILED " .. tostring(e)), "\n") end end f:close() end -- assisted-loop >> "%LOCALAPPDATA%\darktable\luarc"
 ```
 
-Windows (PowerShell), links and the `luarc` line. Same Developer Mode or Administrator need:
-
-```
-New-Item -ItemType Directory -Force "$env:LOCALAPPDATA\darktable\lua\contrib"
-New-Item -ItemType SymbolicLink -Path "$env:LOCALAPPDATA\darktable\lua\contrib\assisted_culling.lua" -Value "$PWD\lua\assisted_culling.lua"
-New-Item -ItemType SymbolicLink -Path "$env:LOCALAPPDATA\darktable\lua\contrib\plugin_common.lua" -Value "$PWD\lua\plugin_common.lua"
-Add-Content "$env:LOCALAPPDATA\darktable\luarc" 'do local ok, e = pcall(require, "contrib/assisted_culling"); local f = io.open(require("darktable").configuration.config_dir .. "/dt-lua-errors.txt", "a"); f:write("assisted_culling ", ok and "loaded" or ("FAILED " .. tostring(e)), "\n"); f:close() end'
-```
-
-Then restart darktable and open `dt-lua-errors.txt` in the config directory. `assisted_culling loaded` means it worked: the panel appears in lighttable once the view has finished loading. `assisted_culling FAILED ...` gives the reason.
+Then restart darktable and open `dt-lua-errors.txt` in the config directory (`~/.config/darktable` on Linux/macOS, `%LOCALAPPDATA%\darktable` on Windows). `assisted_culling loaded` means it worked: the panel appears in lighttable once the view has finished loading. `assisted_culling FAILED ...` gives the reason.
 
 **Why these steps.**
 
-- The plugin is two files, and both must sit in `lua/contrib`: `lua/assisted_culling.lua` and `lua/plugin_common.lua`. `plugin_common.lua` is the module the three Assisted plugins share. The three copies are identical, so one copy serves all three; if another Assisted plugin already put it there, the second `ln -s` or `mklink` fails with "already exists", which is harmless.
-- Without `plugin_common.lua` the plugin fails with `module 'plugin_common' not found`.
-- `plugin_common.lua` has no `luarc` line. It is not a plugin: the plugin loads it with `loadfile`, looking beside itself first, then in the **plugins folder** preference. Nothing copies it for you, and on a new device the preference does not exist yet (it is registered only after the plugin loads), so put it in `lua/contrib`. Your `luarc` shows one line per plugin and none for `plugin_common`, which is correct. Installing just this one plugin? Still do both file steps. Installing more than one? Do the `plugin_common.lua` step once; a repeat is harmless.
-- The `luarc` line loads the plugin inside `pcall` and appends `loaded` or `FAILED <reason>` to `dt-lua-errors.txt`, so a plugin that does not appear says why. Each Assisted plugin gets its own line with its own name. A plain `require "contrib/assisted_culling"` line also works but says nothing when it fails.
-- A link into the repo finds `plugin_common.lua` beside the plugin by itself. With the **plugins folder** preference (next step) set, the plugin can also load it from `darktable-assisted-culling/lua/` in that folder when it is not in `contrib`.
+- The plugin is two files, and both must sit in `lua/contrib`: `lua/assisted_culling.lua` and `lua/plugin_common.lua`. `plugin_common.lua` is the module the three Assisted plugins share. The three copies are identical, so each plugin's block overwrites the same file harmlessly.
+- Without `plugin_common.lua` the plugin fails with `module 'plugin_common' not found`. It has no `luarc` line of its own: the plugin loads it with `loadfile`, looking beside itself first, then in the **plugins folder** preference. Nothing copies it for you, and on a new device the preference does not exist yet (it is registered only after the plugin loads), so put it in `lua/contrib`.
+- The `luarc` line is one loop for all three plugins. For each of `assisted_tagging`, `assisted_culling` and `assisted_grouping` whose file is in `lua/contrib`, it loads the plugin inside `pcall` and appends `loaded` or `FAILED <reason>` to `dt-lua-errors.txt`. A plugin you did not install is skipped without a line. The `assisted-loop` marker at its end stops a second run from adding it again.
+- Replacing an older setup: delete any per-plugin `pcall` or `require "contrib/..."` lines for these plugins from `luarc`, then run the block.
+- Keep `require "tools/script_manager"` (the scripts panel, from the separate `lua-scripts` repo) on the first line of `luarc`, above the loop. If the scripts panel is missing, remove the loop line, restart, and check `dt-lua-errors.txt` after adding it back.
 - Copies must be re-made after every update; links follow the repo.
-- Keep `require "tools/script_manager"` (the scripts panel, from the separate `lua-scripts` repo) on the first line of `luarc`, above the Assisted lines, and append the Assisted lines after it. If the scripts panel is missing, remove the Assisted lines, restart, and add them back one at a time; `dt-lua-errors.txt` shows which one fails.
 
 ### 3. Point the plugin at the repo
 
