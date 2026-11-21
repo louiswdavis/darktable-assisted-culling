@@ -30,10 +30,14 @@ Everything runs locally: a Lua plugin inside darktable and a small Python/OpenCV
 
 - darktable 5.4 or newer, built with Lua (the official builds are). The *subject tracking (SAM)* sharpness mode needs 5.6+ with an AI mask model downloaded.
 - Python 3.10+ with `opencv-python-headless` (4.x; `requirements.txt` pins `<5`), `numpy`, `Pillow`, `rawpy` and `onnxruntime` (only the D-FINE / RT-DETR detectors and the sharpness judge use it).
+- Windows: `git` and `curl` (Windows 10+ ships `curl`). Linking the plugin needs Developer Mode on (`Win + R`, then `ms-settings:developers`) or an Administrator prompt; without either, copy the files instead (step 2).
 
 `rawpy` needs `libraw`. The Windows and macOS wheels bundle it; on Linux install `libraw-dev` first, or skip `rawpy` if you only shoot JPEG. It's imported lazily, only when a raw file shows up.
 
 ## Install
+
+Do the steps in order: Python, darktable, plugins folder, models.
+Commands come first under each step; the reasons follow them.
 
 ### 1. Python side
 
@@ -50,7 +54,80 @@ python3 -m venv .venv
 .venv/bin/pip install -r python/requirements.txt
 ```
 
-### 2. Models
+### 2. darktable side
+
+Run these from the repo root, the folder holding `README.md`. darktable's config directory is `~/.config/darktable` on Linux/macOS and `%LOCALAPPDATA%\darktable` on Windows.
+
+Linux / macOS:
+
+```
+mkdir -p ~/.config/darktable/lua/contrib
+ln -s "$(pwd)/lua/assisted_culling.lua" ~/.config/darktable/lua/contrib/assisted_culling.lua
+ln -s "$(pwd)/lua/plugin_common.lua" ~/.config/darktable/lua/contrib/plugin_common.lua
+echo 'do local ok, e = pcall(require, "contrib/assisted_culling"); local f = io.open(require("darktable").configuration.config_dir .. "/dt-lua-errors.txt", "a"); f:write("assisted_culling ", ok and "loaded" or ("FAILED " .. tostring(e)), "\n"); f:close() end' >> ~/.config/darktable/luarc
+```
+
+Windows (Command Prompt), links. These need Developer Mode on (`Win + R`, then `ms-settings:developers`) or an Administrator prompt:
+
+```
+if not exist "%LOCALAPPDATA%\darktable\lua\contrib" mkdir "%LOCALAPPDATA%\darktable\lua\contrib"
+mklink "%LOCALAPPDATA%\darktable\lua\contrib\assisted_culling.lua" "%CD%\lua\assisted_culling.lua"
+mklink "%LOCALAPPDATA%\darktable\lua\contrib\plugin_common.lua" "%CD%\lua\plugin_common.lua"
+```
+
+Windows (Command Prompt), copies instead of links. Use this with neither Developer Mode nor Administrator, and re-run it after every update:
+
+```
+if not exist "%LOCALAPPDATA%\darktable\lua\contrib" mkdir "%LOCALAPPDATA%\darktable\lua\contrib"
+copy /Y lua\assisted_culling.lua "%LOCALAPPDATA%\darktable\lua\contrib\"
+copy /Y lua\plugin_common.lua "%LOCALAPPDATA%\darktable\lua\contrib\"
+```
+
+Windows (Command Prompt), the `luarc` line (after either of the two blocks above):
+
+```
+echo do local ok, e = pcall(require, "contrib/assisted_culling"); local f = io.open(require("darktable").configuration.config_dir .. "/dt-lua-errors.txt", "a"); f:write("assisted_culling ", ok and "loaded" or ("FAILED " .. tostring(e)), "\n"); f:close() end >> "%LOCALAPPDATA%\darktable\luarc"
+```
+
+Windows (PowerShell), links and the `luarc` line. Same Developer Mode or Administrator need:
+
+```
+New-Item -ItemType Directory -Force "$env:LOCALAPPDATA\darktable\lua\contrib"
+New-Item -ItemType SymbolicLink -Path "$env:LOCALAPPDATA\darktable\lua\contrib\assisted_culling.lua" -Value "$PWD\lua\assisted_culling.lua"
+New-Item -ItemType SymbolicLink -Path "$env:LOCALAPPDATA\darktable\lua\contrib\plugin_common.lua" -Value "$PWD\lua\plugin_common.lua"
+Add-Content "$env:LOCALAPPDATA\darktable\luarc" 'do local ok, e = pcall(require, "contrib/assisted_culling"); local f = io.open(require("darktable").configuration.config_dir .. "/dt-lua-errors.txt", "a"); f:write("assisted_culling ", ok and "loaded" or ("FAILED " .. tostring(e)), "\n"); f:close() end'
+```
+
+Then restart darktable and open `dt-lua-errors.txt` in the config directory. `assisted_culling loaded` means it worked: the panel appears in lighttable once the view has finished loading. `assisted_culling FAILED ...` gives the reason.
+
+**Why these steps.**
+
+- The plugin is two files, and both must sit in `lua/contrib`: `lua/assisted_culling.lua` and `lua/plugin_common.lua`. `plugin_common.lua` is the module the three Assisted plugins share. The three copies are identical, so one copy serves all three; if another Assisted plugin already put it there, the second `ln -s` or `mklink` fails with "already exists", which is harmless.
+- Without `plugin_common.lua` the plugin fails with `module 'plugin_common' not found`.
+- `plugin_common.lua` has no `luarc` line. It is not a plugin: the plugin loads it with `loadfile`, looking beside itself first, then in the **plugins folder** preference. Nothing copies it for you, and on a new device the preference does not exist yet (it is registered only after the plugin loads), so put it in `lua/contrib`. Your `luarc` shows one line per plugin and none for `plugin_common`, which is correct. Installing just this one plugin? Still do both file steps. Installing more than one? Do the `plugin_common.lua` step once; a repeat is harmless.
+- The `luarc` line loads the plugin inside `pcall` and appends `loaded` or `FAILED <reason>` to `dt-lua-errors.txt`, so a plugin that does not appear says why. Each Assisted plugin gets its own line with its own name. A plain `require "contrib/assisted_culling"` line also works but says nothing when it fails.
+- A link into the repo finds `plugin_common.lua` beside the plugin by itself. With the **plugins folder** preference (next step) set, the plugin can also load it from `darktable-assisted-culling/lua/` in that folder when it is not in `contrib`.
+- Copies must be re-made after every update; links follow the repo.
+
+### 3. Point the plugin at the repo
+
+Start darktable, open **preferences → lua options**, and set **plugins folder (holds the three assisted-* folders)** to the folder that holds `darktable-assisted-culling` (and the other assisted plugins). `python/score_images.py`, `models/` and `.venv` are found inside `darktable-assisted-culling`. A folder whose `darktable-assisted-culling` has no `python/score_images.py` is an error. The preference is shared by the assisted plugins; the older per-plugin **Assisted Culling: Plugin folder** preference still works, and the log says once to move it.
+
+There is no interpreter preference: the plugin runs its own `.venv` (else `python`/`python3` on `PATH`), because each assisted plugin has different requirements. On Windows it runs the `pythonw.exe` beside the venv's `python.exe` through `python/launch.py`, so no console window opens and no `.vbs`/`.bat` is written (antivirus behaviour checks such as Bitdefender Advanced Threat Defense flag that chain).
+
+Every other setting lives in the panel and is saved with its [preset](#presets).
+
+### 4. Models
+
+**Recommended** (about 360 MB). Run from the repo root, the folder holding `README.md`, not `python/` (Windows 10+ ships `curl`; `--create-dirs` makes `models/`). Then `pip install -r` again, as in [Python side](#1-python-side), for `onnxruntime`:
+
+```
+curl -L --create-dirs -o models/dfine_x_coco.onnx https://huggingface.co/onnx-community/dfine_x_coco-ONNX/resolve/main/onnx/model.onnx
+curl -L --create-dirs -o models/hyperiqa_model.onnx https://huggingface.co/86Cao/IQA-ONNX-Models/resolve/main/hyperiqa_model.onnx
+curl -L --create-dirs -o models/hyperiqa_model.onnx.data https://huggingface.co/86Cao/IQA-ONNX-Models/resolve/main/hyperiqa_model.onnx.data
+```
+
+**Which models culling uses.**
 
 Every model is optional: culling scores without any. There are three jobs, and these are all the models culling uses:
 
@@ -62,13 +139,6 @@ Every model is optional: culling scores without any. There are three jobs, and t
 
 `models/` sits next to the venv; `.gitignore` skips the whole folder, so `git pull` leaves it alone. Re-cloning the repo deletes it.
 
-**Recommended** (about 360 MB). Run from the repo root, the folder holding `README.md`, not `python/` (Windows 10+ ships `curl`; `--create-dirs` makes `models/`). Then `pip install -r` again, as in [Python side](#1-python-side), for `onnxruntime`:
-
-```
-curl -L --create-dirs -o models/dfine_x_coco.onnx https://huggingface.co/onnx-community/dfine_x_coco-ONNX/resolve/main/onnx/model.onnx
-curl -L --create-dirs -o models/hyperiqa_model.onnx https://huggingface.co/86Cao/IQA-ONNX-Models/resolve/main/hyperiqa_model.onnx
-curl -L --create-dirs -o models/hyperiqa_model.onnx.data https://huggingface.co/86Cao/IQA-ONNX-Models/resolve/main/hyperiqa_model.onnx.data
-```
 
 Not in the block on purpose: the other five detectors (`dfine_l`, `rtdetr_v2`, `dfine_m`, `dfine_s`, YOLOX). They're smaller, faster or older steps below D-FINE-X, and the plugin falls back to them only when D-FINE-X isn't installed. Their downloads are in the table below.
 
@@ -97,44 +167,6 @@ Already have the tagging plugin's models? Copy its detector file into this `mode
 **Check what's installed.** Each file must be named exactly as above (curl's `-o` does that; a browser download saves `model.onnx`). The run log names the detector it picked, plus any better file you haven't installed, e.g. `vehicle detector: object_detection_yolox_2022nov.onnx (better, not installed: dfine_x_coco.onnx, …)`. A run with the judge setting on and its files missing stops and says so.
 
 **curl says `client returned ERROR on write` (error 23)?** curl got the data but couldn't save it. It isn't because the file already exists: curl overwrites. Either `models/` doesn't exist where you ran it (run from the repo root, or add `--create-dirs` as above), or the file is in use (close darktable, or wait for a run to finish, then retry).
-
-### 3. darktable side
-
-darktable's config directory is `~/.config/darktable` on Linux/macOS and `%LOCALAPPDATA%\darktable` on Windows. Link the plugin into it and load it from `luarc`. The plugin is `lua/assisted_culling.lua` plus `lua/plugin_common.lua`, the module the three Assisted plugins share; a link into the repo finds the module beside the plugin by itself.
-
-Linux / macOS:
-
-```
-mkdir -p ~/.config/darktable/lua/contrib
-ln -s "$(pwd)/lua/assisted_culling.lua" ~/.config/darktable/lua/contrib/assisted_culling.lua
-echo 'require "contrib/assisted_culling"' >> ~/.config/darktable/luarc
-```
-
-Windows (Command Prompt). Creating symbolic links needs an Administrator prompt unless Developer Mode is enabled.
-
-```
-if not exist "%LOCALAPPDATA%\darktable\lua\contrib" mkdir "%LOCALAPPDATA%\darktable\lua\contrib"
-mklink "%LOCALAPPDATA%\darktable\lua\contrib\assisted_culling.lua" "%CD%\lua\assisted_culling.lua"
-echo require "contrib/assisted_culling" >> "%LOCALAPPDATA%\darktable\luarc"
-```
-
-Windows (PowerShell). Same Administrator caveat.
-
-```
-New-Item -ItemType Directory -Force "$env:LOCALAPPDATA\darktable\lua\contrib"
-New-Item -ItemType SymbolicLink -Path "$env:LOCALAPPDATA\darktable\lua\contrib\assisted_culling.lua" -Value "$PWD\lua\assisted_culling.lua"
-Add-Content "$env:LOCALAPPDATA\darktable\luarc" 'require "contrib/assisted_culling"'
-```
-
-Windows without Administrator rights or Developer Mode: copy `assisted_culling.lua` into `%LOCALAPPDATA%\darktable\lua\contrib` instead of linking it, and add the same `luarc` line. Re-copy it after every update. With the **plugins folder** preference (next step) set, the plugin loads `plugin_common.lua` from that folder's `darktable-assisted-culling/lua/`; copy it into `contrib` too if you want darktable to start with the preference unset (the three plugins' copies are identical, so one copy serves all of them).
-
-### 4. Point the plugin at the repo
-
-Start darktable, open **preferences → lua options**, and set **plugins folder (holds the three assisted-* folders)** to the folder that holds `darktable-assisted-culling` (and the other assisted plugins). `python/score_images.py`, `models/` and `.venv` are found inside `darktable-assisted-culling`. A folder whose `darktable-assisted-culling` has no `python/score_images.py` is an error. The preference is shared by the assisted plugins; the older per-plugin **Assisted Culling: Plugin folder** preference still works, and the log says once to move it.
-
-There is no interpreter preference: the plugin runs its own `.venv` (else `python`/`python3` on `PATH`), because each assisted plugin has different requirements. On Windows it runs the `pythonw.exe` beside the venv's `python.exe` through `python/launch.py`, so no console window opens and no `.vbs`/`.bat` is written (antivirus behaviour checks such as Bitdefender Advanced Threat Defense flag that chain).
-
-Every other setting lives in the panel and is saved with its [preset](#presets).
 
 ## Using it
 
@@ -344,7 +376,7 @@ Needs darktable 5.6+ with a SAM or SAM 2 mask model enabled and downloaded (pref
 
 #### Vehicle detector
 
-Guessing the subject point works on a bright livery but can pick a sponsor board or kerb instead. For motorsport, give SAM a box around the car: install a detector file ([Models](#2-models)) and, with the **plugins folder** preference set (or auto-detected), the best one in `models/` is used.
+Guessing the subject point works on a bright livery but can pick a sponsor board or kerb instead. For motorsport, give SAM a box around the car: install a detector file ([Models](#4-models)) and, with the **plugins folder** preference set (or auto-detected), the best one in `models/` is used.
 
 On each shortlisted frame, the detector finds cars, motorcycles and trucks (race cars are often labelled as trucks). The most prominent one, scored by confidence × size, becomes SAM's prompt, so a car filling a third of the frame beats a small one in the background. A frame with no vehicle (a crowd shot, a pit board) uses the point guess.
 
@@ -384,7 +416,7 @@ How many frames per burst survive: *single best only*, *portrait (1 or 2)*, *dyn
 
 **Break Close Calls on the Number Read** (default *off*, unproven) settles a close call (the last keeper and the best frame that lost score within 5%) on the car number instead of a few percent of sharpness. It needs a tagging run on the same collection: the reads come from tagging's `boxes.json`, and frames changed since that run, or missing from it, keep the sharpness ranking. Both frames must read the same number, and the dropped frame must read it at least 0.10 (`NUMBER_READ_MIN_GAP`) more confidently; then it is kept in place of the keeper and gets `Why|Number clearer`. When several numbers are shared, the one with the highest combined confidence decides. A keeper inside the keeper margin stays kept as well. Check it against your picks: after a run with it on, `eval_culling.py --sharp-mode <mode>` prints the hit rate with it off and on.
 
-**Break Close Calls with the Sharpness Judge** (default *off*, unproven; *motorsport* sharpness only) settles a close call with a learned image-quality model (HyperIQA) instead of a few percent of Laplacian sharpness, which a busy background or noise can tip. It needs the [sharpness judge](#2-models) model files; with the setting on and the files missing, the run stops and says so. Per burst it scores at most 3 (`JUDGE_FRAMES`) frames, those within the close-call share of the best, on 3×3 tiles of the car crop at 224 px, averaged. When the dropped frame scores at least 5% (`JUDGE_MIN_GAP`) above the last keeper, it is kept instead and gets `Why|Subject clearer`. The number read decides first when it is on and settles the call; the judge only sees close calls the reads left. Judge scores are cached with the other scores. Runtime per judged frame is not measured yet. Check it against your picks: after a run with it on, `eval_culling.py --sharp-mode motion_aware` prints the hit rate with it off and on.
+**Break Close Calls with the Sharpness Judge** (default *off*, unproven; *motorsport* sharpness only) settles a close call with a learned image-quality model (HyperIQA) instead of a few percent of Laplacian sharpness, which a busy background or noise can tip. It needs the [sharpness judge](#4-models) model files; with the setting on and the files missing, the run stops and says so. Per burst it scores at most 3 (`JUDGE_FRAMES`) frames, those within the close-call share of the best, on 3×3 tiles of the car crop at 224 px, averaged. When the dropped frame scores at least 5% (`JUDGE_MIN_GAP`) above the last keeper, it is kept instead and gets `Why|Subject clearer`. The number read decides first when it is on and settles the call; the judge only sees close calls the reads left. Judge scores are cached with the other scores. Runtime per judged frame is not measured yet. Check it against your picks: after a run with it on, `eval_culling.py --sharp-mode motion_aware` prints the hit rate with it off and on.
 
 ### Non-keepers
 
@@ -601,7 +633,7 @@ The grouping-support changes have not run in darktable yet. Work through these s
 **Setup**
 
 1. **Install Python** as in [Install](#1-python-side). *Expect:* the requirements install with no errors.
-2. **Install the plugin** as in [Install](#3-darktable-side) and start darktable. *Expect:* an **Assisted Culling** panel on the right in lighttable, with the page buttons *1 scoring ▾* (open, its settings below it) to *6 tools ▸*; opening *5 run* shows a **Cull Selection** button. No `LUA ERROR` in the darktable log.
+2. **Install the plugin** as in [Install](#2-darktable-side) and start darktable. *Expect:* an **Assisted Culling** panel on the right in lighttable, with the page buttons *1 scoring ▾* (open, its settings below it) to *6 tools ▸*; opening *5 run* shows a **Cull Selection** button. No `LUA ERROR` in the darktable log.
 3. **Set the plugins folder** in **preferences → lua options → plugins folder (holds the three assisted-* folders)** to the folder holding the repo. *Expect:* runs find the repo's `.venv`.
 
 **One run per grouping mechanism**
