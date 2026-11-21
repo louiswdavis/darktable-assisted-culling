@@ -994,6 +994,38 @@ function C.copy_tree(from, to)
     return os.execute("cp -R " .. C.shell_quote(from) .. " " .. C.shell_quote(to)) and true or false
 end
 
+-- Deletes folder `path` with everything under it. Only for folders this plugin made.
+function C.remove_tree(path)
+    if C.IS_WINDOWS then
+        return os.execute('rd /s /q ' .. C.shell_quote((path:gsub("/", "\\"))) .. ' 2>nul') and true or false
+    end
+    return os.execute("rm -rf " .. C.shell_quote(path)) and true or false
+end
+
+-- `path`'s bytes, or nil when it can't be read as a file (missing, or a folder).
+local function read_bytes(path)
+    local f = io.open(path, "rb")
+    if not f then return nil end
+    local text = f:read("*a")
+    f:close()
+    return text
+end
+
+-- True when folders `a` and `b` hold the same names with the same bytes, all the way down.
+function C.trees_equal(a, b)
+    local from, to = C.list_dir(a), C.list_dir(b)
+    if #from ~= #to then return false end
+    table.sort(from)
+    table.sort(to)
+    for i, name in ipairs(from) do
+        if to[i] ~= name then return false end
+        local left, right = read_bytes(a .. "/" .. name), read_bytes(b .. "/" .. name)
+        if left ~= right then return false end
+        if left == nil and not C.trees_equal(a .. "/" .. name, b .. "/" .. name) then return false end
+    end
+    return true
+end
+
 -- Presets as <dir>/<name>.json. The folder is made on first use.
 function C.preset_file_store(dir)
     local windows = C.IS_WINDOWS
@@ -1022,13 +1054,40 @@ function C.preset_file_store(dir)
     return store
 end
 
+-- True when `bundle` already holds exactly `files` ({ name, text } or { name, dir }) and a manifest
+-- matching `manifest` apart from its export date, so a re-export would write the same bundle.
+function C.bundle_unchanged(bundle, files, manifest)
+    -- Text files are written in text mode, so Windows stores CRLF where `files` holds LF.
+    local function lf(text) return text and (text:gsub("\r\n", "\n")) end
+    local function undated(text) return (lf(text) or ""):gsub('\n%s*"exported":[^\n]*', "") end
+    if undated(read_bytes(bundle .. "/manifest.json")) ~= undated(manifest) then return false end
+    local expected = { "manifest.json" }
+    for _, f in ipairs(files) do expected[#expected + 1] = f.name end
+    local found = C.list_dir(bundle)
+    table.sort(expected)
+    table.sort(found)
+    if #expected ~= #found then return false end
+    for i, name in ipairs(expected) do
+        if found[i] ~= name then return false end
+    end
+    for _, f in ipairs(files) do
+        if f.dir then
+            if not C.trees_equal(f.dir, bundle .. "/" .. f.name) then return false end
+        elseif lf(read_bytes(bundle .. "/" .. f.name)) ~= lf(f.text) then
+            return false
+        end
+    end
+    return true
+end
+
 -- o = { prefix, plugin (bundle id, e.g. "assisted_grouping"), schema, store,
 --       read_panel = fn() -> settings | nil, why,
 --       show = fn(settings), remember = fn(name), initial = name, log = fn(msg),
 --       on_change = fn(name, is_template) | nil, can_switch = fn() -> ok, why | nil,
 --       allow_store_new = bool, plugin_folder = fn() -> path or "" }
 -- Export writes <plugin_folder()>/exports/<name>.atpreset; with no folder set, the folder above
--- this file's lua/ folder.
+-- this file's lua/ folder. Exporting a preset again replaces its bundle when anything differs and
+-- leaves it alone when nothing does.
 -- Optional store.copy_note(from, to) -> confirm text | nil, why and store.copy(from, to) -> ok, err:
 -- store new then asks first, and copies the selected preset's store (e.g. a folder) before writing.
 -- Optional store.export_files(name, picked) -> { { name, path | dir }, ... } adds files (path) or
@@ -1277,12 +1336,7 @@ function C.make_preset_controls(o)
         if not text then say("couldn't read " .. o.store.path(current)); return end
         local root = o.plugin_folder and o.plugin_folder() or ""
         local folder = (root ~= "" and root or PLUGIN_DIR) .. "/exports"
-        local bundle, i = folder .. "/" .. current .. ".atpreset", 1
-        while C.path_exists(bundle) do
-            i = i + 1
-            bundle = string.format("%s/%s (%d).atpreset", folder, current, i)
-        end
-        C.make_dir(bundle)
+        local bundle = folder .. "/" .. current .. ".atpreset"
         local picked = {}
         for key, check in pairs(export_checks) do picked[key] = check.value and true or nil end
         local files = { { name = "preset.json", text = text } }
@@ -1296,8 +1350,21 @@ function C.make_preset_controls(o)
             end
         end
         local names = {}
+        for _, f in ipairs(files) do names[#names + 1] = f.name end
+        local manifest = C.preset_manifest(o.plugin, current, names, os.date("%Y-%m-%d"))
+        local replaced = C.path_exists(bundle)
+        if replaced then
+            if C.bundle_unchanged(bundle, files, manifest) then
+                export_box.visible = false
+                local msg = string.format('preset "%s" is already exported and unchanged: %s', current, bundle)
+                o.log(msg)
+                say(msg)
+                return
+            end
+            if not C.remove_tree(bundle) then say("couldn't replace " .. bundle); return end
+        end
+        C.make_dir(bundle)
         for _, f in ipairs(files) do
-            names[#names + 1] = f.name
             local ok
             if f.dir then ok = C.copy_tree(f.dir, bundle .. "/" .. f.name)
             else ok = C.write_file_atomic(bundle .. "/" .. f.name, f.text) end
@@ -1306,13 +1373,12 @@ function C.make_preset_controls(o)
                 return
             end
         end
-        local manifest = C.preset_manifest(o.plugin, current, names, os.date("%Y-%m-%d"))
         if not C.write_file_atomic(bundle .. "/manifest.json", manifest) then
             say("couldn't write " .. bundle .. "/manifest.json")
             return
         end
         export_box.visible = false
-        local msg = string.format('preset "%s" exported to %s', current, bundle)
+        local msg = string.format('preset "%s" %s %s', current, replaced and "re-exported, replacing" or "exported to", bundle)
         o.log(msg .. " (" .. table.concat(names, ", ") .. ")")
         say(msg .. (ctl.check_dirty() and "; unsaved panel changes aren't in it" or ""))
     end
