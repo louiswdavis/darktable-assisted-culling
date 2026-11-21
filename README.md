@@ -108,6 +108,7 @@ Then restart darktable and open `dt-lua-errors.txt` in the config directory. `as
 - The `luarc` line loads the plugin inside `pcall` and appends `loaded` or `FAILED <reason>` to `dt-lua-errors.txt`, so a plugin that does not appear says why. Each Assisted plugin gets its own line with its own name. A plain `require "contrib/assisted_culling"` line also works but says nothing when it fails.
 - A link into the repo finds `plugin_common.lua` beside the plugin by itself. With the **plugins folder** preference (next step) set, the plugin can also load it from `darktable-assisted-culling/lua/` in that folder when it is not in `contrib`.
 - Copies must be re-made after every update; links follow the repo.
+- Keep `require "tools/script_manager"` (the scripts panel, from the separate `lua-scripts` repo) on the first line of `luarc`, above the Assisted lines, and append the Assisted lines after it. If the scripts panel is missing, remove the Assisted lines, restart, and add them back one at a time; `dt-lua-errors.txt` shows which one fails.
 
 ### 3. Point the plugin at the repo
 
