@@ -1389,7 +1389,7 @@ function C.make_preset_controls(o)
                 say(msg)
                 return
             end
-            if not C.remove_tree(bundle) then say("couldn't replace " .. bundle); return end
+            if not os.remove(bundle) then say("couldn't replace " .. bundle); return end  -- a file: Windows rd only removes folders
         end
         step(0.5)
         C.remove_tree(staging)

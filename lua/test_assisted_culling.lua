@@ -17,7 +17,7 @@ end
 -- plugin_common.lua ---------------------------------------------------------------
 -- The same file in all three plugin repos; COMMON_HASH pins it. After changing it, copy it to the
 -- other two repos and put the hash this prints into their tests too.
-local COMMON_HASH = "1a12cbf3"
+local COMMON_HASH = "46d45d75"
 local script_dir = (arg and arg[0] or ""):match("^(.*)[/\\]") or "."
 local PC = dofile(script_dir .. "/plugin_common.lua")
 local function fnv1a(text)
