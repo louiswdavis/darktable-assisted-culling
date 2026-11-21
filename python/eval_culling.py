@@ -12,7 +12,7 @@ PHOTOS are files, folders of photos, or @list.txt. The truth is your stars (0-5)
 flag per photo, read from darktable's .xmp sidecars (xmp:Rating, -1 = rejected) or from a
 truth CSV (columns file, stars, rejected). Culling writes its own stars into the same sidecars,
 so take the snapshot before the run, or the plugin's ratings leak into the truth. The report
-is culling's last-run.csv (see README, "What you get"); only its rows for the given photos
+is culling's last-run.csv (see docs/usage.md, "What you get"); only its rows for the given photos
 count. No darktable, numpy or cv2 needed.
 
 A pick is a photo you rated --pick-stars or more and did not reject. Per group and overall:

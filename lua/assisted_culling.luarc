@@ -1,0 +1,8 @@
+
+-- assisted_culling: loads the plugin and writes "loaded" or "FAILED <reason>" to dt-lua-errors.txt
+do
+    local ok, e = pcall(require, "contrib/assisted_culling")
+    local f = io.open(require("darktable").configuration.config_dir .. "/dt-lua-errors.txt", "a")
+    f:write("assisted_culling ", ok and "loaded" or ("FAILED " .. tostring(e)), "\n")
+    f:close()
+end
