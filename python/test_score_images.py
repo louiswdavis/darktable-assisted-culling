@@ -478,7 +478,8 @@ def run_tests():
           settle({"a": {"12": 0.6}, "b": {"12": 0.9}}), (["b"], {"a": "Close call", "b": "Number clearer"}))
     check("number: a gap under NUMBER_READ_MIN_GAP keeps the sharper frame",
           settle({"a": {"12": 0.6}, "b": {"12": 0.65}})[0], ["a"])
-    check("number: only one frame reading keeps today's ranking", settle({"b": {"12": 0.9}})[0], ["a"])
+    check("number: only one frame reading, confidently, wins the close call", settle({"b": {"12": 0.9}})[0], ["b"])
+    check("number: only one frame reading, faintly, keeps today's ranking", settle({"b": {"12": 0.3}})[0], ["a"])
     check("number: different numbers keep today's ranking", settle({"a": {"12": 0.3}, "b": {"21": 0.9}})[0], ["a"])
     check("number: the number both read best decides",
           settle({"a": {"12": 0.9, "7": 0.1}, "b": {"12": 0.8, "7": 0.5}})[0], ["a"])
@@ -490,6 +491,12 @@ def run_tests():
           settle({"a": {"12": 0.6}, "b": {"12": 0.9}}, settings=Namespace(**{**vars(single), "keep_margin": 0.98})),
           (["a", "b"], {"a": "Close call", "b": "Number clearer"}))
     check("number: number_clearer needs a shared number", R.number_clearer({"1": 0.1}, {"2": 0.9}), False)
+    check("number: a kept frame with no read loses to a confident partial read", R.number_clearer({}, {"9": 0.8}), True)
+    check("number: a read under NUMBER_READ_MIN_CONF does not beat no read", R.number_clearer({}, {"9": 0.3}), False)
+    check("number: text with no digit does not beat no read", R.number_clearer({}, {"RACING": 0.9}), False)
+    check("number: a kept frame that reads keeps against a dropped frame with none", R.number_clearer({"9": 0.8}, {}), False)
+    check("number: a close call between a read and no read swaps to the read",
+          settle({"a": {}, "b": {"9": 0.8}})[0], ["b"])
 
     # ticket 14: the sharpness judge settles a close call the reads left
     def judge(judged, burst=close_pair, settings=single, reads=None):

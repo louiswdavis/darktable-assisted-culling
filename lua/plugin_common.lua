@@ -958,6 +958,35 @@ function C.page_coverage(pages, other, schema)
 end
 
 local dt_ok, dt = pcall(require, "darktable")
+-- Weak-evidence rule ---------------------------------------------------------------
+-- Tagging marks a match it is less sure of than a number read (livery, burst, neighbour, pooled
+-- burst, team only, check match) with a diagnostic tag. Such an image is no evidence of which car
+-- it shows unless the user locked it. These are tagging's default tag names; a collection that
+-- renames them passes its own list. `have` is a { [tag] = true } set.
+
+C.TAGGING_LOCKED_TAG = "Assisted Tagging|Locked"
+C.TAGGING_WEAK_TAGS = {
+    "Assisted Tagging|Identification|By livery",
+    "Assisted Tagging|Identification|By burst",
+    "Assisted Tagging|Identification|By neighbour",
+    "Assisted Tagging|Identification|By pooled burst",
+    "Assisted Tagging|Identification|Team only",
+    "Assisted Tagging|Identification|Check match",
+}
+
+-- True when `have` carries any of `names` (blank names are skipped).
+function C.carries_any(have, names)
+    for _, name in ipairs(names) do
+        if name ~= "" and have[name] then return true end
+    end
+    return false
+end
+
+-- True when `have` may serve as evidence of its car: Locked, or carrying no weak tag.
+function C.is_evidence(have, weak_names, locked_tag)
+    return have[locked_tag or C.TAGGING_LOCKED_TAG] == true or not C.carries_any(have, weak_names or C.TAGGING_WEAK_TAGS)
+end
+
 if not dt_ok then return C end
 
 -- Preset controls ------------------------------------------------------------------

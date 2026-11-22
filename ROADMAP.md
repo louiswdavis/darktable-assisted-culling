@@ -177,6 +177,10 @@ Once grouping writes track ids (see its ROADMAP), pick the keeper per track rath
 detected car, and break sharpness ties on whether the race number is readable. A sharp frame
 with the number hidden is worth less to a shooter selling per-driver photos.
 
+Partly built 2026-11-22 (awaiting a Windows run): the close-call number tie-break now also prefers a
+frame with a confident partial read (`NUMBER_READ_MIN_CONF` 0.5) over a frame with none. Per-track
+keepers still need grouping's track ids.
+
 ## Small or distant cars
 
 - **Tile or crop** before detection, so a car that fills a small part of the frame still gets a box

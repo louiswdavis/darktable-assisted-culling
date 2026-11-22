@@ -28,6 +28,7 @@ SLOPE_MIN_KEEPERS = 10  # fewer keepers than this take the tier tables
 # with number reads on, the dropped frame of a close call reads a number both frames read
 # at least this much more confidently (tagging's OCR, 0-1) than the kept one, so it keeps instead
 NUMBER_READ_MIN_GAP = 0.10
+NUMBER_READ_MIN_CONF = 0.5  # a frame with no read at all loses to one reading digits this confidently, partial or whole
 # with the sharpness judge on (--sharp-judge), the top frames of a burst within CLOSE_CALL_SHARE of
 # its best (at most JUDGE_FRAMES) get a quality score on the car crop, and the dropped frame of a
 # close call keeps instead when it scores at least JUDGE_MIN_GAP (a share) above the kept one
@@ -156,10 +157,13 @@ def close_call(burst_sharpness: dict, ranked_keepers: list, losers: list) -> set
 def number_clearer(kept_reads: dict, lost_reads: dict) -> bool:
     """True when the dropped frame reads the number both frames read best (highest summed
     confidence) at least NUMBER_READ_MIN_GAP more confidently than the kept frame. Reads are
-    {number: confidence}; a frame with none never wins or loses."""
+    {number: confidence}. With no shared number, a kept frame with no read at all also loses
+    to a dropped frame reading digits at NUMBER_READ_MIN_CONF or more (a partial read counts:
+    a half-legible number beats a hidden one); otherwise a frame with none never wins or loses."""
     shared = kept_reads.keys() & lost_reads.keys()
     if not shared:
-        return False
+        return not kept_reads and any(
+            lost_reads[n] >= NUMBER_READ_MIN_CONF and any(c.isdigit() for c in n) for n in lost_reads)
     number = max(shared, key=lambda n: (kept_reads[n] + lost_reads[n], n))
     return lost_reads[number] - kept_reads[number] >= NUMBER_READ_MIN_GAP
 

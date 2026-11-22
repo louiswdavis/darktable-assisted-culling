@@ -1313,7 +1313,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
         local applied_total, failed_total, first_error, n_skipped = 0, 0, nil, 0
         local stats = { keepers = 0, others = 0, rejected = 0, flagged = {}, guessed = 0, subject_bias = 0 }
         -- image ids for To check
-        local guessed_ids, close_ids = {}, {}
+        local guessed_ids, close_ids, no_vehicle_ids = {}, {}, {}
         -- verify: burst number → { ids, name, keepers, tagged, differs }, in the order met; one line per photo
         local verify_bursts, verify_order = {}, {}
         local differ_details, hand_ids, hand_details = {}, {}, {}
@@ -1416,6 +1416,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
             if rejected then stats.rejected = stats.rejected + 1 end
             local guessed = diag:find(";Subject|Vehicle|Guessed;", 1, true) ~= nil
             local close_call = diag:find(";Why|Close call;", 1, true) ~= nil
+            local no_vehicle = diag:find(";Why|No vehicle;", 1, true) ~= nil
             if guessed then stats.guessed = stats.guessed + 1 end
             if diag:find(";Scored|Subject bias;", 1, true) then stats.subject_bias = stats.subject_bias + 1 end
             local want_rating = nil
@@ -1470,6 +1471,7 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                 if ok_apply then
                     if guessed then guessed_ids[#guessed_ids + 1] = img.id end
                     if close_call then close_ids[#close_ids + 1] = img.id end
+                    if no_vehicle then no_vehicle_ids[#no_vehicle_ids + 1] = img.id end
                     applied_total = applied_total + 1
                     writes = writes + res
                     all_writes = all_writes + res
@@ -1749,6 +1751,9 @@ function M.score_images(images, rank_mode, sharp_mode, exp_mode, keep_mode, nk_m
                 alerts.add(string.format("%s with a guessed subject: check them by hand.", C.count(#guessed_ids, "image")), guessed_ids)
             end
             if #close_ids > 0 then alerts.add(string.format("%s in close calls: check both frames.", C.count(#close_ids, "image")), close_ids) end
+            if #no_vehicle_ids > 0 then
+                alerts.add(string.format("%s left unrated (no vehicle found): rate them by hand.", C.count(#no_vehicle_ids, "image")), no_vehicle_ids)
+            end
             if failed_total > 0 then alerts.add(string.format("%d images couldn't be updated (see log).", failed_total)) end
             if n_skipped > 0 then alerts.add(string.format("%d images unreadable (see log).", n_skipped)) end
             log(string.format("apply: timing: %.1fs in tag and rating writes, %.1fs paused, %.1fs in progress updates (job bar %.1fs, panel line %.1fs, toast %.1fs); %d rating writes, %d Keeper / Rejected tag writes; final drain took %ds",

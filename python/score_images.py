@@ -41,7 +41,7 @@ from vehicle_detect import (  # noqa: E402
 from rating import (  # noqa: E402,F401
     STAR_THRESHOLDS, RELATIVE_REFERENCE_PERCENTILE, RELATIVE_MIN_FRAMES, GRADED_STEPS, TIER_THRESHOLDS,
     PEAK_TIER_THRESHOLDS, UNIFORMITY_TIER_THRESHOLDS, MOTION_TIER_THRESHOLDS, TIER_THRESHOLDS_BY_MODE,
-    FLAG_PENALTIES, NUMBER_READ_MIN_GAP, ANGLE_KEEP_SHARE, MOTION_LOOK_STRAIGHT, MOTION_LOOK_TIERS,
+    FLAG_PENALTIES, NUMBER_READ_MIN_GAP, NUMBER_READ_MIN_CONF, ANGLE_KEEP_SHARE, MOTION_LOOK_STRAIGHT, MOTION_LOOK_TIERS,
     SLOPE_STARS, SLOPE_MIN_KEEPERS, slope_stars, JUDGE_FRAMES, JUDGE_MIN_GAP, tier_table, keepers_allowed, penalised_flags,
     blank_frames, relative_references, rate_burst, judge_shortlist,
 )
@@ -773,6 +773,7 @@ CACHE_NEUTRAL = (
     "CAR_BOX_MIN_IOU",
     # number reads come from tagging's file each run and only settle close calls
     "NUMBER_READ_MIN_GAP",
+    "NUMBER_READ_MIN_CONF",
     # another view's keeper is picked from cached scores and the burst's boxes
     "ANGLE_KEEP_SHARE",
     "MOTION_LOOK_MIN_BOX",
@@ -2015,7 +2016,8 @@ if __name__ == "__main__":
                              "ranking only, and --star-scale is not used for them")
     parser.add_argument("--number-reads", default="",
                         help="tagging's last boxes.json: in a close call, the dropped frame keeps instead when it "
-                             "reads a car number both frames read at least NUMBER_READ_MIN_GAP more confidently "
+                             "reads a car number both frames read at least NUMBER_READ_MIN_GAP more confidently, "
+                             "or reads one at NUMBER_READ_MIN_CONF or more when the keeper reads none "
                              "(empty = off)")
     parser.add_argument("--sharp-judge", default="",
                         help="motion_aware: a no-reference quality model .onnx (DBCNN, HyperIQA or TReS from "
