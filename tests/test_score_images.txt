@@ -338,124 +338,124 @@ ok   scorer: starts and builds its arguments
 all tests passed
 
 --- stderr ---
-15:45:54 py: finding subjects: 5 frames in 1 bursts, 0 from cache, detector off
-15:45:54 py: burst 9: shortlist of 5 frames: 0 point, 1 point, 2 point
-15:45:54 py: finding subjects: 2 frames in 1 bursts, 0 from cache, detector off
-15:45:55 py: skip saliency 7 (/var/folders/nz/vys208qx42q2wqdxhcbhjrf80000gp/T/tmpo7dm5b3t/gone.jpg): [Errno 2] No such file or directory: '/var/folders/nz/vys208qx42q2wqdxhcbhjrf80000gp/T/tmpo7dm5b3t/gone.jpg'
-15:45:55 py: burst 9: shortlist of 1 frames: 0 point
-15:45:55 py: scoring: 5 frames in 1 bursts, 5 from cache or stage A, 0 to decode, sharpness sam_subject
-15:45:55 py: burst 9: 5 of 5 frames scored, mode sam_subject, masked 0 of 3 shortlisted, so subject bias, keepers 0
-15:45:55 py: scoring: 2 frames in 1 bursts, 2 from cache or stage A, 0 to decode, sharpness sam_subject
-15:45:55 py: burst 9: 1 of 2 frames scored, mode sam_subject, masked 0 of 1 shortlisted, so subject bias, keepers 0
-15:45:55 py: scoring: 2 frames in 2 bursts, 0 from cache or stage A, 2 to decode, sharpness subject_focus
-15:45:55 py: burst 1: 1 of 1 frames scored, mode subject_focus, keepers 1
-15:45:55 py: burst 0: 1 of 1 frames scored, mode subject_focus, keepers 0
-15:45:55 py: scoring: 2 frames in 2 bursts, 2 from cache or stage A, 0 to decode, sharpness subject_focus
-15:45:55 py: relative: subject_focus (2 frames) is under 5 frames, so its bursts take the universal tiers of subject_focus
-15:45:55 py: burst 0: 1 of 1 frames scored, mode subject_focus, keepers 0
-15:45:55 py: burst 1: 1 of 1 frames scored, mode subject_focus, keepers 1
-15:45:55 py: scoring: 2 frames in 2 bursts, 0 from cache or stage A, 2 to decode, sharpness tiles_uniformity
-15:45:56 py: burst 0: 1 of 1 frames scored, mode tiles_uniformity, keepers 0
-15:45:56 py: burst 1: 1 of 1 frames scored, mode tiles_uniformity, keepers 1
-15:45:56 py: scoring: 2 frames in 2 bursts, 1 from cache or stage A, 1 to decode, sharpness subject_focus
-15:45:56 py: burst 1: 1 of 1 frames scored, mode subject_focus, keepers 1
-15:45:56 py: burst 0: 1 of 1 frames scored, mode subject_focus, keepers 0
-15:45:56 py: scoring: 2 frames in 2 bursts, 2 from cache or stage A, 0 to decode, sharpness subject_focus
-15:45:56 py: burst 0: 1 of 1 frames scored, mode subject_focus, keepers 0
-15:45:56 py: burst 1: 1 of 1 frames scored, mode subject_focus, keepers 1
-15:45:56 py: first picks: 1 of 2 keepers rated (at most 1, one per burst)
-15:45:56 py: scoring: 2 frames in 2 bursts, 0 from cache or stage A, 2 to decode, sharpness motion_aware
-15:45:57 py: motion 1 (burst1.jpg): ordinary, straightness 0.00, subject 990, crop 48x48, centre third (no detector)
-15:45:57 py: burst 1: 1 of 1 frames scored, mode motion_aware, keepers 1
-15:45:57 py: motion 0 (burst0.jpg): ordinary, straightness 0.00, subject 2012, crop 48x48, centre third (no detector)
-15:45:57 py: burst 0: 1 of 1 frames scored, mode motion_aware, keepers 0
-15:45:57 py: scoring: 2 frames in 2 bursts, 2 from cache or stage A, 0 to decode, sharpness motion_aware
-15:45:57 py: burst 0: 1 of 1 frames scored, mode motion_aware, keepers 0
-15:45:57 py: burst 1: 1 of 1 frames scored, mode motion_aware, keepers 1
-15:45:57 py: scoring: 2 frames in 2 bursts, 2 from cache or stage A, 0 to decode, sharpness subject_focus
-15:45:57 py: burst 0: 1 of 1 frames scored, mode subject_focus, keepers 0
-15:45:57 py: burst 1: 1 of 1 frames scored, mode subject_focus, keepers 1
-15:45:57 py: scoring: 2 frames in 1 bursts, 1 from cache or stage A, 1 to decode, sharpness subject_focus
-15:45:57 py: skip 9 (/var/folders/nz/vys208qx42q2wqdxhcbhjrf80000gp/T/tmpo7dm5b3t/gone.jpg): [Errno 2] No such file or directory: '/var/folders/nz/vys208qx42q2wqdxhcbhjrf80000gp/T/tmpo7dm5b3t/gone.jpg'
-15:45:57 py: burst 0: 1 of 2 frames scored, mode subject_focus, keepers 0
-15:45:57 py: sharpness judge: judge.onnx on the car crop of up to 3 frames per burst
-15:45:57 py: scoring: 2 frames in 2 bursts, 0 from cache or stage A, 2 to decode, sharpness motion_aware
-15:45:58 py: motion 0 (burst0.jpg): ordinary, straightness 0.00, subject 2012, crop 48x48, centre third (no detector)
-15:45:58 py: burst 0: 1 of 1 frames scored, mode motion_aware, judged 0 0.207, keepers 0
-15:45:58 py: motion 1 (burst1.jpg): ordinary, straightness 0.00, subject 990, crop 48x48, centre third (no detector)
-15:45:58 py: burst 1: 1 of 1 frames scored, mode motion_aware, judged 1 0.206, keepers 1
-15:45:58 py: sharpness judge: judge.onnx on the car crop of up to 3 frames per burst
-15:45:58 py: scoring: 2 frames in 2 bursts, 2 from cache or stage A, 0 to decode, sharpness motion_aware
-15:45:58 py: burst 0: 1 of 1 frames scored, mode motion_aware, judged 0 0.207, keepers 0
-15:45:58 py: burst 1: 1 of 1 frames scored, mode motion_aware, judged 1 0.206, keepers 1
-15:45:58 py: sharpness judge: judge.onnx on the car crop of up to 3 frames per burst
-15:45:58 py: scoring: 2 frames in 2 bursts, 2 from cache or stage A, 0 to decode, sharpness motion_aware
-15:45:58 py: burst 0: 1 of 1 frames scored, mode motion_aware, judged 0 0.207, keepers 0
-15:45:58 py: burst 1: 1 of 1 frames scored, mode motion_aware, judged 1 0.206, keepers 1
-15:45:58 py: sharpness judge: judge.onnx on the car crop of up to 3 frames per burst
-15:45:58 py: scoring: 2 frames in 2 bursts, 0 from cache or stage A, 2 to decode, sharpness motion_aware
-15:45:58 py: motion 1 (burst1.jpg): ordinary, straightness 0.00, subject 935, crop 72x72
-15:45:58 py: burst 1: 1 of 1 frames scored, mode motion_aware, judged 1 0.211, keepers 1
-15:45:58 py: motion 0 (burst0.jpg): ordinary, straightness 0.00, subject 1894, crop 72x72
-15:45:58 py: burst 0: 1 of 1 frames scored, mode motion_aware, judged 0 0.21, keepers 0
-15:45:58 py: detections: 0 cached, 2 detected
-15:45:58 py: car boxes: off, raw detector boxes
-15:45:58 py: sharpness judge: judge.onnx on the car crop of up to 3 frames per burst
-15:45:58 py: scoring: 2 frames in 2 bursts, 2 from cache or stage A, 0 to decode, sharpness motion_aware
-15:45:58 py: burst 0: 1 of 1 frames scored, mode motion_aware, judged 0 0.21, keepers 0
-15:45:58 py: burst 1: 1 of 1 frames scored, mode motion_aware, judged 1 0.211, keepers 1
-15:45:58 py: detections: 0 cached, 0 detected
-15:45:58 py: car boxes: off, raw detector boxes
-15:45:58 py: sharpness judge: judge.onnx on the car crop of up to 3 frames per burst
-15:45:58 py: scoring: 2 frames in 2 bursts, 2 from cache or stage A, 0 to decode, sharpness motion_aware
-15:45:58 py: burst 0: 1 of 1 frames scored, mode motion_aware, judged 0 0.21, keepers 0
-15:45:58 py: burst 1: 1 of 1 frames scored, mode motion_aware, judged 1 0.211, keepers 1
-15:45:58 py: detections: 0 cached, 0 detected
-15:45:58 py: car boxes: off, raw detector boxes
-15:45:58 py: scoring: 2 frames in 2 bursts, 2 from cache or stage A, 0 to decode, sharpness subject_focus
-15:45:58 py: star slope: 2 keepers, under 10, so the tier tables rate them
-15:45:58 py: burst 0: 1 of 1 frames scored, mode subject_focus, keepers 0
-15:45:58 py: burst 1: 1 of 1 frames scored, mode subject_focus, keepers 1
-15:45:58 py: scoring: 2 frames in 2 bursts, 2 from cache or stage A, 0 to decode, sharpness subject_focus
-15:45:58 py: burst 0: 1 of 1 frames scored, mode subject_focus, keepers 0
-15:45:58 py: burst 1: 1 of 1 frames scored, mode subject_focus, keepers 1
-15:45:58 py: scoring: 10 frames in 10 bursts, 4 from cache or stage A, 6 to decode, sharpness subject_focus
-15:45:58 py: star slope: 10 keepers
-15:45:58 py: burst 0: 1 of 1 frames scored, mode subject_focus, keepers 0
-15:45:58 py: burst 1: 1 of 1 frames scored, mode subject_focus, keepers 1
-15:45:58 py: burst 5: 1 of 1 frames scored, mode subject_focus, keepers 5
-15:45:58 py: burst 6: 1 of 1 frames scored, mode subject_focus, keepers 6
-15:45:58 py: burst 2: 1 of 1 frames scored, mode subject_focus, keepers 2
-15:45:58 py: burst 4: 1 of 1 frames scored, mode subject_focus, keepers 4
-15:45:58 py: burst 3: 1 of 1 frames scored, mode subject_focus, keepers 3
-15:45:58 py: burst 8: 1 of 1 frames scored, mode subject_focus, keepers 8
-15:45:58 py: burst 7: 1 of 1 frames scored, mode subject_focus, keepers 7
-15:45:58 py: burst 9: 1 of 1 frames scored, mode subject_focus, keepers 9
-15:45:59 py: scoring: 10 frames in 10 bursts, 10 from cache or stage A, 0 to decode, sharpness subject_focus
-15:45:59 py: burst 0: 1 of 1 frames scored, mode subject_focus, keepers 0
-15:45:59 py: burst 1: 1 of 1 frames scored, mode subject_focus, keepers 1
-15:45:59 py: burst 2: 1 of 1 frames scored, mode subject_focus, keepers 2
-15:45:59 py: burst 3: 1 of 1 frames scored, mode subject_focus, keepers 3
-15:45:59 py: burst 4: 1 of 1 frames scored, mode subject_focus, keepers 4
-15:45:59 py: burst 5: 1 of 1 frames scored, mode subject_focus, keepers 5
-15:45:59 py: burst 6: 1 of 1 frames scored, mode subject_focus, keepers 6
-15:45:59 py: burst 7: 1 of 1 frames scored, mode subject_focus, keepers 7
-15:45:59 py: burst 8: 1 of 1 frames scored, mode subject_focus, keepers 8
-15:45:59 py: burst 9: 1 of 1 frames scored, mode subject_focus, keepers 9
-15:45:59 py: scoring: 2 frames in 2 bursts, 2 from cache or stage A, 0 to decode, sharpness subject_focus
-15:45:59 py: burst 0: 1 of 1 frames scored, mode subject_focus, keepers 0
-15:45:59 py: burst 1: 1 of 1 frames scored, mode subject_focus, keepers 1
-15:45:59 py: scoring: 2 frames in 2 bursts, 0 from cache or stage A, 2 to decode, sharpness subject_focus
-15:45:59 py: burst 0: 1 of 1 frames scored, mode subject_peak from EXIF (median 0.008 s, f/8; 0 = unknown), keepers 0
-15:45:59 py: burst 1: 1 of 1 frames scored, mode subject_peak from EXIF (median 0.008 s, f/8; 0 = unknown), keepers 1
-15:45:59 py: finding subjects: 5 frames in 1 bursts, 0 from cache, detector off
-15:45:59 py: burst 9: shortlist of 5 frames: 0 point, 1 point, 2 point
-15:45:59 py: scoring: 5 frames in 1 bursts, 2 from cache or stage A, 3 to decode, sharpness sam_subject
-15:46:00 py: burst 9: 5 of 5 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 0
-15:46:00 py: burst 9: shortlist of 5 frames: 0 point cached, 1 point cached, 2 point cached
-15:46:00 py: finding subjects: 5 frames in 1 bursts, 5 from cache, detector off
-15:46:00 py: scoring: 5 frames in 1 bursts, 5 from cache or stage A, 0 to decode, sharpness sam_subject
-15:46:00 py: burst 9: 5 of 5 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 0
-15:46:00 py: burst 9: shortlist of 5 frames: 0 point, 1 point, 2 point
-15:46:00 py: finding subjects: 5 frames in 1 bursts, 5 from cache, detector off
-15:46:00 py: archived report: /var/folders/nz/vys208qx42q2wqdxhcbhjrf80000gp/T/tmpohxo77i6/reports/20261122-154600.csv
+18:15:41 py: finding subjects: 5 frames in 1 bursts, 0 from cache, detector off
+18:15:42 py: burst 9: shortlist of 5 frames: 0 point, 1 point, 2 point
+18:15:42 py: finding subjects: 2 frames in 1 bursts, 0 from cache, detector off
+18:15:42 py: skip saliency 7 (/var/folders/nz/vys208qx42q2wqdxhcbhjrf80000gp/T/tmpziox1zws/gone.jpg): [Errno 2] No such file or directory: '/var/folders/nz/vys208qx42q2wqdxhcbhjrf80000gp/T/tmpziox1zws/gone.jpg'
+18:15:42 py: burst 9: shortlist of 1 frames: 0 point
+18:15:42 py: scoring: 5 frames in 1 bursts, 5 from cache or stage A, 0 to decode, sharpness sam_subject
+18:15:42 py: burst 9: 5 of 5 frames scored, mode sam_subject, masked 0 of 3 shortlisted, so subject bias, keepers 0
+18:15:42 py: scoring: 2 frames in 1 bursts, 2 from cache or stage A, 0 to decode, sharpness sam_subject
+18:15:42 py: burst 9: 1 of 2 frames scored, mode sam_subject, masked 0 of 1 shortlisted, so subject bias, keepers 0
+18:15:42 py: scoring: 2 frames in 2 bursts, 0 from cache or stage A, 2 to decode, sharpness subject_focus
+18:15:43 py: burst 1: 1 of 1 frames scored, mode subject_focus, keepers 1
+18:15:43 py: burst 0: 1 of 1 frames scored, mode subject_focus, keepers 0
+18:15:43 py: scoring: 2 frames in 2 bursts, 2 from cache or stage A, 0 to decode, sharpness subject_focus
+18:15:43 py: relative: subject_focus (2 frames) is under 5 frames, so its bursts take the universal tiers of subject_focus
+18:15:43 py: burst 0: 1 of 1 frames scored, mode subject_focus, keepers 0
+18:15:43 py: burst 1: 1 of 1 frames scored, mode subject_focus, keepers 1
+18:15:43 py: scoring: 2 frames in 2 bursts, 0 from cache or stage A, 2 to decode, sharpness tiles_uniformity
+18:15:43 py: burst 0: 1 of 1 frames scored, mode tiles_uniformity, keepers 0
+18:15:43 py: burst 1: 1 of 1 frames scored, mode tiles_uniformity, keepers 1
+18:15:43 py: scoring: 2 frames in 2 bursts, 1 from cache or stage A, 1 to decode, sharpness subject_focus
+18:15:43 py: burst 1: 1 of 1 frames scored, mode subject_focus, keepers 1
+18:15:43 py: burst 0: 1 of 1 frames scored, mode subject_focus, keepers 0
+18:15:43 py: scoring: 2 frames in 2 bursts, 2 from cache or stage A, 0 to decode, sharpness subject_focus
+18:15:43 py: burst 0: 1 of 1 frames scored, mode subject_focus, keepers 0
+18:15:43 py: burst 1: 1 of 1 frames scored, mode subject_focus, keepers 1
+18:15:43 py: first picks: 1 of 2 keepers rated (at most 1, one per burst)
+18:15:43 py: scoring: 2 frames in 2 bursts, 0 from cache or stage A, 2 to decode, sharpness motion_aware
+18:15:44 py: motion 0 (burst0.jpg): ordinary, straightness 0.00, subject 2012, crop 48x48, centre third (no detector)
+18:15:44 py: burst 0: 1 of 1 frames scored, mode motion_aware, keepers 0
+18:15:44 py: motion 1 (burst1.jpg): ordinary, straightness 0.00, subject 990, crop 48x48, centre third (no detector)
+18:15:44 py: burst 1: 1 of 1 frames scored, mode motion_aware, keepers 1
+18:15:44 py: scoring: 2 frames in 2 bursts, 2 from cache or stage A, 0 to decode, sharpness motion_aware
+18:15:44 py: burst 0: 1 of 1 frames scored, mode motion_aware, keepers 0
+18:15:44 py: burst 1: 1 of 1 frames scored, mode motion_aware, keepers 1
+18:15:44 py: scoring: 2 frames in 2 bursts, 2 from cache or stage A, 0 to decode, sharpness subject_focus
+18:15:44 py: burst 0: 1 of 1 frames scored, mode subject_focus, keepers 0
+18:15:44 py: burst 1: 1 of 1 frames scored, mode subject_focus, keepers 1
+18:15:44 py: scoring: 2 frames in 1 bursts, 1 from cache or stage A, 1 to decode, sharpness subject_focus
+18:15:44 py: skip 9 (/var/folders/nz/vys208qx42q2wqdxhcbhjrf80000gp/T/tmpziox1zws/gone.jpg): [Errno 2] No such file or directory: '/var/folders/nz/vys208qx42q2wqdxhcbhjrf80000gp/T/tmpziox1zws/gone.jpg'
+18:15:44 py: burst 0: 1 of 2 frames scored, mode subject_focus, keepers 0
+18:15:44 py: sharpness judge: judge.onnx on the car crop of up to 3 frames per burst
+18:15:44 py: scoring: 2 frames in 2 bursts, 0 from cache or stage A, 2 to decode, sharpness motion_aware
+18:15:45 py: motion 0 (burst0.jpg): ordinary, straightness 0.00, subject 2012, crop 48x48, centre third (no detector)
+18:15:45 py: burst 0: 1 of 1 frames scored, mode motion_aware, judged 0 0.207, keepers 0
+18:15:45 py: motion 1 (burst1.jpg): ordinary, straightness 0.00, subject 990, crop 48x48, centre third (no detector)
+18:15:45 py: burst 1: 1 of 1 frames scored, mode motion_aware, judged 1 0.206, keepers 1
+18:15:45 py: sharpness judge: judge.onnx on the car crop of up to 3 frames per burst
+18:15:45 py: scoring: 2 frames in 2 bursts, 2 from cache or stage A, 0 to decode, sharpness motion_aware
+18:15:45 py: burst 0: 1 of 1 frames scored, mode motion_aware, judged 0 0.207, keepers 0
+18:15:45 py: burst 1: 1 of 1 frames scored, mode motion_aware, judged 1 0.206, keepers 1
+18:15:45 py: sharpness judge: judge.onnx on the car crop of up to 3 frames per burst
+18:15:45 py: scoring: 2 frames in 2 bursts, 2 from cache or stage A, 0 to decode, sharpness motion_aware
+18:15:45 py: burst 0: 1 of 1 frames scored, mode motion_aware, judged 0 0.207, keepers 0
+18:15:45 py: burst 1: 1 of 1 frames scored, mode motion_aware, judged 1 0.206, keepers 1
+18:15:45 py: sharpness judge: judge.onnx on the car crop of up to 3 frames per burst
+18:15:45 py: scoring: 2 frames in 2 bursts, 0 from cache or stage A, 2 to decode, sharpness motion_aware
+18:15:48 py: motion 1 (burst1.jpg): ordinary, straightness 0.00, subject 935, crop 72x72
+18:15:48 py: burst 1: 1 of 1 frames scored, mode motion_aware, judged 1 0.211, keepers 1
+18:15:48 py: motion 0 (burst0.jpg): ordinary, straightness 0.00, subject 1894, crop 72x72
+18:15:48 py: burst 0: 1 of 1 frames scored, mode motion_aware, judged 0 0.21, keepers 0
+18:15:48 py: detections: 0 cached, 2 detected
+18:15:48 py: car boxes: off, raw detector boxes
+18:15:48 py: sharpness judge: judge.onnx on the car crop of up to 3 frames per burst
+18:15:48 py: scoring: 2 frames in 2 bursts, 2 from cache or stage A, 0 to decode, sharpness motion_aware
+18:15:48 py: burst 0: 1 of 1 frames scored, mode motion_aware, judged 0 0.21, keepers 0
+18:15:48 py: burst 1: 1 of 1 frames scored, mode motion_aware, judged 1 0.211, keepers 1
+18:15:48 py: detections: 0 cached, 0 detected
+18:15:48 py: car boxes: off, raw detector boxes
+18:15:48 py: sharpness judge: judge.onnx on the car crop of up to 3 frames per burst
+18:15:48 py: scoring: 2 frames in 2 bursts, 2 from cache or stage A, 0 to decode, sharpness motion_aware
+18:15:48 py: burst 0: 1 of 1 frames scored, mode motion_aware, judged 0 0.21, keepers 0
+18:15:48 py: burst 1: 1 of 1 frames scored, mode motion_aware, judged 1 0.211, keepers 1
+18:15:48 py: detections: 0 cached, 0 detected
+18:15:48 py: car boxes: off, raw detector boxes
+18:15:49 py: scoring: 2 frames in 2 bursts, 2 from cache or stage A, 0 to decode, sharpness subject_focus
+18:15:49 py: star slope: 2 keepers, under 10, so the tier tables rate them
+18:15:49 py: burst 0: 1 of 1 frames scored, mode subject_focus, keepers 0
+18:15:49 py: burst 1: 1 of 1 frames scored, mode subject_focus, keepers 1
+18:15:49 py: scoring: 2 frames in 2 bursts, 2 from cache or stage A, 0 to decode, sharpness subject_focus
+18:15:49 py: burst 0: 1 of 1 frames scored, mode subject_focus, keepers 0
+18:15:49 py: burst 1: 1 of 1 frames scored, mode subject_focus, keepers 1
+18:15:49 py: scoring: 10 frames in 10 bursts, 4 from cache or stage A, 6 to decode, sharpness subject_focus
+18:15:50 py: star slope: 10 keepers
+18:15:50 py: burst 0: 1 of 1 frames scored, mode subject_focus, keepers 0
+18:15:50 py: burst 1: 1 of 1 frames scored, mode subject_focus, keepers 1
+18:15:50 py: burst 5: 1 of 1 frames scored, mode subject_focus, keepers 5
+18:15:50 py: burst 6: 1 of 1 frames scored, mode subject_focus, keepers 6
+18:15:50 py: burst 8: 1 of 1 frames scored, mode subject_focus, keepers 8
+18:15:50 py: burst 4: 1 of 1 frames scored, mode subject_focus, keepers 4
+18:15:50 py: burst 2: 1 of 1 frames scored, mode subject_focus, keepers 2
+18:15:50 py: burst 9: 1 of 1 frames scored, mode subject_focus, keepers 9
+18:15:50 py: burst 7: 1 of 1 frames scored, mode subject_focus, keepers 7
+18:15:50 py: burst 3: 1 of 1 frames scored, mode subject_focus, keepers 3
+18:15:50 py: scoring: 10 frames in 10 bursts, 10 from cache or stage A, 0 to decode, sharpness subject_focus
+18:15:50 py: burst 0: 1 of 1 frames scored, mode subject_focus, keepers 0
+18:15:50 py: burst 1: 1 of 1 frames scored, mode subject_focus, keepers 1
+18:15:50 py: burst 2: 1 of 1 frames scored, mode subject_focus, keepers 2
+18:15:50 py: burst 3: 1 of 1 frames scored, mode subject_focus, keepers 3
+18:15:50 py: burst 4: 1 of 1 frames scored, mode subject_focus, keepers 4
+18:15:50 py: burst 5: 1 of 1 frames scored, mode subject_focus, keepers 5
+18:15:50 py: burst 6: 1 of 1 frames scored, mode subject_focus, keepers 6
+18:15:50 py: burst 7: 1 of 1 frames scored, mode subject_focus, keepers 7
+18:15:50 py: burst 8: 1 of 1 frames scored, mode subject_focus, keepers 8
+18:15:50 py: burst 9: 1 of 1 frames scored, mode subject_focus, keepers 9
+18:15:50 py: scoring: 2 frames in 2 bursts, 2 from cache or stage A, 0 to decode, sharpness subject_focus
+18:15:50 py: burst 0: 1 of 1 frames scored, mode subject_focus, keepers 0
+18:15:50 py: burst 1: 1 of 1 frames scored, mode subject_focus, keepers 1
+18:15:50 py: scoring: 2 frames in 2 bursts, 0 from cache or stage A, 2 to decode, sharpness subject_focus
+18:15:50 py: burst 1: 1 of 1 frames scored, mode subject_peak from EXIF (median 0.008 s, f/8; 0 = unknown), keepers 1
+18:15:50 py: burst 0: 1 of 1 frames scored, mode subject_peak from EXIF (median 0.008 s, f/8; 0 = unknown), keepers 0
+18:15:50 py: finding subjects: 5 frames in 1 bursts, 0 from cache, detector off
+18:15:51 py: burst 9: shortlist of 5 frames: 0 point, 1 point, 2 point
+18:15:51 py: scoring: 5 frames in 1 bursts, 2 from cache or stage A, 3 to decode, sharpness sam_subject
+18:15:51 py: burst 9: 5 of 5 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 0
+18:15:51 py: burst 9: shortlist of 5 frames: 0 point cached, 1 point cached, 2 point cached
+18:15:51 py: finding subjects: 5 frames in 1 bursts, 5 from cache, detector off
+18:15:51 py: scoring: 5 frames in 1 bursts, 5 from cache or stage A, 0 to decode, sharpness sam_subject
+18:15:51 py: burst 9: 5 of 5 frames scored, mode sam_subject, masked 3 of 3 shortlisted, keepers 0
+18:15:51 py: burst 9: shortlist of 5 frames: 0 point, 1 point, 2 point
+18:15:51 py: finding subjects: 5 frames in 1 bursts, 5 from cache, detector off
+18:15:52 py: archived report: /var/folders/nz/vys208qx42q2wqdxhcbhjrf80000gp/T/tmp3khpvan1/reports/20261122-181552.csv

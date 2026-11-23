@@ -17,7 +17,7 @@ end
 -- plugin_common.lua ---------------------------------------------------------------
 -- The same file in all three plugin repos; COMMON_HASH pins it. After changing it, copy it to the
 -- other two repos and put the hash this prints into their tests too.
-local COMMON_HASH = "1506a9d0"
+local COMMON_HASH = "17aaca9e"
 local script_dir = (arg and arg[0] or ""):match("^(.*)[/\\]") or "."
 local PC = dofile(script_dir .. "/plugin_common.lua")
 local function fnv1a(text)
@@ -91,15 +91,19 @@ do -- run_log: a line reaches the file as it is logged, waits only between hold 
     run_log.append_lines("py: one\r\npy: two\n")
     check("run_log: release writes the rest, helper lines go in as they are",
         lines(), "lua: first\nlua: while the helper runs\nlua: still held\npy: one\npy: two\n")
+    run_log.started = "2026-11-22_09-59-59"
     for run = 1, 7 do
         run_log.rotate(5)
         run_log.log("run " .. run)
+        run_log.started = "2026-11-22_10-00-0" .. run -- stands in for the run's start time
     end
-    check("run_log: rotate keeps the current log and 5 older ones", table.concat(PC.list_dir(dir), ","),
-        "plugin.log,plugin.prev.log,plugin.prev2.log,plugin.prev3.log,plugin.prev4.log,plugin.prev5.log")
+    local names = PC.list_dir(dir)
+    check("run_log: rotate keeps the current log and 5 older ones named by start time", table.concat(names, ","),
+        "plugin.2026-11-22_10-00-02.log,plugin.2026-11-22_10-00-03.log,plugin.2026-11-22_10-00-04.log,"
+        .. "plugin.2026-11-22_10-00-05.log,plugin.2026-11-22_10-00-06.log,plugin.log")
     check("run_log: the current log holds the newest run", lines(), "lua: run 7\n")
-    check("run_log: .prev.log holds the run before", (PC.read_file(dir .. "/plugin.prev.log"):gsub("%d%d:%d%d:%d%d ", "")), "lua: run 6\n")
-    check("run_log: .prev5.log holds the oldest kept run", (PC.read_file(dir .. "/plugin.prev5.log"):gsub("%d%d:%d%d:%d%d ", "")), "lua: run 2\n")
+    check("run_log: the newest kept log holds the run before", (PC.read_file(dir .. "/plugin.2026-11-22_10-00-06.log"):gsub("%d%d:%d%d:%d%d ", "")), "lua: run 6\n")
+    check("run_log: the oldest kept log holds the oldest kept run", (PC.read_file(dir .. "/plugin.2026-11-22_10-00-02.log"):gsub("%d%d:%d%d:%d%d ", "")), "lua: run 2\n")
     for _, n in ipairs(PC.list_dir(dir)) do os.remove(dir .. "/" .. n) end
     os.remove(dir)
 end

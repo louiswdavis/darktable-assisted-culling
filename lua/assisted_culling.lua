@@ -511,7 +511,7 @@ local TMP_DIR = dt.configuration.tmp_dir
 -- Leftovers of a darktable that crashed or was killed mid-run; a day old is surely not live.
 C.sweep_temp(TMP_DIR, "dt_assisted_culling_", 86400)
 -- The run log: this plugin's lines plus the scorer's stderr. Kept in the
--- config dir, which outlives tmp_dir; the 5 runs before it are kept as .prev.log, .prev2.log to .prev5.log.
+-- config dir, which outlives tmp_dir; the 5 runs before it are kept as .<start time>.log.
 local LOG_PATH = dt.configuration.config_dir .. "/assisted_culling.log"
 local LOGS_KEPT = 5
 -- Lua errors (panel build, callbacks, events) go to their own log, which runs never rotate.

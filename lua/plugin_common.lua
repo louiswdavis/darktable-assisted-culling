@@ -247,8 +247,8 @@ end
 -- and `w.release()` lines wait in memory: a helper process appends its stderr to the
 -- same file then, and two processes appending at once can overwrite each other's
 -- lines on Windows. `w.hold()` writes what is waiting first. `w.rotate(keep)` starts
--- a new log: the current one becomes `<name>.prev.log`, older ones `<name>.prev2.log`
--- up to `<name>.prev<keep>.log`.
+-- a new log: the current one is renamed `<name>.<YYYY-MM-DD_HH-MM-SS>.log` (its run's start),
+-- and the oldest of those beyond `keep` is deleted.
 function C.run_log(path)
     local w = { held = false }
     local waiting = {}
@@ -287,12 +287,37 @@ function C.run_log(path)
         if not w.held then write_waiting() end
     end
 
+    -- The finished log is renamed <name>.<start>.log (start = "YYYY-MM-DD_HH-MM-SS" of its run;
+    -- the rotate time when darktable restarted since and the start is unknown). Only the oldest
+    -- beyond `keep` is deleted, so no kept log is ever renamed again.
     function w.rotate(keep)
         local base = path:gsub("%.log$", "")
-        local function prev(n) return base .. (n == 1 and ".prev.log" or ".prev" .. n .. ".log") end
-        os.remove(prev(keep))
-        for n = keep - 1, 1, -1 do os.rename(prev(n), prev(n + 1)) end
-        os.rename(path, prev(1))
+        local dir, name = base:match("^(.*)[/\\]([^/\\]+)$")
+        local stamp = w.started or os.date("%Y-%m-%d_%H-%M-%S")
+        local target = base .. "." .. stamp .. ".log"
+        local function exists(file)
+            local f = io.open(file, "r")
+            if f then f:close() end
+            return f ~= nil
+        end
+        local seq = 1
+        while exists(target) do
+            seq = seq + 1
+            target = base .. "." .. stamp .. "_" .. seq .. ".log"
+        end
+        if exists(path) then os.rename(path, target) end
+        w.started = os.date("%Y-%m-%d_%H-%M-%S")
+        local kept = {}
+        for _, file in ipairs(C.list_dir(dir)) do
+            if file:sub(1, #name + 1) == name .. "." and file:find("%.%d%d%d%d%-%d%d%-%d%d_%d%d%-%d%d%-%d%d[_%d]*%.log$") then
+                kept[#kept + 1] = file
+            end
+        end
+        table.sort(kept)
+        for i = 1, #kept - keep do os.remove(dir .. "/" .. kept[i]) end
+        -- logs of the old <name>.prev<n>.log scheme
+        os.remove(base .. ".prev.log")
+        for n = 2, 9 do os.remove(base .. ".prev" .. n .. ".log") end
     end
 
     return w
@@ -961,10 +986,10 @@ local dt_ok, dt = pcall(require, "darktable")
 -- Weak-evidence rule ---------------------------------------------------------------
 -- Tagging marks a match it is less sure of than a number read (livery, burst, neighbour, pooled
 -- burst, team only, check match) with a diagnostic tag. Such an image is no evidence of which car
--- it shows unless the user locked it. These are tagging's default tag names; a collection that
+-- it shows unless the user confirmed it. These are tagging's default tag names; a collection that
 -- renames them passes its own list. `have` is a { [tag] = true } set.
 
-C.TAGGING_LOCKED_TAG = "Assisted Tagging|Locked"
+C.TAGGING_CONFIRMED_TAG = "Assisted Tagging|Confirmed"
 C.TAGGING_WEAK_TAGS = {
     "Assisted Tagging|Identification|By livery",
     "Assisted Tagging|Identification|By burst",
@@ -982,9 +1007,9 @@ function C.carries_any(have, names)
     return false
 end
 
--- True when `have` may serve as evidence of its car: Locked, or carrying no weak tag.
-function C.is_evidence(have, weak_names, locked_tag)
-    return have[locked_tag or C.TAGGING_LOCKED_TAG] == true or not C.carries_any(have, weak_names or C.TAGGING_WEAK_TAGS)
+-- True when `have` may serve as evidence of its car: Confirmed, or carrying no weak tag.
+function C.is_evidence(have, weak_names, confirmed_tag)
+    return have[confirmed_tag or C.TAGGING_CONFIRMED_TAG] == true or not C.carries_any(have, weak_names or C.TAGGING_WEAK_TAGS)
 end
 
 if not dt_ok then return C end
@@ -1622,29 +1647,56 @@ end
 -- Pages: { number, title, widgets }. An accordion: each page is a button ("1  title ▸") with its
 -- widgets in a box below it. Clicking a button opens that page (its label ends in ▾) and folds the
 -- others; clicking the open page folds everything. The open page is stored in preference `page`
--- of `group` (0 = all folded; the next start opens page 1).
-function C.paged_sections(group, pages)
-    local buttons, bodies, open = {}, {}, 0
+-- of `group` (0 = all folded; the next start opens page 1). `opts` is optional: `pref` names the
+-- preference holding the open page (default "page"), so an accordion nested inside a page keeps its
+-- own state; a page with no `number` shows its title alone. `independent = true` drops the
+-- fold-the-others rule: each page opens and folds on its own and `pref` is a string of the open page
+-- numbers ("1,3"; "-" = none; unset opens page 1).
+function C.paged_sections(group, pages, opts)
+    local pref = opts and opts.pref or "page"
+    local independent = opts and opts.independent
+    local buttons, bodies, open, open_set = {}, {}, 0, {}
     local function show(index)
         open = index
         for i, page in ipairs(pages) do
-            bodies[i].visible = i == index
-            buttons[i].label = page.number .. "  " .. page.title .. (i == index and " ▾" or " ▸")
+            local is_open = independent and open_set[i] or i == index
+            bodies[i].visible = is_open and true or false
+            buttons[i].label = (page.number and (page.number .. "  ") or "") .. page.title .. (is_open and " ▾" or " ▸")
         end
+    end
+    local function save_set()
+        local numbers = {}
+        for i = 1, #pages do if open_set[i] then numbers[#numbers + 1] = tostring(i) end end
+        dt.preferences.write(group, pref, "string", #numbers > 0 and table.concat(numbers, ",") or "-")
     end
     local body = { orientation = "vertical" }
     for i, page in ipairs(pages) do
         buttons[i] = dt.new_widget("button") {
             clicked_callback = function()
+                if independent then
+                    open_set[i] = not open_set[i] or nil
+                    show(0)
+                    save_set()
+                    return
+                end
                 show(open == i and 0 or i)
-                dt.preferences.write(group, "page", "integer", open)
+                dt.preferences.write(group, pref, "integer", open)
             end,
         }
         bodies[i] = dt.new_widget("box")({ orientation = "vertical", table.unpack(page.widgets) })
         body[#body + 1] = buttons[i]
         body[#body + 1] = bodies[i]
     end
-    show(C.page_index(dt.preferences.read(group, "page", "integer"), #pages))
+    if independent then
+        local saved = dt.preferences.read(group, pref, "string")
+        if saved == nil or saved == "" then saved = "1" end
+        for number in saved:gmatch("%d+") do
+            if tonumber(number) <= #pages then open_set[tonumber(number)] = true end
+        end
+        show(0)
+    else
+        show(C.page_index(dt.preferences.read(group, pref, "integer"), #pages))
+    end
     return dt.new_widget("box")(body)
 end
 
