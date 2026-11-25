@@ -16,6 +16,7 @@ SHARED = {
     "python/launch.py": REPOS,
     "python/run_tests.py": REPOS,
     "python/check_shared.py": REPOS,
+    "python/test_modules.py": REPOS,
     "python/common.py": ("culling", "tagging"),
     "python/vehicle_detect.py": ("culling", "tagging"),
 }

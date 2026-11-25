@@ -1,0 +1,35 @@
+python 3.14.5 at /Users/louis.davis/Documents/codebases/darktable/darktable-assisted-culling/.venv/bin/python
+ok   check_registries.py imports in a fresh interpreter
+ok   check_shared.py imports in a fresh interpreter
+ok   common.py imports in a fresh interpreter
+ok   eval_culling.py imports in a fresh interpreter
+ok   launch.py imports in a fresh interpreter
+ok   probe_decode_boxes.py imports in a fresh interpreter
+ok   rating.py imports in a fresh interpreter
+ok   score_images.py imports in a fresh interpreter
+ok   stress_test_cull.py imports in a fresh interpreter
+ok   vehicle_detect.py imports in a fresh interpreter
+ok   eval_culling.py --help exits 0
+ok   score_images.py --help exits 0
+ok   stress_test_cull.py --help exits 0
+ok   no annotation names something defined further down its file
+ok   the scan catches a planted forward annotation (both of its uses)
+ok   check_registries.py parses as Python 3.10
+ok   check_shared.py parses as Python 3.10
+ok   common.py parses as Python 3.10
+ok   eval_culling.py parses as Python 3.10
+ok   launch.py parses as Python 3.10
+ok   probe_decode_boxes.py parses as Python 3.10
+ok   rating.py parses as Python 3.10
+ok   score_images.py parses as Python 3.10
+ok   stress_test_cull.py parses as Python 3.10
+ok   vehicle_detect.py parses as Python 3.10
+ok   test_eval_culling.py parses as Python 3.10
+ok   test_modules.py parses as Python 3.10
+ok   test_score_images.py parses as Python 3.10
+ok   the suite runs on Python 3.10 or newer (this is 3.14.5)
+ok   every new def is named in a test (add one, or the def is untested)
+ok   untested_defs.txt lists only defs still untested (delete the lines now covered)
+info 60 of 171 defs are not yet named in a test
+
+all tests passed
